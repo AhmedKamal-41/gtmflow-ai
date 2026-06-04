@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python3 -c \"print\\('python not found via python; check below'\\)\")",
+      "Bash(python -m pytest -q)",
+      "Read(//c/Users/Admin/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.5.0/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python scripts/search.py \"B2B SaaS internal tool GTM sales dashboard professional data-dense trustworthy\" --design-system -f markdown)",
+      "Bash(python -m pytest tests/test_demo.py -v)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(python -)",
+      "Bash(python _resolve_conflicts.py)",
+      "Bash(python -m pip install -q -r requirements.txt)",
+      "Bash(python -c \"import app.main; print\\('backend imports OK'\\)\")",
+      "Bash(python -m compileall app)"
+    ]
+  }
+}
