@@ -33,6 +33,7 @@ const server = vi.hoisted(() => {
     outputs: {} as Record<string, Record<string, unknown>[]>,
     pushes: {} as Record<string, Record<string, unknown>[]>,
     fit: {} as Record<string, Record<string, unknown> | null>,
+    scores: {} as Record<string, Record<string, unknown> | null>,
     readiness: {} as Record<string, Record<string, unknown>>,
     holds: new Set<string>(),
     held: {} as Record<string, Held[]>,
@@ -80,7 +81,9 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     getLead: vi.fn((id: string) => call("getLead", id, () => Promise.resolve(state.leads[id]))),
-    getLeadScore: vi.fn((id: string) => call("getLeadScore", id, nf)),
+    getLeadScore: vi.fn((id: string) =>
+      call("getLeadScore", id, () => (state.scores[id] ? Promise.resolve(state.scores[id]) : nf())),
+    ),
     getLeadFitScore: vi.fn((id: string) =>
       call("getLeadFitScore", id, () => (state.fit[id] ? Promise.resolve(state.fit[id]) : nf())),
     ),
@@ -210,6 +213,15 @@ function seed(leadId: string, name: string, opts: { summaries?: number; pushes?:
   s.pushes[leadId] = Array.from({ length: opts.pushes ?? 0 }, (_, i) => push(leadId, i));
   s.readiness[leadId] = readiness(false);
   s.fit[leadId] = null;
+  s.scores[leadId] = null;
+}
+
+function legacyScore(leadId: string, total: number, priority: string) {
+  return {
+    lead_id: leadId, total_score: total, priority, score_breakdown: {},
+    matched_signals: { industry_terms: [], title_terms: [], pain_point_terms: [] },
+    reasoning: `${leadId} legacy reasoning`,
+  };
 }
 
 async function release(name: string, leadId: string) {
@@ -303,37 +315,52 @@ describe("history panels", () => {
 });
 
 describe("out-of-order responses after navigation", () => {
-  it("late responses for the previous lead cannot overwrite the current lead, score, draft, or histories", async () => {
-    server.state.fit["lead-a"] = fitRow("lead-a", "strong_match", 100);
-    server.state.fit["lead-b"] = fitRow("lead-b", "weak_match", 40);
-    for (const name of ["getLatestAIOutput", "getLeadReadiness", "getLeadFitScore"]) {
-      server.state.holds.add(server.key(name, "lead-a"));
-    }
-    server.state.holds.add("getAIOutputs:lead-a@0");
-    server.state.holds.add("getPushes:lead-a@0");
+  // The page loads a lead's data in sequence (lead, draft, legacy score,
+  // readiness, fit), so each stage is held for lead A in turn: A's load is
+  // stuck exactly there when the user navigates to B, and its late response
+  // arrives after B has fully rendered.
+  it.each(["getLatestAIOutput", "getLeadScore", "getLeadReadiness", "getLeadFitScore"])(
+    "a late %s response for the previous lead cannot overwrite the current lead",
+    async (stage) => {
+      const s = server.state;
+      s.scores["lead-a"] = legacyScore("lead-a", 91, "Hot");
+      s.scores["lead-b"] = legacyScore("lead-b", 12, "Cold");
+      s.fit["lead-a"] = fitRow("lead-a", "strong_match", 100);
+      s.fit["lead-b"] = fitRow("lead-b", "weak_match", 40);
+      s.readiness["lead-a"] = readiness(true, ["LEAD-A-ONLY exclusion reason"]);
+      s.holds.add(server.key(stage, "lead-a"));
+      s.holds.add("getAIOutputs:lead-a@0");
+      s.holds.add("getPushes:lead-a@0");
 
-    const { rerender } = render(<LeadDetailPage />);
-    await screen.findByRole("heading", { name: "Alpha Co" });
+      const { rerender } = render(<LeadDetailPage />);
+      await screen.findByRole("heading", { name: "Alpha Co" });
+      await waitFor(() => expect(s.held[server.key(stage, "lead-a")]).toHaveLength(1));
 
-    useParamsMock.mockReturnValue({ leadId: "lead-b" });
-    rerender(<LeadDetailPage />);
-    await within(await currentDraftSection()).findByText("Beta Co current draft");
-    await screen.findByText("Weak match");
+      useParamsMock.mockReturnValue({ leadId: "lead-b" });
+      rerender(<LeadDetailPage />);
+      await within(await currentDraftSection()).findByText("Beta Co current draft");
+      await screen.findByText("Weak match");
+      await screen.findByText("Cold");
 
-    // Now every held lead-a response arrives, late and out of order.
-    await release("getAIOutputs", "lead-a@0");
-    await release("getPushes", "lead-a@0");
-    await release("getLatestAIOutput", "lead-a");
+      // Lead A's held responses now arrive, late and out of order.
+      await release("getPushes", "lead-a@0");
+      await release(stage, "lead-a");
+      await release("getAIOutputs", "lead-a@0");
 
-    expect(screen.getByRole("heading", { name: "Beta Co" })).toBeInTheDocument();
-    expect(within(section("Current outreach draft")).getByText("Beta Co current draft")).toBeInTheDocument();
-    expect(screen.queryByText("Alpha Co current draft")).not.toBeInTheDocument();
-    expect(screen.queryByText("lead-a summary 0")).not.toBeInTheDocument();
-    expect(screen.queryByText("lead-a push 0")).not.toBeInTheDocument();
-    expect(within(section("Push history")).getByText(/Showing 2 of 2/)).toBeInTheDocument();
-    expect(screen.queryByText("Strong match")).not.toBeInTheDocument();
-    expect(screen.getByText("Weak match")).toBeInTheDocument();
-  });
+      expect(screen.getByRole("heading", { name: "Beta Co" })).toBeInTheDocument();
+      const draftCard = section("Current outreach draft");
+      expect(within(draftCard).getByText("Beta Co current draft")).toBeInTheDocument();
+      expect(screen.queryByText("Alpha Co current draft")).not.toBeInTheDocument();
+      expect(screen.queryByText("Hot")).not.toBeInTheDocument(); // A's legacy score
+      expect(screen.getByText("Cold")).toBeInTheDocument();
+      expect(screen.queryByText("Strong match")).not.toBeInTheDocument(); // A's fit
+      expect(screen.getByText("Weak match")).toBeInTheDocument();
+      expect(screen.queryByText(/LEAD-A-ONLY/)).not.toBeInTheDocument(); // A's readiness
+      expect(screen.queryByText("lead-a summary 0")).not.toBeInTheDocument();
+      expect(screen.queryByText("lead-a push 0")).not.toBeInTheDocument();
+      expect(within(section("Push history")).getByText(/Showing 2 of 2/)).toBeInTheDocument();
+    },
+  );
 
   it("an action that finishes after navigating away does not repaint the old lead", async () => {
     server.state.holds.add(server.key("approveOutreach", "lead-a"));

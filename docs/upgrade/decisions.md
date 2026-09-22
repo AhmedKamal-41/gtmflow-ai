@@ -79,6 +79,67 @@ A follow-up closeout pass re-inspected Phase 3's own claims (per the user's expl
 1. **`approval_rate` exceeding 100%: only a PARTIAL fix, not "fixed."** Reproduced: approve → reject → approve on one generated draft still yields `outreach_generated=1, outreach_approved=2, approval_rate=200.0`. Phase 2's idempotency check only catches an *exact* repeat of the same decision on the same output; a genuine decision change is, correctly, not treated as a repeat, so it's not caught by that mechanism and was never going to be. **`docs/upgrade/phase-status.md`'s Phase 11 row has been corrected to reflect this.** The full fix (redefine the metric) stays Phase 11 scope, as instructed.
 2. **A real, previously-undetected regression was found and fixed**: `approve-outreach`/`reject-outreach` were unconditionally overwriting `Lead.status`, silently erasing a blocked disposition (`do_not_contact`/`disqualified`/`unsubscribed`) and defeating the Phase 2 push-time status check through a second path Phase 2 never tested. Reproduced before the fix (approving outreach on a blocked lead flipped its status, after which it was successfully pushed to Slack), fixed in `app/api/outreach_review.py` and `app/services/demo.py` using the same status-preserving guard Phase 2 already applied to scoring, and closed with 5 focused regression tests **before any real PDL data was imported**, per the explicit instruction to fix this class of bug first.
 
+## Decisions made in Phase 4
+
+| Decision | Reasoning | Status |
+|---|---|---|
+| New `lead_fit_scores` table, not a rewrite of `lead_scores` | v1's table is unique on `lead_id` (single mutable row); v2 needed append-only, multi-row-per-lead, version-stamped history. Retrofitting the old table would have required either destroying v1's semantics or bolting versioning onto a table that was never designed for it. A new table is the minimal correct change; v1 stays untouched and authoritative for existing consumers. | Done — migration `0006_fit_scores` |
+| `demo-us-sectors-v1`'s industry/country criteria intentionally mirror the PDL importer's own eligibility filter | The user's brief specified these exact values; independently declared (not shared code) and independently versioned in `app/scoring/fit.py`, distinct from `app/pdl/config.py`'s `MAPPING_VERSION`. This is why the real cohort scores uniformly 100 — documented as expected, not papered over. | Done |
+| Company-size criterion present in every response but inactive (weight 0) | No seller size preference exists yet (Phase 5). Reporting it as an explicit `not_configured` criterion, rather than omitting it, makes its absence visible per the brief's instruction. | Done |
+| CSV upload resume requires an **explicit `resume_batch_id`**, not automatic content-hash matching | A mid-phase checkpoint review correctly identified that hash-only matching cannot distinguish "retry of that specific attempt" from "deliberately separate re-upload of identical content" — both are legitimate. Redesigned from the original hash-auto-detect approach (which the checkpoint flagged as insufficient) to require the caller to pass back the specific `batch_id` it's retrying; hash is still checked, but only to *reject* a resume attempt whose content has changed, never to *discover* a resume target on its own. | Done, tests rewritten accordingly |
+| `outreach_rejected` lead status is reported as a v2 readiness gap, not added as a new hard routing-eligibility exclusion | Verified by reading `app/services/integration_push.py`: `BLOCKED_STATUSES = DISQUALIFIED_STATUSES`, which does **not** include `outreach_rejected` today. Adding a new hard exclusion to the real push pipeline was out of this phase's explicit scope ("preserve existing approval/blocking rules... add no automatic sends"); the brief's listing of it as a "current" hard exclusion was checked against the actual code and found not to be true today. Recorded honestly in the handoff rather than silently treated as already-enforced or silently added without instruction. | Done — flagged, not silently assumed or added |
+| Readiness and eligibility are always recomputed live; the stored snapshot is returned separately as `at_scoring` | The first completion let the bulk batch listing return readiness as stored at scoring time (`readiness_is_current=false`), which the finish pass rejected: a page labeled "readiness" must show what applies now. Recomputed in a fixed number of queries per page (latest drafts, then their latest reviews); the stored snapshot is kept as a labeled audit trail and never gates an action. | Done (finish pass) |
+| One shared definition of the current fit row (`app/services/fit_queries.py`) | Filters had drifted between endpoints (three version fields in some, none checked `normalization_version`). All readers now use all four version fields and `created_at DESC, id DESC`. | Done (finish pass) |
+| Draft/review "latest" uses the same `(created_at, id)` order everywhere | With tied timestamps, the latest-draft lookup and the supersession check could disagree, so a stale draft could be approved. Readiness uses the same rule. | Done (finish pass) |
+| CSV batches start `uploading` (committed before any lead chunk); `INCOMPLETE_BATCH_STATUSES` = {`partial`, `uploading`} is the single definition every routing/scoring guard checks | A crash after a committed chunk previously left a batch looking like a finished, routable `uploaded` batch that couldn't be resumed. Resume now counts committed rows instead of trusting a counter that lags after a crash. No schema change, since status is an existing string column. | Done (finish pass) |
+| Rescoring unchanged inputs is skipped by default (batch endpoint and CLI; `--rescore-unchanged` overrides) | Pressing "score" twice would otherwise pile up identical history rows. Skips are reported, not hidden. | Done (finish pass) |
+| Real-cohort run verified rather than duplicated | The 5,000 rows were written at 21:56 UTC by a parallel session (`e3f3881d`) using the same scorer code. The final-code run skipped all 5,000 as unchanged (identical fingerprints), and `scripts/phase4_verify_stored_fit.py` matched every stored row field by field against a fresh recompute. Writing a second identical generation would have been history noise. | Done (finish pass) |
+
+## Phase 4 checkpoint: a real gap found mid-phase, and how it was fixed
+
+A checkpoint review of the in-progress work correctly identified that the
+first draft of the CSV-retry mechanism (automatic resume via content-hash
+matching against any existing `status="partial"` batch) could not express
+the difference between "retry this exact failed attempt" and "upload this
+same file again as a deliberate, separate operation" — a legitimate case the
+original design would have silently mishandled by always merging into the
+old partial batch. Fixed by requiring an explicit `resume_batch_id` (see the
+decisions table above and `phase4-scoring-handoff.md`'s Part A.4); the
+content hash is still stored and still checked, now only to reject a
+resume attempt whose file content doesn't match the batch being resumed. All
+affected tests were rewritten, not just patched, since the underlying
+contract changed. The same checkpoint also asked for: a consistent tie-
+breaker on the "latest fit score" queries (added: `created_at DESC, id
+DESC`, matching this codebase's existing pagination convention), consistent
+`NULLS LAST` behavior in both sort directions on the leads list (fixed — the
+ascending sort previously put unscored leads first), and an explicit
+`readiness_is_current` flag distinguishing the batch bulk endpoint's stored
+readiness from the single-lead endpoints' always-fresh readiness (added).
+
+
+## Phase 4 finish pass: re-checking the first completion claim
+
+A first session reported Phase 4 complete (251 backend + 7 frontend tests,
+5,000 leads scored). A second pass re-inspected that code against the brief
+rather than trusting the report and found problems the existing tests didn't
+cover:
+- stale readiness in the bulk listing;
+- version-filter drift;
+- draft timestamp tie-breaks;
+- a crash-unsafe CSV upload state;
+- the lead page repainting the previous lead when an action finished after
+  navigation;
+- duplicated history rows after a post-action refresh;
+- per-lead legacy score requests on the batch page;
+- a model/migration index mismatch that `alembic check` flagged.
+
+Each fix came with a test. Where practical, the test was also run against
+the old code to show it fails there. The details, and the explicit
+"no longer true" list, are in `phase4-scoring-handoff.md` §7. The earlier
+sort-direction item was already fixed in the checkpoint code; it is now
+also enforced dialect-independently (an explicit `IS NULL` sort key) and
+tested page by page on Postgres as well as SQLite.
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
@@ -88,14 +149,15 @@ A follow-up closeout pass re-inspected Phase 3's own claims (per the user's expl
 
 ## Unresolved questions for the user
 
-Resolved since Phase 2 (moved out of this list): PDL curation criteria (fixed rules supplied and implemented, zero shortfall), blocked-status-survives-review regression (found and fixed), approval_rate fix status (corrected to "partial").
+Resolved since Phase 2 (moved out of this list): PDL curation criteria (fixed rules supplied and implemented, zero shortfall), blocked-status-survives-review regression (found and fixed), approval_rate fix status (corrected to "partial"). Resolved in Phase 4: scoring model redesign scope (implemented as `demo-us-sectors-v1`, see phase4-scoring-handoff.md — point allocations and band thresholds were specified in the Phase 4 brief itself, not left to be improvised).
 
 Still open, listed in the order they'll come up:
 
-1. **Scoring model redesign scope for Phase 4.** Audit finding B.2 shows company-only PDL records structurally cap around 38–41/100 — now backed by 5,000 real records to validate against (see phase3-data-handoff.md §1.7 for the actual missing-website/missing-size rates in the real sample). The user's Phase 2 brief confirms the direction (separate company fit / evidence coverage / outreach readiness / blocked status, deterministic) but not the exact point allocations or band thresholds for the new sub-scores — that's Phase 4's design work, flagging so it doesn't get improvised without a check-in.
-2. **Training data source for Phases 6–9**, beyond "100-example pilot, human-annotated, possibly corrected from company facts" (confirmed in Phase 2). Still open: who performs the pilot annotation, and over what time frame, since it gates how much data exists by Phase 7/8. Now that 5,000 real PDL leads exist to draw candidate leads from, this is more concrete than it was in Phase 2, but the actual annotation workflow (Phase 6) still doesn't exist.
+1. **The seller/service profile itself (Phase 5's core input).** Phase 4 confirmed this is now the single hardest blocker: v2's `outbound_email` outreach-readiness gap `no_seller_profile_configured` fires on all 5,000 real leads and will fire on every future one until this exists, and the company-size scoring criterion has nothing to compare against without it. Needs: seller company name, one-paragraph value proposition, target-ICP description, bounded proof-point list, and a decision on single-global vs. per-campaign scope (single-global is the natural default given this app's single-tenant design — flag if the user wants otherwise).
+2. **Training data source for Phases 6–9**, beyond "100-example pilot, human-annotated, possibly corrected from company facts" (confirmed in Phase 2). Still open: who performs the pilot annotation, and over what time frame, since it gates how much data exists by Phase 7/8. 5,000 real PDL leads (now with v2 fit scores) exist to draw candidates from, but the actual annotation workflow (Phase 6) still doesn't exist.
 3. **Concurrent-push idempotency mechanism for Phase 11** (D.3) — a DB-level unique constraint / row lock vs. an application-level idempotency key vs. a queue-based dedup once Phase 10's background jobs exist. Not decided; explicitly deferred per the user's instruction to keep delivery reliability in Phase 11.
 4. **Company-identity resolution/merge strategy for a future second PDL snapshot.** Phase 3 imported exactly one snapshot, so no two `Lead` rows have ever needed to be resolved to the same `CompanyIdentity`. The matching strategy (fuzzy name match? domain + locality heuristic? manual review queue?) is still undesigned — flagging now since it wasn't yet a live question with only one snapshot in the database, but will be the moment a second PDL pull happens.
+5. **Whether `outreach_rejected` should become a real hard routing-eligibility exclusion**, not just a v2 readiness gap. Verified in Phase 4 that the current Slack-push pipeline does not treat it as a hard block (`BLOCKED_STATUSES` excludes it); left unchanged since modifying that enforcement was out of Phase 4's scope, but flagging since the Phase 4 brief's own wording assumed it already was one.
 
 ## Schema relationships added in Phase 2 (Part C + D)
 
