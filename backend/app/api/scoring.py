@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_session
 from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
 from app.schemas.lead_score import BatchScoreSummary, LeadScoreResponse
-from app.scoring.lead_scoring import score_lead
+from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
 
 router = APIRouter(tags=["scoring"])
 
@@ -39,7 +39,13 @@ def _apply_score(session: Session, lead: Lead) -> dict[str, Any]:
         lead.score.priority = result["priority"]
         lead.score.score_breakdown = persisted_breakdown
         lead.score.reasoning = result["reasoning"]
-    lead.status = "scored"
+    # A blocked disposition (do_not_contact / disqualified / unsubscribed) is
+    # not a workflow stage -- scoring must not overwrite it. Otherwise a
+    # lead's blocked status is silently lost the moment it's scored, and the
+    # push-time status check in services/integration_push.py would never see
+    # it (see docs/upgrade/audit.md D.2).
+    if lead.status not in DISQUALIFIED_STATUSES:
+        lead.status = "scored"
     return result
 
 
@@ -141,7 +147,13 @@ def score_one_batch(
         else:
             cold += 1
 
-    if leads:
+    # "partial" is a disposition (this batch's CSV import didn't fully
+    # commit), not a workflow stage scoring should overwrite -- same
+    # invariant already applied to blocked Lead.status (see
+    # app/api/scoring.py's _apply_score, app/api/outreach_review.py).
+    # Scoring the rows that DID commit is still fine and still happens
+    # above; only the batch-level status flag is protected here.
+    if leads and batch.status != "partial":
         batch.status = "scored"
     average = round(score_sum / len(leads), 1) if leads else 0.0
 

@@ -29,7 +29,7 @@ def _scored_batch_setup(client: TestClient) -> tuple[str, list[dict]]:
     up = _upload(client, SCORED_CSV)
     batch_id = up["batch_id"]
     client.post(f"/api/batches/{batch_id}/score")
-    leads = client.get(f"/api/leads?batch_id={batch_id}").json()
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     return batch_id, leads
 
 
@@ -115,13 +115,21 @@ def test_metrics_counts_outreach_generated(client: TestClient) -> None:
 
 def test_metrics_approval_rate_and_counts(client: TestClient) -> None:
     _, leads = _scored_batch_setup(client)
-    for lead in leads:
-        client.post(f"/api/leads/{lead['id']}/generate-outreach")
-    client.post(f"/api/leads/{leads[0]['id']}/approve-outreach")
-    client.post(f"/api/leads/{leads[1]['id']}/approve-outreach")
+    outputs = [
+        client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
+        for lead in leads
+    ]
+    client.post(
+        f"/api/leads/{leads[0]['id']}/approve-outreach",
+        json={"ai_output_id": outputs[0]["id"]},
+    )
+    client.post(
+        f"/api/leads/{leads[1]['id']}/approve-outreach",
+        json={"ai_output_id": outputs[1]["id"]},
+    )
     client.post(
         f"/api/leads/{leads[2]['id']}/reject-outreach",
-        json={"reason": "Too generic"},
+        json={"ai_output_id": outputs[2]["id"], "reason": "Too generic"},
     )
 
     body = client.get("/api/metrics/dashboard").json()

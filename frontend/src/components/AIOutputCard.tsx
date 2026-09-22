@@ -8,12 +8,25 @@ const META: Record<string, { label: string; icon: IconName }> = {
   outreach_email: { label: "Outreach draft", icon: "send" },
 };
 
-export function AIOutputCard({ output }: { output: AIOutput }) {
+export function AIOutputCard({
+  output,
+  revision,
+  isLatestOfType,
+}: {
+  output: AIOutput;
+  // 1-based position among outputs of the same output_type, oldest first.
+  // Undefined when the caller hasn't computed it (falls back to no badge).
+  revision?: number;
+  // True when this is the current/latest draft of its type -- only this one
+  // can be approved/rejected from the UI (see leads/[leadId]/page.tsx).
+  isLatestOfType?: boolean;
+}) {
   const created = new Date(output.created_at).toLocaleString();
   const meta = META[output.output_type] ?? {
     label: output.output_type.replace(/_/g, " "),
     icon: "file" as IconName,
   };
+  const shortId = output.id.slice(0, 8);
 
   return (
     <Card padding="none">
@@ -25,6 +38,18 @@ export function AIOutputCard({ output }: { output: AIOutput }) {
           <div className="text-sm font-semibold text-slate-900">
             {meta.label}
           </div>
+          <span
+            className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500"
+            title={`Output ID: ${output.id}`}
+          >
+            {revision ? `rev ${revision} · ` : ""}
+            {shortId}
+          </span>
+          {isLatestOfType === false && (
+            <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+              superseded
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-medium text-slate-500">

@@ -45,7 +45,8 @@ def test_demo_run_batch_is_reachable(client: TestClient) -> None:
 
     leads = client.get(f"/api/leads?batch_id={batch_id}")
     assert leads.status_code == 200
-    assert len(leads.json()) == 10
+    assert leads.json()["total"] == 10
+    assert len(leads.json()["items"]) == 10
 
 
 def test_demo_run_is_additive(client: TestClient) -> None:
@@ -54,5 +55,5 @@ def test_demo_run_is_additive(client: TestClient) -> None:
     second = client.post("/api/demo/run").json()
     assert first["batch_id"] != second["batch_id"]
 
-    batches = client.get("/api/batches").json()
+    batches = client.get("/api/batches").json()["items"]
     assert len(batches) == 2

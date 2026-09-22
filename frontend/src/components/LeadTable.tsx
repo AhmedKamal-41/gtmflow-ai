@@ -1,8 +1,9 @@
 import Link from "next/link";
 
-import type { Lead, LeadScore } from "@/types/api";
+import type { Lead, LeadFitScore, LeadScore } from "@/types/api";
 
 import { Card } from "./Card";
+import { FitBandBadge } from "./FitBandBadge";
 import { Icon } from "./Icon";
 import { PriorityBadge } from "./PriorityBadge";
 import { StatusBadge } from "./StatusBadge";
@@ -10,9 +11,13 @@ import { StatusBadge } from "./StatusBadge";
 type Props = {
   leads: Lead[];
   scores: Record<string, LeadScore | null>;
+  // v2 deterministic company-fit scorer (Phase 4) -- optional and separate
+  // from `scores`/`LeadScore` above (the legacy v1 Hot/Warm/Cold scorer).
+  // Omitted keys render as "Not fit-scored", never inferred from `scores`.
+  fitScores?: Record<string, LeadFitScore | undefined>;
 };
 
-export function LeadTable({ leads, scores }: Props) {
+export function LeadTable({ leads, scores, fitScores = {} }: Props) {
   if (leads.length === 0) {
     return (
       <Card>
@@ -33,12 +38,14 @@ export function LeadTable({ leads, scores }: Props) {
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Score</th>
               <th className="px-4 py-3">Priority</th>
+              <th className="px-4 py-3">Fit (v2 demo)</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {leads.map((lead) => {
               const score = scores[lead.id];
+              const fit = fitScores[lead.id];
               return (
                 <tr
                   key={lead.id}
@@ -73,6 +80,18 @@ export function LeadTable({ leads, scores }: Props) {
                       <PriorityBadge priority={score.priority} />
                     ) : (
                       <span className="text-xs text-slate-400">Not scored</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {fit ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <FitBandBadge band={fit.band} />
+                        <span className="tabular text-xs text-slate-400">
+                          {fit.fit_score}/{fit.max_fit_score}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Not fit-scored</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">

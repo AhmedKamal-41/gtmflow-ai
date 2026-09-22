@@ -47,4 +47,5 @@ class BatchPushSummary(BaseModel):
     pushed: int
     skipped: int
     failed: int
+    blocked: int = 0
     results: list[BatchPushResult]

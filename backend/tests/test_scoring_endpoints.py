@@ -29,7 +29,7 @@ def _upload(client: TestClient, csv: str = MIXED_CSV, batch_name: str = "test") 
 
 
 def _first_lead_id(client: TestClient, batch_id: str) -> str:
-    leads = client.get(f"/api/leads?batch_id={batch_id}").json()
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     assert leads, "no leads found in batch"
     return leads[0]["id"]
 

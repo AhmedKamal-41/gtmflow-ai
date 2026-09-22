@@ -3,17 +3,32 @@
 
 import type {
   AIOutput,
+  BatchFitScoreSummary,
   BatchPushResponse,
   BatchScoreResponse,
   DemoRunResponse,
+  FitProfile,
   IntegrationPush,
   Lead,
   LeadBatch,
+  LeadFitScore,
   LeadScore,
   MetricsDashboard,
   OutreachReviewResponse,
+  Page,
   UploadResponse,
 } from "@/types/api";
+
+export type PageParams = { limit?: number; offset?: number };
+
+function buildQuery(params: Record<string, string | number | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined) q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -83,17 +98,26 @@ export function uploadBatch(
   });
 }
 
-export function getBatches(): Promise<LeadBatch[]> {
-  return request<LeadBatch[]>("/api/batches");
+export function getBatches(params?: PageParams): Promise<Page<LeadBatch>> {
+  return request<Page<LeadBatch>>(`/api/batches${buildQuery({ ...params })}`);
 }
 
 export function getBatch(batchId: string): Promise<LeadBatch> {
   return request<LeadBatch>(`/api/batches/${batchId}`);
 }
 
-export function getLeads(batchId?: string): Promise<Lead[]> {
-  const q = batchId ? `?batch_id=${encodeURIComponent(batchId)}` : "";
-  return request<Lead[]>(`/api/leads${q}`);
+export type LeadListParams = PageParams & {
+  fit_band?: string;
+  min_fit_score?: number;
+  sort?: "created_at_desc" | "fit_score_desc" | "fit_score_asc";
+};
+
+export function getLeads(
+  batchId?: string,
+  params?: LeadListParams,
+): Promise<Page<Lead>> {
+  const q = buildQuery({ batch_id: batchId, ...params });
+  return request<Page<Lead>>(`/api/leads${q}`);
 }
 
 export function getLead(leadId: string): Promise<Lead> {
@@ -126,8 +150,30 @@ export function generateOutreach(leadId: string): Promise<AIOutput> {
   });
 }
 
-export function getAIOutputs(leadId: string): Promise<AIOutput[]> {
-  return request<AIOutput[]>(`/api/leads/${leadId}/ai-outputs`);
+export function getAIOutputs(
+  leadId: string,
+  params?: PageParams,
+): Promise<Page<AIOutput>> {
+  return request<Page<AIOutput>>(
+    `/api/leads/${leadId}/ai-outputs${buildQuery({ ...params })}`,
+  );
+}
+
+// Authoritative "what is the current draft of this type" lookup -- a
+// dedicated backend query (newest AIOutput of output_type for this lead),
+// NOT inferred by paging through ai-outputs history and searching page 1.
+// Phase 3 closeout Part D.4: history is now paginated, so the first page
+// may not even contain the newest row once older items page in a
+// different order, and even before that, "search the loaded page" was
+// already the wrong source of truth -- this endpoint always exists
+// independent of how much history has been loaded client-side.
+export function getLatestAIOutput(
+  leadId: string,
+  outputType: string,
+): Promise<AIOutput> {
+  return request<AIOutput>(
+    `/api/leads/${leadId}/latest-ai-output${buildQuery({ output_type: outputType })}`,
+  );
 }
 
 export function pushLead(
@@ -150,28 +196,41 @@ export function pushHotLeads(
   });
 }
 
-export function getPushes(leadId: string): Promise<IntegrationPush[]> {
-  return request<IntegrationPush[]>(`/api/leads/${leadId}/pushes`);
+export function getPushes(
+  leadId: string,
+  params?: PageParams,
+): Promise<Page<IntegrationPush>> {
+  return request<Page<IntegrationPush>>(
+    `/api/leads/${leadId}/pushes${buildQuery({ ...params })}`,
+  );
 }
 
+// ai_output_id is required: the caller must say exactly which draft it's
+// approving/rejecting, so a stale/out-of-date UI can't silently act on a
+// different draft than the one it's showing (docs/upgrade/audit.md C.2).
 export function approveOutreach(
   leadId: string,
+  aiOutputId: string,
 ): Promise<OutreachReviewResponse> {
   return request<OutreachReviewResponse>(
     `/api/leads/${leadId}/approve-outreach`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body: JSON.stringify({ ai_output_id: aiOutputId }),
+    },
   );
 }
 
 export function rejectOutreach(
   leadId: string,
+  aiOutputId: string,
   reason?: string,
 ): Promise<OutreachReviewResponse> {
   return request<OutreachReviewResponse>(
     `/api/leads/${leadId}/reject-outreach`,
     {
       method: "POST",
-      body: JSON.stringify({ reason: reason ?? null }),
+      body: JSON.stringify({ ai_output_id: aiOutputId, reason: reason ?? null }),
     },
   );
 }
@@ -182,4 +241,41 @@ export function getMetricsDashboard(): Promise<MetricsDashboard> {
 
 export function runDemo(): Promise<DemoRunResponse> {
   return request<DemoRunResponse>("/api/demo/run", { method: "POST" });
+}
+
+// --- Phase 4: v2 deterministic company-fit scorer --------------------
+// Entirely separate from scoreLead/scoreBatch/getLeadScore above (the
+// legacy v1 Hot/Warm/Cold scorer, unchanged). See types/api.ts's
+// LeadFitScore doc comment for why a "strong_match" fit band is not the
+// same claim as legacy "Hot".
+
+export function scoreLeadFit(leadId: string): Promise<LeadFitScore> {
+  return request<LeadFitScore>(`/api/leads/${leadId}/fit-score`, {
+    method: "POST",
+  });
+}
+
+export function getLeadFitScore(leadId: string): Promise<LeadFitScore> {
+  return request<LeadFitScore>(`/api/leads/${leadId}/fit-score`);
+}
+
+export function scoreBatchFit(
+  batchId: string,
+): Promise<BatchFitScoreSummary> {
+  return request<BatchFitScoreSummary>(`/api/batches/${batchId}/fit-score`, {
+    method: "POST",
+  });
+}
+
+export function getBatchFitScores(
+  batchId: string,
+  params?: PageParams,
+): Promise<Page<LeadFitScore>> {
+  return request<Page<LeadFitScore>>(
+    `/api/batches/${batchId}/fit-scores${buildQuery({ ...params })}`,
+  );
+}
+
+export function getFitProfile(): Promise<FitProfile> {
+  return request<FitProfile>("/api/scoring/fit-profile");
 }

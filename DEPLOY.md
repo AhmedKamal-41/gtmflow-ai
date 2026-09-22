@@ -7,8 +7,8 @@ This deploys three services into one Railway project:
 3. **frontend**, Next.js service (root dir `frontend/`)
 
 Railway's Nixpacks builder auto-detects Python and Next.js, so no Dockerfile is
-needed. The backend ships a `Procfile` that creates the DB tables on boot and
-starts uvicorn.
+needed. The backend ships a `Procfile` that starts uvicorn. Schema migrations
+are explicit (Alembic), not run automatically on boot -- see Step 2.5.
 
 ---
 
@@ -42,6 +42,39 @@ starts uvicorn.
 
 > The app rewrites Railway's `postgres://` URL to the `postgresql+psycopg://`
 > driver automatically, so `${{Postgres.DATABASE_URL}}` works untouched.
+
+## Step 2.5, Run migrations explicitly (required before first boot, and after every deploy that adds one)
+
+Migrations are never run automatically by the web process (see
+`docs/upgrade/decisions.md` for why -- an uncontrolled migration on every
+worker boot is exactly what Phase 2 removed). Run them as an explicit,
+one-off command against the backend service, using the Railway CLI from your
+machine (or Railway's dashboard "Run Command" on the service):
+
+```bash
+railway run --service backend alembic upgrade head
+```
+
+- **First deploy, empty database**: this creates every table from
+  `0001_baseline` forward. Nothing else to do.
+- **An existing database created by the old `init_db.py`/`create_all` path**
+  (i.e. anything deployed before Phase 2): first verify and stamp it as the
+  baseline, then upgrade -- do not run `alembic upgrade head` directly
+  against it, and never run `alembic stamp head`:
+  ```bash
+  railway run --service backend python scripts/verify_baseline_schema.py --stamp
+  railway run --service backend alembic upgrade head
+  ```
+  `verify_baseline_schema.py` refuses to stamp anything if the live schema
+  doesn't actually match what `0001_baseline` expects -- see the script's
+  docstring and `docs/upgrade/audit.md`'s Phase 2 handoff for what that
+  failure looks like and how to resolve it.
+
+The `Procfile` also declares a `release: alembic upgrade head` line, which
+some platforms (Heroku) run automatically as a pre-deploy step. This repo
+has not verified whether Railway's Nixpacks builder executes `release:` the
+same way -- treat the explicit `railway run` command above as the verified
+path, and the `release:` line as a bonus for platforms that do honor it.
 
 ## Step 3, Add the frontend service
 
@@ -86,10 +119,10 @@ starts uvicorn.
 
 ## Notes & caveats
 
-- **Schema creation** runs on every backend boot via `python -m app.core.init_db`
-  in the `Procfile`. `create_all` is idempotent, it only creates missing tables
-  and never alters existing ones. There are no migrations yet, so a schema change
-  to an existing table would need a manual migration.
+- **Schema migrations are explicit (Alembic), not run on boot.** See Step 2.5.
+  `app/core/init_db.py` (`create_all`) still exists for quick local
+  SQLite/Postgres bring-up without Alembic, but is no longer the path used
+  for a real deployment -- see `docs/upgrade/decisions.md`.
 - **No auth.** Every endpoint is public once deployed. Fine for a demo; add a
   protection layer before putting real data in.
 - **Build-time frontend var.** If you ever change the backend URL, you must

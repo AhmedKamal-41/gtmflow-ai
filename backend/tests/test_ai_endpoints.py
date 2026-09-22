@@ -21,7 +21,7 @@ def _upload_and_get_lead_id(client: TestClient) -> str:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "ai-test"}
     ).json()
-    leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()
+    leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]
     assert leads, "expected at least one lead"
     return leads[0]["id"]
 
@@ -119,7 +119,9 @@ def test_list_ai_outputs_returns_newest_first(client: TestClient) -> None:
 
     response = client.get(f"/api/leads/{lead_id}/ai-outputs")
     assert response.status_code == 200
-    body = response.json()
+    page = response.json()
+    assert page["total"] == 2
+    body = page["items"]
     assert len(body) == 2
     # outreach was created second -> appears first
     assert body[0]["output_type"] == "outreach_email"
@@ -130,7 +132,9 @@ def test_list_ai_outputs_empty_when_lead_has_none(client: TestClient) -> None:
     lead_id = _upload_and_get_lead_id(client)
     response = client.get(f"/api/leads/{lead_id}/ai-outputs")
     assert response.status_code == 200
-    assert response.json() == []
+    page = response.json()
+    assert page["items"] == []
+    assert page["total"] == 0
 
 
 def test_latest_ai_output_returns_match(client: TestClient) -> None:

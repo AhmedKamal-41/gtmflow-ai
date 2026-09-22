@@ -14,11 +14,14 @@ from app.schemas.integration_push import (
     IntegrationPushRead,
     PushRequest,
 )
+from app.schemas.pagination import Page
 from app.services.integration_push import (
     SLACK,
+    BlockedLeadError,
     lead_has_successful_slack_push,
     push_lead_to_slack,
 )
+from app.services.pagination import pagination_params, paginate
 
 router = APIRouter(tags=["push"])
 
@@ -28,6 +31,27 @@ def _validate_integration_type(integration_type: str) -> None:
         raise HTTPException(
             status_code=400,
             detail="Unsupported integration_type. Only 'slack' is supported in Phase 6.",
+        )
+
+
+def _require_complete_batch(lead: Lead) -> None:
+    """Part C.4 of the Phase 3 closeout: a batch whose CSV upload only
+    partially committed (some chunks failed/were never reached, e.g. the
+    row-count limit was hit mid-stream) must be excluded from dispatch
+    through every push entry point -- not overridable by force=true, same
+    precedence as the blocked-lead-status check. A lead's own batch may be
+    None only in tests that construct a Lead without one; treated as
+    complete (nothing to exclude) in that case.
+    """
+    batch = lead.batch
+    if batch is not None and batch.status == "partial":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Batch {batch.id} is only partially imported (status='partial') "
+                "and is excluded from Slack routing until the import completes. "
+                "This cannot be overridden with force=true."
+            ),
         )
 
 
@@ -46,6 +70,7 @@ def push_one_lead(
         raise HTTPException(status_code=404, detail="Lead not found")
 
     _validate_integration_type(request.integration_type)
+    _require_complete_batch(lead)
 
     if lead.score is None:
         raise HTTPException(
@@ -59,7 +84,19 @@ def push_one_lead(
             detail="Only Hot leads can be pushed unless force=true.",
         )
 
-    push = push_lead_to_slack(session, lead)
+    try:
+        push = push_lead_to_slack(session, lead)
+    except BlockedLeadError as e:
+        # Persist the audit WorkflowEvent the service already added, then
+        # report the block. This is not overridable by force=true.
+        session.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Lead status is '{e.lead_status}' and blocks outreach "
+                "delivery. This cannot be overridden with force=true."
+            ),
+        ) from e
     session.commit()
     session.refresh(push)
     return push
@@ -80,6 +117,15 @@ def push_batch_hot_leads(
         raise HTTPException(status_code=404, detail="Batch not found")
 
     _validate_integration_type(request.integration_type)
+    if batch.status == "partial":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Batch {batch.id} is only partially imported (status='partial') "
+                "and is excluded from Slack routing until the import completes. "
+                "This cannot be overridden with force=true."
+            ),
+        )
 
     leads_in_batch = list(
         session.execute(
@@ -92,7 +138,7 @@ def push_batch_hot_leads(
         if lead.score is not None and lead.score.priority == "Hot"
     ]
 
-    pushed = skipped = failed = 0
+    pushed = skipped = failed = blocked = 0
     results: list[BatchPushResult] = []
 
     for lead in hot_leads:
@@ -108,7 +154,25 @@ def push_batch_hot_leads(
             )
             continue
 
-        push = push_lead_to_slack(session, lead)
+        try:
+            push = push_lead_to_slack(session, lead)
+        except BlockedLeadError as e:
+            # Not overridable by force=true: distinct from "skipped" (already
+            # pushed) and from "failed" (attempted delivery, transport error).
+            # No IntegrationPush row exists for this lead/attempt.
+            blocked += 1
+            results.append(
+                BatchPushResult(
+                    lead_id=lead.id,
+                    company_name=lead.company_name,
+                    status="blocked",
+                    reason=(
+                        f"lead status is '{e.lead_status}'; blocked from "
+                        "outreach delivery, not overridable by force=true"
+                    ),
+                )
+            )
+            continue
         session.flush()  # populate push.id
 
         if push.status in ("success", "mock_success"):
@@ -143,6 +207,7 @@ def push_batch_hot_leads(
                 "pushed": pushed,
                 "skipped": skipped,
                 "failed": failed,
+                "blocked": blocked,
             },
         )
     )
@@ -154,28 +219,27 @@ def push_batch_hot_leads(
         pushed=pushed,
         skipped=skipped,
         failed=failed,
+        blocked=blocked,
         results=results,
     )
 
 
 @router.get(
     "/api/leads/{lead_id}/pushes",
-    response_model=list[IntegrationPushRead],
+    response_model=Page[IntegrationPushRead],
 )
 def list_lead_pushes(
     lead_id: UUID,
+    pagination: tuple[int, int] = Depends(pagination_params),
     session: Session = Depends(get_session),
-) -> list[IntegrationPush]:
+) -> Page[IntegrationPushRead]:
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    rows = (
-        session.execute(
-            select(IntegrationPush)
-            .where(IntegrationPush.lead_id == lead_id)
-            .order_by(IntegrationPush.created_at.desc())
-        )
-        .scalars()
-        .all()
+    limit, offset = pagination
+    stmt = (
+        select(IntegrationPush)
+        .where(IntegrationPush.lead_id == lead_id)
+        .order_by(IntegrationPush.created_at.desc(), IntegrationPush.id.desc())
     )
-    return list(rows)
+    return paginate(session, stmt, limit=limit, offset=offset, schema=IntegrationPushRead)

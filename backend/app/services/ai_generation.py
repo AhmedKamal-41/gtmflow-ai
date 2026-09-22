@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 from uuid import UUID
 
@@ -11,8 +13,21 @@ from sqlalchemy.orm import Session
 from app.ai.client import get_ai_client
 from app.core.config import settings
 from app.models import AIOutput, Lead, WorkflowEvent
+from app.models.ai_output import ORIGIN_GENERATED
 
 PROMPT_VERSION = "v1"
+OUTPUT_SCHEMA_VERSION = "v1"
+
+
+def _hash_input(ctx: dict[str, Any]) -> str:
+    """Stable hash of the exact context handed to the AI client.
+
+    Used to prove/refute "was this the same input" later without storing a
+    second copy of the snapshot -- sort_keys makes it independent of dict
+    ordering, default=str covers any UUID/datetime values that sneak in.
+    """
+    canonical = json.dumps(ctx, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _model_label() -> str:
@@ -74,6 +89,11 @@ def generate_summary_for_lead(session: Session, lead: Lead) -> AIOutput:
         content=content,
         model_used=_model_label(),
         prompt_version=PROMPT_VERSION,
+        origin=ORIGIN_GENERATED,
+        input_snapshot=ctx,
+        input_hash=_hash_input(ctx),
+        output_schema_version=OUTPUT_SCHEMA_VERSION,
+        model_revision=client.model_revision,
     )
     session.add(output)
     session.add(
@@ -106,6 +126,11 @@ def generate_outreach_for_lead(session: Session, lead: Lead) -> AIOutput:
         content=content,
         model_used=_model_label(),
         prompt_version=PROMPT_VERSION,
+        origin=ORIGIN_GENERATED,
+        input_snapshot=ctx,
+        input_hash=_hash_input(ctx),
+        output_schema_version=OUTPUT_SCHEMA_VERSION,
+        model_revision=client.model_revision,
     )
     session.add(output)
     session.add(

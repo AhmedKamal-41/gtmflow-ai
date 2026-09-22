@@ -19,8 +19,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
-from app.scoring.lead_scoring import score_lead
+from app.models import AIOutputReview, Lead, LeadBatch, LeadScore, WorkflowEvent
+from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
+from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
+
+DEMO_REVIEWER_LABEL = "demo-auto-approve"
 from app.services.ai_generation import (
     generate_outreach_for_lead,
     generate_summary_for_lead,
@@ -105,7 +108,8 @@ def _score(session: Session, lead: Lead) -> str:
         score_breakdown=persisted_breakdown,
         reasoning=result["reasoning"],
     )
-    lead.status = "scored"
+    if lead.status not in DISQUALIFIED_STATUSES:
+        lead.status = "scored"
     session.add(
         WorkflowEvent(
             lead_id=lead.id,
@@ -120,6 +124,21 @@ def _score(session: Session, lead: Lead) -> str:
 
 
 def _approve(session: Session, lead: Lead, ai_output_id: Any) -> None:
+    # Mirrors app/api/outreach_review.py's approve path so demo-generated
+    # approvals are structurally identical to real ones -- a real
+    # AIOutputReview row, not just a WorkflowEvent. Honestly labeled as
+    # automated (not the same reviewer_label the interactive UI uses), since
+    # this endpoint approves on the demo's behalf, not a human's.
+    session.add(
+        AIOutputReview(
+            lead_id=lead.id,
+            ai_output_id=ai_output_id,
+            decision="approved",
+            review_kind=REVIEW_KIND_OPERATIONAL_OUTREACH,
+            reviewer_label=DEMO_REVIEWER_LABEL,
+            legacy_unlinked=False,
+        )
+    )
     session.add(
         WorkflowEvent(
             lead_id=lead.id,
@@ -131,7 +150,8 @@ def _approve(session: Session, lead: Lead, ai_output_id: Any) -> None:
             },
         )
     )
-    lead.status = "outreach_approved"
+    if lead.status not in DISQUALIFIED_STATUSES:
+        lead.status = "outreach_approved"
 
 
 def run_demo(session: Session) -> dict[str, Any]:

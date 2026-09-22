@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Card } from "@/components/Card";
 import { ErrorMessage } from "@/components/ErrorMessage";
@@ -12,28 +12,53 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { APIError, getBatches } from "@/lib/api";
 import type { LeadBatch } from "@/types/api";
 
+const PAGE_SIZE = 50;
+
 export default function BatchesPage() {
   const [batches, setBatches] = useState<LeadBatch[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getBatches()
-      .then(setBatches)
+  const load = useCallback((offset: number) => {
+    getBatches({ limit: PAGE_SIZE, offset })
+      .then((page) => {
+        setBatches((prev) =>
+          offset === 0 ? page.items : [...(prev ?? []), ...page.items],
+        );
+        setTotal(page.total);
+        setHasMore(page.has_more);
+      })
       .catch((e) =>
         setError(
           e instanceof APIError
             ? (e.detail ?? e.message)
             : "Failed to load batches",
         ),
-      );
+      )
+      .finally(() => setLoadingMore(false));
   }, []);
+
+  useEffect(() => {
+    load(0);
+  }, [load]);
+
+  function loadMore() {
+    setLoadingMore(true);
+    load(batches?.length ?? 0);
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Workspace"
         title="Batches"
-        description="Every uploaded lead list, newest first."
+        description={
+          total > 0
+            ? `${total.toLocaleString()} uploaded lead list${total === 1 ? "" : "s"}, newest first.`
+            : "Every uploaded lead list, newest first."
+        }
         actions={
           <Link
             href="/upload"
@@ -139,6 +164,20 @@ export default function BatchesPage() {
               </tbody>
             </table>
           </div>
+          {hasMore && (
+            <div className="flex justify-center border-t border-slate-100 p-3">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="text-sm font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+              >
+                {loadingMore
+                  ? "Loading…"
+                  : `Load more (${batches.length.toLocaleString()} of ${total.toLocaleString()})`}
+              </button>
+            </div>
+          )}
         </Card>
       )}
     </div>

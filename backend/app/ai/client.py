@@ -18,6 +18,11 @@ class AIClient(ABC):
     """Both summary and outreach generators implement this interface."""
 
     name: str = "abstract"
+    # Concrete provider/model identity for AIOutput.model_revision provenance
+    # (Part D). Distinct from `name` ("mock"/"openai", the provider family):
+    # this is the specific revision within that provider, e.g. a real model
+    # string or a versioned mock-generator tag.
+    model_revision: str = "unknown"
 
     @abstractmethod
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:
@@ -47,6 +52,7 @@ class OpenAIClient(AIClient):
             )
         self._api_key = api_key
         self._model = model
+        self.model_revision = model
 
     def _call(self, prompt: str) -> str:
         try:

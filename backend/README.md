@@ -35,11 +35,24 @@ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/gtmflow
 
 ## Database initialization
 
-Tables are not auto-created on startup (schema changes should be deliberate). Once `DATABASE_URL` points at a reachable Postgres, create the tables once:
+Tables are not auto-created on startup (schema changes should be deliberate). As of Phase 2 this is Alembic-managed:
 
 ```bash
-python -m app.core.init_db
+# Fresh database (nothing in it yet)
+alembic upgrade head
+
+# An existing database that was created by the OLD `init_db.py` /
+# `create_all` path (anything deployed before Phase 2) -- adopt it first,
+# never run `alembic stamp head` directly:
+python scripts/verify_baseline_schema.py --stamp
+alembic upgrade head
 ```
+
+`verify_baseline_schema.py` checks the target database's actual schema against what `0001_baseline` expects before stamping anything, and refuses (with a clear diff) if it doesn't match. See that script's docstring and `docs/upgrade/decisions.md` for the full rationale.
+
+Migrations are never run automatically by the app process (see `app/main.py`, which only wires CORS) -- always an explicit command, never something a web worker triggers on boot.
+
+`python -m app.core.init_db` still exists for quick local/throwaway bring-up without Alembic (e.g. a scratch SQLite file), but is not the path for anything you intend to keep or deploy.
 
 ## Run the API
 
@@ -106,16 +119,16 @@ The suite runs against in-memory SQLite via a dependency-overridden `get_session
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/leads/{lead_id}/push` | Body: `{integration_type, force?}`. 400 if unscored or non-Hot without `force`. Mock when `SLACK_WEBHOOK_URL` empty. |
-| POST | `/api/batches/{batch_id}/push-hot` | Pushes every Hot lead; skips already-pushed unless `force` |
+| POST | `/api/leads/{lead_id}/push` | Body: `{integration_type, force?}`. 400 if unscored or non-Hot without `force`. 400 if the lead's status is `do_not_contact`/`disqualified`/`unsubscribed` -- **not overridable by `force`**, regardless of score. Mock when `SLACK_WEBHOOK_URL` empty. |
+| POST | `/api/batches/{batch_id}/push-hot` | Pushes every Hot lead; skips already-pushed unless `force`; blocked-status leads are reported separately as `status: "blocked"` in `results`, never pushed |
 | GET | `/api/leads/{lead_id}/pushes` | Push history, newest first |
 
 ### Outreach review
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/api/leads/{lead_id}/approve-outreach` | Emits `WorkflowEvent("outreach_approved")`; sets `Lead.status="outreach_approved"` |
-| POST | `/api/leads/{lead_id}/reject-outreach` | Body: `{reason?}`; emits `WorkflowEvent("outreach_rejected")` with the reason captured |
+| POST | `/api/leads/{lead_id}/approve-outreach` | Body: `{ai_output_id}` (required). 404 if unknown, 400 if the output belongs to a different lead or isn't outreach, 409 if a newer outreach draft now exists for this lead (stale draft). Idempotent: an identical repeat returns the existing review, `idempotent_replay: true`. |
+| POST | `/api/leads/{lead_id}/reject-outreach` | Body: `{ai_output_id, reason?}` (ai_output_id required). Same validation as approve. |
 
 ### Metrics
 
@@ -138,11 +151,14 @@ curl -X POST http://localhost:8000/api/batches/<batch_id>/score
 curl -X POST http://localhost:8000/api/leads/<lead_id>/generate-summary
 curl -X POST http://localhost:8000/api/leads/<lead_id>/generate-outreach
 
-# Approve / reject outreach
-curl -X POST http://localhost:8000/api/leads/<lead_id>/approve-outreach
+# Approve / reject outreach (ai_output_id is required -- get it from
+# generate-outreach's response or GET /api/leads/<lead_id>/ai-outputs)
+curl -X POST http://localhost:8000/api/leads/<lead_id>/approve-outreach \
+  -H "Content-Type: application/json" \
+  -d '{"ai_output_id": "<ai_output_id>"}'
 curl -X POST http://localhost:8000/api/leads/<lead_id>/reject-outreach \
   -H "Content-Type: application/json" \
-  -d '{"reason": "Too generic"}'
+  -d '{"ai_output_id": "<ai_output_id>", "reason": "Too generic"}'
 
 # Push to Slack (mock when SLACK_WEBHOOK_URL is unset)
 curl -X POST http://localhost:8000/api/leads/<lead_id>/push \

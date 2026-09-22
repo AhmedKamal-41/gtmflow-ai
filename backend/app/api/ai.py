@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_session
 from app.models import AIOutput, Lead
 from app.schemas.ai_output import AIOutputRead
+from app.schemas.pagination import Page
 from app.services.ai_generation import (
     generate_outreach_for_lead,
     generate_summary_for_lead,
 )
+from app.services.pagination import pagination_params, paginate
 
 router = APIRouter(prefix="/api/leads", tags=["ai"])
 
@@ -55,25 +57,23 @@ def post_generate_outreach(
 
 @router.get(
     "/{lead_id}/ai-outputs",
-    response_model=list[AIOutputRead],
+    response_model=Page[AIOutputRead],
 )
 def list_lead_ai_outputs(
     lead_id: UUID,
+    pagination: tuple[int, int] = Depends(pagination_params),
     session: Session = Depends(get_session),
-) -> list[AIOutput]:
+) -> Page[AIOutputRead]:
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    rows = (
-        session.execute(
-            select(AIOutput)
-            .where(AIOutput.lead_id == lead_id)
-            .order_by(AIOutput.created_at.desc())
-        )
-        .scalars()
-        .all()
+    limit, offset = pagination
+    stmt = (
+        select(AIOutput)
+        .where(AIOutput.lead_id == lead_id)
+        .order_by(AIOutput.created_at.desc(), AIOutput.id.desc())
     )
-    return list(rows)
+    return paginate(session, stmt, limit=limit, offset=offset, schema=AIOutputRead)
 
 
 @router.get(

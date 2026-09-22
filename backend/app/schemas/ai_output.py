@@ -24,3 +24,13 @@ class AIOutputRead(AIOutputBase):
     id: UUID
     lead_id: UUID
     created_at: datetime
+
+    # Phase 2 identity + provenance. `id` + `created_at` together already
+    # identify the exact revision; these fields explain how it was produced.
+    parent_output_id: UUID | None = None
+    origin: str = "generated"
+    input_snapshot: dict[str, Any] | None = None
+    input_hash: str | None = None
+    output_schema_version: str | None = None
+    model_revision: str | None = None
+    adapter_revision: str | None = None

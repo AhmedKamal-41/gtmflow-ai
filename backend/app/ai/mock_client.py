@@ -161,6 +161,9 @@ def _focus_pain(ctx: dict[str, Any], pains: list[str]) -> str:
 
 class MockAIClient(AIClient):
     name = "mock"
+    # Bumped only if the deterministic generation logic in this file changes
+    # shape in a way that matters for reproducing/explaining a past output.
+    model_revision = "mock-deterministic-v1"
 
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:
         company = ctx.get("company_name") or "this company"

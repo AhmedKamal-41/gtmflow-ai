@@ -32,3 +32,12 @@ class LeadRead(LeadBase):
     cleaned_data: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
+
+    # Phase 2 provenance + canonical identity. NULL for every lead created
+    # via CSV upload or the demo seed -- only the (future) Phase 3 PDL
+    # importer populates these.
+    company_identity_id: UUID | None = None
+    source_snapshot_id: UUID | None = None
+    import_run_id: UUID | None = None
+    source_record_id: str | None = None
+    source_raw_data: dict[str, Any] | None = None

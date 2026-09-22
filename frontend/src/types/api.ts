@@ -2,6 +2,18 @@
 // Kept permissive on unions (string instead of literal) so the UI never
 // crashes if the backend introduces a new status/priority value.
 
+// Phase 3: every list endpoint (batches, leads, AI-output history, push
+// history) returns this envelope instead of a bare array. `total` is
+// server-computed across the whole dataset, not len(items) -- always show
+// it rather than deriving a count from the current page.
+export type Page<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 export type LeadBatch = {
   id: string;
   name: string | null;
@@ -29,6 +41,12 @@ export type Lead = {
   cleaned_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  // Phase 2/3 provenance + canonical identity. NULL for CSV/demo leads.
+  company_identity_id: string | null;
+  source_snapshot_id: string | null;
+  import_run_id: string | null;
+  source_record_id: string | null;
+  source_raw_data: Record<string, unknown> | null;
 };
 
 export type ScoreBreakdown = {
@@ -83,6 +101,14 @@ export type AIOutput = {
   model_used: string | null;
   prompt_version: string | null;
   created_at: string;
+  // Phase 2 identity + provenance.
+  parent_output_id: string | null;
+  origin: string; // "generated" | "human_edited"
+  input_snapshot: Record<string, unknown> | null;
+  input_hash: string | null;
+  output_schema_version: string | null;
+  model_revision: string | null;
+  adapter_revision: string | null;
 };
 
 export type IntegrationPush = {
@@ -135,14 +161,17 @@ export type BatchPushResponse = {
   pushed: number;
   skipped: number;
   failed: number;
+  blocked: number;
   results: BatchPushResult[];
 };
 
 export type OutreachReviewResponse = {
   lead_id: string;
   ai_output_id: string;
+  review_id: string;
   event_type: string; // "outreach_approved" | "outreach_rejected"
   message: string;
+  idempotent_replay: boolean;
 };
 
 export type DemoRunResponse = {
@@ -155,6 +184,93 @@ export type DemoRunResponse = {
   outreach_generated: number;
   outreach_approved: number;
   leads_pushed: number;
+};
+
+// --- Phase 4: v2 deterministic company-fit scorer -------------------------
+// Entirely separate from the legacy `LeadScore` (Hot/Warm/Cold) above. A
+// `strong_match` fit band is NOT the same claim as legacy "Hot" -- it means
+// "matched this broad demonstration profile's two active criteria," not a
+// calibrated purchase-probability signal. Always label these distinctly in
+// the UI; never silently translate one into the other's meaning.
+
+export type FitCriterion = {
+  name: string;
+  weight: number;
+  active: boolean;
+  source_field: string;
+  raw_input: unknown;
+  normalized_input: string | null;
+  result: string; // "match" | "mismatch" | "unknown" | "not_configured"
+  points: number;
+  explanation: string;
+};
+
+export type ActionReadiness = {
+  status: string; // "ready" | "not_ready"
+  gaps: string[];
+  gap_explanations: Record<string, string>;
+};
+
+export type Readiness = {
+  outbound_email: ActionReadiness;
+  internal_slack_handoff: ActionReadiness;
+};
+
+export type Eligibility = {
+  excluded: boolean;
+  reasons: string[];
+  checked_at: string;
+};
+
+export type LeadFitScore = {
+  id: string | null;
+  lead_id: string;
+  scorer_version: string;
+  profile_id: string;
+  profile_version: string;
+  normalization_version: string;
+  input_fingerprint: string;
+  fit_score: number;
+  max_fit_score: number;
+  evidence_coverage_pct: number;
+  band: string; // "strong_match" | "partial_match" | "weak_match" | "insufficient_evidence"
+  criteria: FitCriterion[];
+  readiness: Readiness;
+  // false when this response's `readiness` is a stored historical
+  // snapshot (the bulk batch listing) rather than freshly recomputed
+  // (every single-lead fit-score request always recomputes it).
+  readiness_is_current: boolean;
+  eligibility: Eligibility; // always freshly recomputed, every endpoint
+  computed_at: string;
+  computation_ms: number;
+};
+
+export type FitProfile = {
+  profile_id: string;
+  profile_version: string;
+  scorer_version: string;
+  normalization_version: string;
+  description: string;
+  industry_match_values: string[];
+  industry_weight: number;
+  country_match_values: string[];
+  country_weight: number;
+  size_weight: number;
+  zero_weight_criteria: string[];
+  max_fit_score: number;
+  coverage_threshold_pct: number;
+  band_strong_min: number;
+  band_partial_min: number;
+};
+
+export type BatchFitScoreSummary = {
+  batch_id: string;
+  scored_leads: number;
+  strong_match: number;
+  partial_match: number;
+  weak_match: number;
+  insufficient_evidence: number;
+  average_fit_score: number;
 };
 
 export type MetricsDashboard = {
