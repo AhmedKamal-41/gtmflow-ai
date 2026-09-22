@@ -30,3 +30,10 @@ class MetricsDashboard(BaseModel):
     average_lead_score: float
     missing_data_rate: float
     automation_coverage: float
+    # v2 company fit (demonstration profile) -- distinct leads by the band of
+    # their latest applicable score; separate from hot/warm/cold above.
+    fit_scored_leads: int
+    fit_strong_match: int
+    fit_partial_match: int
+    fit_weak_match: int
+    fit_insufficient_evidence: int

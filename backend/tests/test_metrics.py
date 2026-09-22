@@ -58,6 +58,11 @@ def test_metrics_empty_database_returns_zeros(client: TestClient) -> None:
         "average_lead_score": 0.0,
         "missing_data_rate": 0.0,
         "automation_coverage": 0.0,
+        "fit_scored_leads": 0,
+        "fit_strong_match": 0,
+        "fit_partial_match": 0,
+        "fit_weak_match": 0,
+        "fit_insufficient_evidence": 0,
     }
 
 
@@ -187,3 +192,19 @@ def test_metrics_failed_push_count_uses_monkeypatched_sender(
     assert body["leads_pushed"] == 0
     assert body["unique_leads_pushed"] == 0
     assert body["push_success_rate"] == 0.0
+
+
+def test_fit_metrics_count_distinct_leads_not_score_rows(client: TestClient) -> None:
+    _upload(client, SCORED_CSV)
+    lead_ids = [lead["id"] for lead in client.get("/api/leads").json()["items"]]
+    for _ in range(3):  # three history rows per lead
+        for lead_id in lead_ids:
+            assert client.post(f"/api/leads/{lead_id}/fit-score").status_code == 201
+    body = client.get("/api/metrics/dashboard").json()
+    assert body["fit_scored_leads"] == len(lead_ids)
+    assert (
+        body["fit_strong_match"] + body["fit_partial_match"]
+        + body["fit_weak_match"] + body["fit_insufficient_evidence"]
+    ) == len(lead_ids)
+    # Fit scoring is not legacy scoring: v1 counters are untouched.
+    assert body["total_leads_processed"] == 0

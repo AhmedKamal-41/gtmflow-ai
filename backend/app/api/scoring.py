@@ -4,14 +4,16 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
 from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
 from app.schemas.lead_score import BatchScoreSummary, LeadScoreResponse
+from app.schemas.pagination import Page
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
+from app.services.pagination import pagination_params
 
 router = APIRouter(tags=["scoring"])
 
@@ -103,18 +105,66 @@ def get_lead_score(
     if lead.score is None:
         raise HTTPException(status_code=404, detail="Lead has not been scored yet")
 
-    stored = dict(lead.score.score_breakdown or {})
+    return _response_from_stored(lead.score)
+
+
+def _response_from_stored(score: LeadScore) -> LeadScoreResponse:
+    stored = dict(score.score_breakdown or {})
     matched = stored.pop(
         "matched_signals",
         {"industry_terms": [], "title_terms": [], "pain_point_terms": []},
     )
     return LeadScoreResponse(
-        lead_id=lead_id,
-        total_score=lead.score.total_score,
-        priority=lead.score.priority,
+        lead_id=score.lead_id,
+        total_score=score.total_score,
+        priority=score.priority,
         score_breakdown=stored,
         matched_signals=matched,
-        reasoning=lead.score.reasoning or "",
+        reasoning=score.reasoning or "",
+    )
+
+
+@router.get(
+    "/api/batches/{batch_id}/scores",
+    response_model=Page[LeadScoreResponse],
+)
+def list_batch_scores(
+    batch_id: UUID,
+    pagination: tuple[int, int] = Depends(pagination_params),
+    session: Session = Depends(get_session),
+) -> Page[LeadScoreResponse]:
+    """Legacy v1 scores for one page of the batch's leads, in the same order
+    as GET /api/leads?batch_id=... (created_at DESC, id DESC) -- one bounded
+    lookup per page instead of one GET /api/leads/{id}/score per lead.
+    Pagination is over leads: `total` is the batch's lead count and leads
+    on the page that were never scored are simply absent from `items`."""
+    if session.get(LeadBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    limit, offset = pagination
+    total = session.scalar(
+        select(func.count()).select_from(Lead).where(Lead.batch_id == batch_id)
+    ) or 0
+    page_ids = list(
+        session.execute(
+            select(Lead.id)
+            .where(Lead.batch_id == batch_id)
+            .order_by(Lead.created_at.desc(), Lead.id.desc())
+            .limit(limit)
+            .offset(offset)
+        ).scalars()
+    )
+    scores: dict[UUID, LeadScore] = {}
+    if page_ids:
+        scores = {
+            row.lead_id: row
+            for row in session.execute(
+                select(LeadScore).where(LeadScore.lead_id.in_(page_ids))
+            ).scalars()
+        }
+    items = [_response_from_stored(scores[i]) for i in page_ids if i in scores]
+    return Page[LeadScoreResponse](
+        items=items, total=total, limit=limit, offset=offset,
+        has_more=(offset + len(page_ids)) < total,
     )
 
 

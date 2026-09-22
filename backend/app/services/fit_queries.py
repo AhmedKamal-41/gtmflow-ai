@@ -164,15 +164,17 @@ def current_readiness(
 
 # ----------------------------------------------------------------- summary
 
-def batch_fit_summary(session: Session, batch_id: UUID) -> dict[str, Any]:
+def batch_fit_summary(session: Session, batch_id: UUID | None) -> dict[str, Any]:
     """Distinct-lead counts from each lead's latest applicable row -- a
     lead rescored five times counts once, in the band of its latest score.
     `score_rows` (all applicable rows, history included) is reported
-    alongside so the difference is visible rather than silently hidden."""
+    alongside so the difference is visible rather than silently hidden.
+    `batch_id=None` summarizes every lead (the metrics dashboard)."""
+    lead_filter = [Lead.batch_id == batch_id] if batch_id is not None else []
     total_leads = session.scalar(
-        select(func.count()).select_from(Lead).where(Lead.batch_id == batch_id)
+        select(func.count()).select_from(Lead).where(*lead_filter)
     ) or 0
-    batch_lead_ids = select(Lead.id).where(Lead.batch_id == batch_id)
+    batch_lead_ids = select(Lead.id).where(*lead_filter)
     latest = latest_fit_subquery()
     band_rows = session.execute(
         select(latest.c.band, func.count(), func.sum(latest.c.fit_score))

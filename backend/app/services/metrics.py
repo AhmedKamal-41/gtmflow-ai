@@ -11,6 +11,12 @@ Two push counters are deliberately exposed:
     push. Pushing the same lead twice keeps this at 1.
 
 The frontend shows both with a one-line explanation of the distinction.
+
+The v2 company-fit counts (``fit_*``) are distinct LEADS, each counted
+once in the band of its latest applicable score (see
+app/services/fit_queries.py) -- rescoring adds history rows but never
+moves these numbers unless a lead's latest band actually changed. They are
+reported separately from the legacy Hot/Warm/Cold counts, never merged.
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import AIOutput, IntegrationPush, Lead, LeadScore, WorkflowEvent
+from app.services.fit_queries import batch_fit_summary
 
 OUTREACH_OUTPUT_TYPE = "outreach_email"
 APPROVED_EVENT = "outreach_approved"
@@ -107,7 +114,14 @@ def compute_dashboard(session: Session) -> dict[str, Any]:
 
     automation_coverage = _pct(total_leads_processed, total_leads_uploaded)
 
+    fit = batch_fit_summary(session, None)
+
     return {
+        "fit_scored_leads": fit["scored_leads"],
+        "fit_strong_match": fit["strong_match"],
+        "fit_partial_match": fit["partial_match"],
+        "fit_weak_match": fit["weak_match"],
+        "fit_insufficient_evidence": fit["insufficient_evidence"],
         "total_leads_uploaded": total_leads_uploaded,
         "total_leads_processed": total_leads_processed,
         "hot_leads": hot_leads,

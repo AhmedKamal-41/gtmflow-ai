@@ -180,3 +180,36 @@ def test_batch_scored_workflow_event_is_created(
     assert data["hot"] == summary["hot"]
     assert data["warm"] == summary["warm"]
     assert data["cold"] == summary["cold"]
+
+
+def test_batch_scores_bulk_lookup_matches_single_lead_reads(client) -> None:
+    """GET /api/batches/{id}/scores returns, for one page of leads, exactly
+    what GET /api/leads/{id}/score returns per lead -- total counts leads,
+    and unscored leads on the page are absent rather than an error."""
+    csv = (
+        "company_name,industry,contact_title,company_size,source\n"
+        "Cascade Modular,Housing,VP Operations,1000+,referral\n"
+        "Northbridge Clinics,Healthcare,Practice Manager,1000+,webinar\n"
+        "Unscored Co,Retail,Clerk,1-10,unknown\n"
+    )
+    files = {"file": ("leads.csv", csv.encode("utf-8"), "text/csv")}
+    batch_id = client.post(
+        "/api/batches/upload", files=files, data={"batch_name": "bulk-scores"}
+    ).json()["batch_id"]
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
+    by_name = {lead["company_name"]: lead["id"] for lead in leads}
+    for name in ("Cascade Modular", "Northbridge Clinics"):
+        client.post(f"/api/leads/{by_name[name]}/score")
+
+    page = client.get(f"/api/batches/{batch_id}/scores?limit=50").json()
+    assert page["total"] == 3
+    assert {item["lead_id"] for item in page["items"]} == {
+        by_name["Cascade Modular"], by_name["Northbridge Clinics"],
+    }
+    for item in page["items"]:
+        assert item == client.get(f"/api/leads/{item['lead_id']}/score").json()
+
+    first = client.get(f"/api/batches/{batch_id}/scores?limit=2&offset=0").json()
+    second = client.get(f"/api/batches/{batch_id}/scores?limit=2&offset=2").json()
+    assert first["has_more"] is True and second["has_more"] is False
+    assert len(first["items"]) + len(second["items"]) == 2
