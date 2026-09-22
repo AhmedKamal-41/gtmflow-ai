@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 
 import pytest
@@ -13,16 +14,28 @@ from app.main import app
 
 @pytest.fixture()
 def db_engine() -> Iterator[Engine]:
-    engine = create_engine(
-        "sqlite:///:memory:",
-        future=True,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    # Opt-in: TEST_DATABASE_URL points the suite at a DISPOSABLE database
+    # (e.g. an empty Postgres DB) to exercise dialect-specific behavior --
+    # window functions, NULL ordering, savepoints, UUID comparison. Every
+    # table is dropped and recreated around each test, so never point this
+    # at a database whose contents matter.
+    test_url = os.environ.get("TEST_DATABASE_URL")
+    if test_url:
+        engine = create_engine(test_url, future=True)
+        Base.metadata.drop_all(engine)
+    else:
+        engine = create_engine(
+            "sqlite:///:memory:",
+            future=True,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
     Base.metadata.create_all(engine)
     try:
         yield engine
     finally:
+        if test_url:
+            Base.metadata.drop_all(engine)
         engine.dispose()
 
 

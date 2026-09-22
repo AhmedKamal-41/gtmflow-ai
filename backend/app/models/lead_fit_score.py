@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
@@ -41,6 +41,16 @@ class LeadFitScore(Base):
     """
 
     __tablename__ = "lead_fit_scores"
+    # Declared here so the model matches migration 0006 exactly (without
+    # it, `alembic check` / autogenerate would propose dropping the index).
+    # Serves the "latest row per lead for this profile" lookups in
+    # app/services/fit_queries.py.
+    __table_args__ = (
+        Index(
+            "ix_lead_fit_scores_lead_profile_created",
+            "lead_id", "profile_id", "profile_version", "created_at",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
