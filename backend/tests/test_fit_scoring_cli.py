@@ -77,16 +77,36 @@ def test_real_run_persists_one_row_per_lead(
     assert summary["fit_score_distribution"]["min"] == 40  # Weak Health Co: country only
 
 
-def test_rerun_is_bounded_and_does_not_duplicate_beyond_expected_rows(
+def test_default_rerun_skips_unchanged_leads_and_writes_nothing(
     db_session: Session, db_session_factory: sessionmaker[Session]
 ) -> None:
-    """Rescoring the same cohort again inserts a SECOND generation of rows
-    (versioned history, Part D.1) -- 3 leads x 2 runs = 6 rows, never more,
-    and each lead still has exactly 2 historical rows."""
+    """Rerunning after a successful run finds every lead's latest row
+    already has the identical input fingerprint -- nothing is written, and
+    every lead is reported as skipped (not silently dropped)."""
     _seed_leads(db_session)
 
     score_cohort(db_session_factory, dry_run=False, chunk_size=2)
+    second = score_cohort(db_session_factory, dry_run=False, chunk_size=2)
+
+    assert second["total_attempted"] == 3
+    assert second["total_succeeded"] == 0
+    assert second["total_skipped_unchanged"] == 3
+    assert second["total_failed"] == 0
+    import sqlalchemy as sa
+
+    assert len(db_session.execute(sa.select(LeadFitScore)).scalars().all()) == 3
+
+
+def test_rescore_unchanged_writes_bounded_second_generation(
+    db_session: Session, db_session_factory: sessionmaker[Session]
+) -> None:
+    """--rescore-unchanged inserts a SECOND generation of rows (versioned
+    history, Part D.1) -- 3 leads x 2 runs = 6 rows, never more, and each
+    lead has exactly 2 historical rows."""
+    _seed_leads(db_session)
+
     score_cohort(db_session_factory, dry_run=False, chunk_size=2)
+    score_cohort(db_session_factory, dry_run=False, chunk_size=2, rescore_unchanged=True)
 
     import sqlalchemy as sa
 
@@ -96,6 +116,51 @@ def test_rerun_is_bounded_and_does_not_duplicate_beyond_expected_rows(
     for row in rows:
         counts_per_lead[row.lead_id] = counts_per_lead.get(row.lead_id, 0) + 1
     assert set(counts_per_lead.values()) == {2}
+
+
+def test_changed_inputs_are_rescored_even_by_default(
+    db_session: Session, db_session_factory: sessionmaker[Session]
+) -> None:
+    _seed_leads(db_session)
+    score_cohort(db_session_factory, dry_run=False, chunk_size=2)
+
+    import sqlalchemy as sa
+
+    weak = db_session.execute(
+        sa.select(Lead).where(Lead.company_name == "Weak Health Co")
+    ).scalar_one()
+    weak.industry = "Medical Practice"
+    db_session.commit()
+
+    second = score_cohort(db_session_factory, dry_run=False, chunk_size=2)
+    assert second["total_succeeded"] == 1
+    assert second["total_skipped_unchanged"] == 2
+    assert second["band_counts"] == {"strong_match": 1}
+
+
+def test_one_failing_lead_does_not_sink_its_chunk(
+    db_session: Session, db_session_factory: sessionmaker[Session], monkeypatch
+) -> None:
+    _seed_leads(db_session)
+    from app.scoring import fit as fit_module
+
+    real = fit_module.compute_fit
+
+    def flaky(lead):
+        if lead.company_name == "Strong Realty Co":
+            raise ValueError("bad input")
+        return real(lead)
+
+    monkeypatch.setattr(fit_module, "compute_fit", flaky)
+    summary = score_cohort(db_session_factory, dry_run=False, chunk_size=10)
+
+    assert summary["total_attempted"] == 3
+    assert summary["total_succeeded"] == 2
+    assert summary["failed_by_segment"] == {"real_estate": 1}
+    assert summary["errors"][0]["error"] == "bad input"
+    import sqlalchemy as sa
+
+    assert len(db_session.execute(sa.select(LeadFitScore)).scalars().all()) == 2
 
 
 def test_limit_bounds_how_many_leads_are_considered(

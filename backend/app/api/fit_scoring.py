@@ -1,11 +1,24 @@
 """Phase 4 Parts C/D/E: API surface for the v2 deterministic company-fit
-scorer. Entirely additive -- does not call or alter anything in
-app/api/scoring.py (the legacy v1 endpoints), and never mutates
-Lead.status / LeadBatch.status / AIOutputReview (Part D.3).
+scorer. Additive -- does not call or alter anything in app/api/scoring.py
+(the legacy v1 endpoints), and never mutates Lead.status / LeadBatch.status
+/ AIOutputReview, never generates or approves a draft, never sends (Part
+D.3).
+
+Every read of "the current fit score" or "current readiness" goes through
+app/services/fit_queries.py, so single-lead, bulk, summary, and list
+endpoints can't disagree about which stored row is current.
+
+Two kinds of readiness appear in responses, deliberately kept apart:
+
+* `readiness` / `eligibility` -- CURRENT, recomputed from live lead,
+  batch, draft, and review state on every read (`readiness_is_current` is
+  always true).
+* `at_scoring` -- the HISTORICAL readiness/eligibility snapshot stored
+  with the score row, i.e. what was true when it was
+  computed. Useful for auditing; never used to gate anything.
 """
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,89 +26,68 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models import AIOutput, AIOutputReview, Lead, LeadBatch, LeadFitScore
+from app.models import Lead, LeadBatch, LeadFitScore
 from app.schemas.lead_fit_score import (
-    BatchFitScoreSummary,
+    BatchFitScoreRunSummary,
+    BatchFitSummary,
+    CurrentReadinessResponse,
     FitProfileResponse,
+    HistoricalAssessment,
     LeadFitScoreResponse,
 )
 from app.schemas.pagination import Page
 from app.scoring import fit
-from app.services.pagination import pagination_params, paginate
+from app.services import fit_queries
+from app.services.pagination import pagination_params
 
 router = APIRouter(tags=["fit-scoring"])
 
-OUTREACH_OUTPUT_TYPE = "outreach_email"
+# Leads scored per DB transaction by the batch endpoint -- bounded memory
+# and bounded transaction size regardless of batch size.
+SCORE_CHUNK_SIZE = 500
 
 
-def _readiness_inputs(session: Session, lead: Lead) -> dict[str, Any]:
-    """One query for the latest outreach draft, one for its latest review
-    -- bounded per lead, not per-criterion."""
-    latest_output = session.execute(
-        select(AIOutput)
-        .where(AIOutput.lead_id == lead.id, AIOutput.output_type == OUTREACH_OUTPUT_TYPE)
-        .order_by(AIOutput.created_at.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-
-    review_decision: str | None = None
-    if latest_output is not None:
-        latest_review = session.execute(
-            select(AIOutputReview)
-            .where(AIOutputReview.ai_output_id == latest_output.id)
-            .order_by(AIOutputReview.created_at.desc())
-            .limit(1)
-        ).scalar_one_or_none()
-        if latest_review is not None:
-            review_decision = latest_review.decision
-
-    return {
-        "has_contact_email": bool(lead.contact_email),
-        "latest_outreach_exists": latest_output is not None,
-        "latest_outreach_review_decision": review_decision,
-    }
-
-
-def _score_and_optionally_persist(
-    session: Session, lead: Lead, *, persist: bool
+def _response(
+    *,
+    lead: Lead,
+    row: LeadFitScore | None,
+    fit_result: fit.FitResult | None,
+    readiness: fit.ReadinessResult,
+    eligibility: fit.EligibilityResult,
 ) -> LeadFitScoreResponse:
-    """Freshly computed end to end -- readiness here is always current
-    (this IS the computation), unlike the bulk batch listing endpoint
-    below which reads a stored snapshot."""
-    fit_result = fit.compute_fit(lead)
-    readiness_inputs = _readiness_inputs(session, lead)
-    eligibility = fit.compute_eligibility(lead)
-    readiness = fit.compute_readiness(
-        lead,
-        eligibility_excluded=eligibility.excluded,
-        **readiness_inputs,
-    )
-
-    row_id: UUID | None = None
-    if persist:
-        row = LeadFitScore(
-            lead_id=lead.id,
-            scorer_version=fit_result.scorer_version,
-            profile_id=fit_result.profile_id,
-            profile_version=fit_result.profile_version,
-            normalization_version=fit_result.normalization_version,
-            input_fingerprint=fit_result.input_fingerprint,
-            fit_score=fit_result.fit_score,
-            evidence_coverage_pct=fit_result.evidence_coverage_pct,
-            band=fit_result.band,
-            criteria=fit_result.criteria_as_dicts(),
-            readiness=readiness.to_dict(),
-            eligibility_excluded=eligibility.excluded,
-            eligibility_reasons=eligibility.reasons,
-            computed_at=fit_result.computed_at,
-            computation_ms=fit_result.computation_ms,
+    """Build a response from either a stored row or a fresh (unpersisted)
+    computation. Fit/coverage/band/criteria come from the row when there is
+    one; readiness/eligibility are always the current values passed in."""
+    if row is not None:
+        historical = HistoricalAssessment(
+            readiness=row.readiness,
+            eligibility_excluded=row.eligibility_excluded,
+            eligibility_reasons=row.eligibility_reasons,
+            computed_at=row.computed_at,
         )
-        session.add(row)
-        session.flush()
-        row_id = row.id
-
+        return LeadFitScoreResponse(
+            id=row.id,
+            lead_id=lead.id,
+            scorer_version=row.scorer_version,
+            profile_id=row.profile_id,
+            profile_version=row.profile_version,
+            normalization_version=row.normalization_version,
+            input_fingerprint=row.input_fingerprint,
+            fit_score=row.fit_score,
+            max_fit_score=fit.MAX_FIT_SCORE,
+            evidence_coverage_pct=row.evidence_coverage_pct,
+            band=row.band,
+            criteria=row.criteria,
+            readiness=readiness.to_dict(),
+            readiness_is_current=True,
+            eligibility=eligibility.to_dict(),
+            at_scoring=historical,
+            computed_at=row.computed_at,
+            computation_ms=row.computation_ms,
+        )
+    assert fit_result is not None
     return LeadFitScoreResponse(
-        id=row_id,
+        id=None,
         lead_id=lead.id,
         scorer_version=fit_result.scorer_version,
         profile_id=fit_result.profile_id,
@@ -110,9 +102,84 @@ def _score_and_optionally_persist(
         readiness=readiness.to_dict(),
         readiness_is_current=True,
         eligibility=eligibility.to_dict(),
+        at_scoring=None,
         computed_at=fit_result.computed_at,
         computation_ms=fit_result.computation_ms,
     )
+
+
+def score_leads(
+    session: Session,
+    leads: list[Lead],
+    *,
+    persist: bool,
+    skip_unchanged: bool = False,
+) -> list[tuple[Lead, LeadFitScoreResponse | None, Exception | None]]:
+    """Score a bounded list of leads: one readiness query pair for the whole
+    list, and (with `skip_unchanged`) one lookup of existing latest rows.
+
+    Returns, per lead, `(lead, response, error)`:
+      * `response` set, `error` None -- scored (and persisted if `persist`);
+      * both None -- skipped: its latest applicable row already has this
+        exact input fingerprint, so rescoring would only duplicate history;
+      * `error` set -- that lead failed; its savepoint was rolled back and
+        the other leads are unaffected.
+
+    Writes LeadFitScore rows only. The caller owns the transaction.
+    """
+    readiness_by_lead = fit_queries.current_readiness_by_lead(session, leads)
+    existing = (
+        fit_queries.latest_fit_scores_by_lead(session, [lead.id for lead in leads])
+        if skip_unchanged
+        else {}
+    )
+    results: list[tuple[Lead, LeadFitScoreResponse | None, Exception | None]] = []
+    for lead in leads:
+        readiness, eligibility = readiness_by_lead[lead.id]
+        try:
+            fit_result = fit.compute_fit(lead)
+            prior = existing.get(lead.id)
+            if prior is not None and prior.input_fingerprint == fit_result.input_fingerprint:
+                results.append((lead, None, None))
+                continue
+            row: LeadFitScore | None = None
+            if persist:
+                with session.begin_nested():
+                    row = LeadFitScore(
+                        lead_id=lead.id,
+                        scorer_version=fit_result.scorer_version,
+                        profile_id=fit_result.profile_id,
+                        profile_version=fit_result.profile_version,
+                        normalization_version=fit_result.normalization_version,
+                        input_fingerprint=fit_result.input_fingerprint,
+                        fit_score=fit_result.fit_score,
+                        evidence_coverage_pct=fit_result.evidence_coverage_pct,
+                        band=fit_result.band,
+                        criteria=fit_result.criteria_as_dicts(),
+                        readiness=readiness.to_dict(),
+                        eligibility_excluded=eligibility.excluded,
+                        eligibility_reasons=eligibility.reasons,
+                        computed_at=fit_result.computed_at,
+                        computation_ms=fit_result.computation_ms,
+                    )
+                    session.add(row)
+                    session.flush()
+            results.append(
+                (
+                    lead,
+                    _response(
+                        lead=lead,
+                        row=row,
+                        fit_result=fit_result,
+                        readiness=readiness,
+                        eligibility=eligibility,
+                    ),
+                    None,
+                )
+            )
+        except Exception as e:  # noqa: BLE001 -- per-lead isolation
+            results.append((lead, None, e))
+    return results
 
 
 @router.post(
@@ -126,8 +193,11 @@ def score_lead_fit(lead_id: UUID, session: Session = Depends(get_session)) -> Le
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    response = _score_and_optionally_persist(session, lead, persist=True)
+    [(_, response, error)] = score_leads(session, [lead], persist=True)
+    if error is not None:
+        raise error
     session.commit()
+    assert response is not None
     return response
 
 
@@ -138,53 +208,39 @@ def score_lead_fit(lead_id: UUID, session: Session = Depends(get_session)) -> Le
 def get_latest_lead_fit_score(
     lead_id: UUID, session: Session = Depends(get_session)
 ) -> LeadFitScoreResponse:
-    """Returns the most recently PERSISTED fit/band/coverage/criteria for
-    this lead's current profile version, exactly as they were computed --
-    but recomputes readiness and eligibility fresh (Part D.4: a stored
-    eligibility/readiness snapshot must not be trusted after the lead or
-    its batch/outreach state has since changed)."""
+    """The latest applicable stored fit/band/coverage/criteria, exactly as
+    computed, plus CURRENT readiness/eligibility (Part D.4: a stored
+    snapshot must not be trusted after lead/batch/outreach state changed)."""
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-
-    stored = session.execute(
-        select(LeadFitScore)
-        .where(
-            LeadFitScore.lead_id == lead_id,
-            LeadFitScore.scorer_version == fit.SCORER_VERSION,
-            LeadFitScore.profile_id == fit.PROFILE_ID,
-            LeadFitScore.profile_version == fit.PROFILE_VERSION,
-        )
-        .order_by(LeadFitScore.created_at.desc(), LeadFitScore.id.desc())
-        .limit(1)
-    ).scalar_one_or_none()
+    stored = fit_queries.latest_fit_score(session, lead_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="Lead has not been fit-scored yet")
-
-    readiness_inputs = _readiness_inputs(session, lead)
-    eligibility = fit.compute_eligibility(lead)
-    readiness = fit.compute_readiness(
-        lead, eligibility_excluded=eligibility.excluded, **readiness_inputs
+    readiness, eligibility = fit_queries.current_readiness(session, lead)
+    return _response(
+        lead=lead, row=stored, fit_result=None, readiness=readiness, eligibility=eligibility
     )
 
-    return LeadFitScoreResponse(
-        id=stored.id,
+
+@router.get(
+    "/api/leads/{lead_id}/readiness",
+    response_model=CurrentReadinessResponse,
+)
+def get_current_readiness(
+    lead_id: UUID, session: Session = Depends(get_session)
+) -> CurrentReadinessResponse:
+    """Current outreach readiness and routing eligibility, independent of
+    whether the lead has ever been fit-scored -- these describe live state,
+    not a score."""
+    lead = session.get(Lead, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    readiness, eligibility = fit_queries.current_readiness(session, lead)
+    return CurrentReadinessResponse(
         lead_id=lead.id,
-        scorer_version=stored.scorer_version,
-        profile_id=stored.profile_id,
-        profile_version=stored.profile_version,
-        normalization_version=stored.normalization_version,
-        input_fingerprint=stored.input_fingerprint,
-        fit_score=stored.fit_score,
-        max_fit_score=fit.MAX_FIT_SCORE,
-        evidence_coverage_pct=stored.evidence_coverage_pct,
-        band=stored.band,
-        criteria=stored.criteria,
         readiness=readiness.to_dict(),
-        readiness_is_current=True,
         eligibility=eligibility.to_dict(),
-        computed_at=stored.computed_at,
-        computation_ms=stored.computation_ms,
     )
 
 
@@ -217,81 +273,68 @@ def get_fit_profile() -> FitProfileResponse:
 
 @router.post(
     "/api/batches/{batch_id}/fit-score",
-    response_model=BatchFitScoreSummary,
+    response_model=BatchFitScoreRunSummary,
     status_code=status.HTTP_200_OK,
 )
-def score_batch_fit(batch_id: UUID, session: Session = Depends(get_session)) -> BatchFitScoreSummary:
-    """Scores every lead in the batch and persists one row each. Bounded to
-    this batch's leads. Deliberately does NOT touch LeadBatch.status or
-    Lead.status (Part D.3) -- a batch stuck 'partial' stays 'partial', and
-    scoring never marks anything contactable."""
+def score_batch_fit(batch_id: UUID, session: Session = Depends(get_session)) -> BatchFitScoreRunSummary:
+    """Scores every lead in the batch in chunks of SCORE_CHUNK_SIZE, one
+    committed transaction per chunk. Leads whose latest applicable row has
+    the same input fingerprint are skipped (reported, not rescored), so
+    pressing the button twice doesn't pile up identical history rows.
+    Never touches LeadBatch.status or Lead.status (Part D.3) -- a partial
+    batch stays partial and nothing becomes contactable by being scored.
+
+    The response's run counts describe THIS run; `summary` is the batch's
+    distinct-lead state afterwards (see GET /api/batches/{id}/fit-summary).
+    """
     batch = session.get(LeadBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
 
-    leads = list(
-        session.execute(select(Lead).where(Lead.batch_id == batch_id)).scalars().all()
+    lead_ids = list(
+        session.execute(
+            select(Lead.id).where(Lead.batch_id == batch_id).order_by(Lead.id)
+        ).scalars()
     )
+    scored = skipped = failed = 0
+    for start in range(0, len(lead_ids), SCORE_CHUNK_SIZE):
+        chunk_ids = lead_ids[start : start + SCORE_CHUNK_SIZE]
+        leads = list(
+            session.execute(select(Lead).where(Lead.id.in_(chunk_ids))).scalars()
+        )
+        for _, response, error in score_leads(
+            session, leads, persist=True, skip_unchanged=True
+        ):
+            if error is not None:
+                failed += 1
+            elif response is None:
+                skipped += 1
+            else:
+                scored += 1
+        session.commit()
 
-    counts = {
-        fit.BAND_STRONG: 0,
-        fit.BAND_PARTIAL: 0,
-        fit.BAND_WEAK: 0,
-        fit.BAND_INSUFFICIENT_EVIDENCE: 0,
-    }
-    score_sum = 0
-    for lead in leads:
-        response = _score_and_optionally_persist(session, lead, persist=True)
-        score_sum += response.fit_score
-        counts[response.band] += 1
-
-    session.commit()
-    average = round(score_sum / len(leads), 1) if leads else 0.0
-
-    return BatchFitScoreSummary(
+    return BatchFitScoreRunSummary(
         batch_id=batch_id,
-        scored_leads=len(leads),
-        strong_match=counts[fit.BAND_STRONG],
-        partial_match=counts[fit.BAND_PARTIAL],
-        weak_match=counts[fit.BAND_WEAK],
-        insufficient_evidence=counts[fit.BAND_INSUFFICIENT_EVIDENCE],
-        average_fit_score=average,
+        attempted=len(lead_ids),
+        newly_scored=scored,
+        skipped_unchanged=skipped,
+        failed=failed,
+        summary=BatchFitSummary(**fit_queries.batch_fit_summary(session, batch_id)),
     )
 
 
-def _latest_fit_scores_by_lead(
-    session: Session, lead_ids: list[UUID]
-) -> dict[UUID, LeadFitScore]:
-    """One query for however many leads are on the current page -- the
-    bounded bulk lookup Part E asks for instead of one fit-score request
-    per lead. Picks each lead's most recent row for the CURRENT profile
-    version via a ROW_NUMBER window, not a correlated subquery per lead."""
-    if not lead_ids:
-        return {}
-
-    rn = (
-        func.row_number()
-        .over(
-            partition_by=LeadFitScore.lead_id,
-            order_by=(LeadFitScore.created_at.desc(), LeadFitScore.id.desc()),
-        )
-        .label("rn")
-    )
-    ranked = (
-        select(LeadFitScore, rn)
-        .where(
-            LeadFitScore.lead_id.in_(lead_ids),
-            LeadFitScore.scorer_version == fit.SCORER_VERSION,
-            LeadFitScore.profile_id == fit.PROFILE_ID,
-            LeadFitScore.profile_version == fit.PROFILE_VERSION,
-        )
-        .subquery()
-    )
-    stmt = select(LeadFitScore).select_from(ranked).join(
-        LeadFitScore, LeadFitScore.id == ranked.c.id
-    ).where(ranked.c.rn == 1)
-    rows = session.execute(stmt).scalars().all()
-    return {row.lead_id: row for row in rows}
+@router.get(
+    "/api/batches/{batch_id}/fit-summary",
+    response_model=BatchFitSummary,
+)
+def get_batch_fit_summary(
+    batch_id: UUID, session: Session = Depends(get_session)
+) -> BatchFitSummary:
+    """Distinct-lead band counts from each lead's latest applicable score --
+    rescoring never inflates these."""
+    if session.get(LeadBatch, batch_id) is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return BatchFitSummary(**fit_queries.batch_fit_summary(session, batch_id))
 
 
 @router.get(
@@ -303,8 +346,13 @@ def list_batch_fit_scores(
     pagination: tuple[int, int] = Depends(pagination_params),
     session: Session = Depends(get_session),
 ) -> Page[LeadFitScoreResponse]:
-    """Paginated, bounded bulk lookup of each lead's latest fit score in a
-    batch (Part E) -- one query for the page's fit rows, not N requests."""
+    """Paginated bulk lookup over the batch's leads, in the same order as
+    GET /api/leads?batch_id=... (created_at DESC, id DESC). Pagination is
+    over LEADS, so `total` is the batch's lead count and a page's `items`
+    omits leads on that page that have never been fit-scored. A constant
+    number of queries per page: leads, latest fit rows, latest drafts,
+    their latest reviews. Readiness/eligibility in each item are current.
+    """
     batch = session.get(LeadBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
@@ -315,45 +363,25 @@ def list_batch_fit_scores(
         .where(Lead.batch_id == batch_id)
         .order_by(Lead.created_at.desc(), Lead.id.desc())
     )
-    total = session.scalar(select(func.count()).select_from(lead_stmt.subquery())) or 0
-    leads = session.execute(lead_stmt.limit(limit).offset(offset)).scalars().all()
+    total = session.scalar(
+        select(func.count()).select_from(Lead).where(Lead.batch_id == batch_id)
+    ) or 0
+    leads = list(session.execute(lead_stmt.limit(limit).offset(offset)).scalars())
 
-    scores_by_lead = _latest_fit_scores_by_lead(session, [lead.id for lead in leads])
+    scores_by_lead = fit_queries.latest_fit_scores_by_lead(session, [lead.id for lead in leads])
+    scored_leads = [lead for lead in leads if lead.id in scores_by_lead]
+    readiness_by_lead = fit_queries.current_readiness_by_lead(session, scored_leads)
 
     items: list[LeadFitScoreResponse] = []
-    for lead in leads:
-        stored = scores_by_lead.get(lead.id)
-        if stored is None:
-            continue
-        # Eligibility is recomputed fresh per lead (Part D.4) -- cheap here
-        # because `lead.batch` resolves from the session identity map
-        # (already loaded once above as `batch`) rather than a new query,
-        # so this does not reintroduce N+1. `readiness` is shown as stored
-        # (may lag if outreach/review state changed since scoring) --
-        # `readiness_is_current=False` makes that explicit to callers
-        # instead of leaving them to assume it's live. Opening the lead
-        # individually via GET /api/leads/{id}/fit-score always recomputes
-        # readiness fresh (readiness_is_current=True there).
-        eligibility = fit.compute_eligibility(lead)
+    for lead in scored_leads:
+        readiness, eligibility = readiness_by_lead[lead.id]
         items.append(
-            LeadFitScoreResponse(
-                id=stored.id,
-                lead_id=lead.id,
-                scorer_version=stored.scorer_version,
-                profile_id=stored.profile_id,
-                profile_version=stored.profile_version,
-                normalization_version=stored.normalization_version,
-                input_fingerprint=stored.input_fingerprint,
-                fit_score=stored.fit_score,
-                max_fit_score=fit.MAX_FIT_SCORE,
-                evidence_coverage_pct=stored.evidence_coverage_pct,
-                band=stored.band,
-                criteria=stored.criteria,
-                readiness=stored.readiness,
-                readiness_is_current=False,
-                eligibility=eligibility.to_dict(),
-                computed_at=stored.computed_at,
-                computation_ms=stored.computation_ms,
+            _response(
+                lead=lead,
+                row=scores_by_lead[lead.id],
+                fit_result=None,
+                readiness=readiness,
+                eligibility=eligibility,
             )
         )
 
@@ -361,3 +389,4 @@ def list_batch_fit_scores(
         items=items, total=total, limit=limit, offset=offset,
         has_more=(offset + len(leads)) < total,
     )
+

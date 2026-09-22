@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.models import Lead, LeadBatch, WorkflowEvent
+from app.models.lead_batch import (
+    BATCH_STATUS_PARTIAL,
+    BATCH_STATUS_UPLOADING,
+    INCOMPLETE_BATCH_STATUSES,
+)
 from app.pdl.config import CSV_MAX_BYTES, CSV_MAX_ROWS
 from app.schemas.batch_upload import BatchUploadError, BatchUploadResponse
 from app.schemas.lead_batch import LeadBatchRead
@@ -94,6 +99,12 @@ def _lead_kwargs(batch_id: UUID, cleaned) -> dict[str, object]:
     return kwargs
 
 
+def _committed_lead_count(session: Session, batch_id: UUID) -> int:
+    return session.scalar(
+        select(func.count()).select_from(Lead).where(Lead.batch_id == batch_id)
+    ) or 0
+
+
 @router.post(
     "/upload",
     response_model=BatchUploadResponse,
@@ -157,12 +168,15 @@ async def upload_batch(
                     status_code=404,
                     detail=f"resume_batch_id {resume_batch_id} does not exist.",
                 )
-            if batch.status != "partial":
+            # "uploading" is resumable too: it's what a batch is left in when
+            # the process died after committing some chunks but before the
+            # handler could record "partial" (see INCOMPLETE_BATCH_STATUSES).
+            if batch.status not in INCOMPLETE_BATCH_STATUSES:
                 raise HTTPException(
                     status_code=409,
                     detail=(
                         f"Batch {resume_batch_id} has status '{batch.status}', not "
-                        "'partial' -- there is nothing to resume. Omit "
+                        "'partial'/'uploading' -- there is nothing to resume. Omit "
                         "resume_batch_id to upload this file as a new batch."
                     ),
                 )
@@ -177,17 +191,27 @@ async def upload_batch(
                     ),
                 )
             batch_id = batch.id
-            already_committed = batch.processed_leads
+            # The rows actually committed to this batch, not the stored
+            # `processed_leads` counter: after a crash between a chunk commit
+            # and the final bookkeeping commit, the counter lags the table.
+            # Rows are inserted in file order, so skipping this many valid
+            # rows of the (hash-verified identical) file resumes exactly
+            # where the committed data ends.
+            already_committed = _committed_lead_count(session, batch_id)
             resumed = True
         else:
             batch = LeadBatch(
                 name=batch_name,
                 source="csv",
-                status="uploaded",
+                status=BATCH_STATUS_UPLOADING,
                 upload_content_hash=content_hash,
             )
             session.add(batch)
-            session.flush()
+            # Committed on its own, before any lead chunk, so the batch is
+            # durably marked incomplete from the start -- if the process
+            # dies mid-stream it stays "uploading" (excluded from routing,
+            # resumable), never a finished-looking "uploaded".
+            session.commit()
             batch_id = batch.id
             already_committed = 0
             resumed = False
@@ -251,9 +275,9 @@ async def upload_batch(
 
         batch = session.get(LeadBatch, batch_id)
         batch.total_leads = stats.total_rows
-        batch.processed_leads = already_committed + inserted
+        batch.processed_leads = _committed_lead_count(session, batch_id)
         if mid_stream_error is not None:
-            batch.status = "partial"
+            batch.status = BATCH_STATUS_PARTIAL
         elif batch.processed_leads == 0:
             batch.status = "failed"
         else:

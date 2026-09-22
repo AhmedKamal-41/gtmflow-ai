@@ -97,7 +97,10 @@ def get_latest_ai_output(
             AIOutput.lead_id == lead_id,
             AIOutput.output_type == output_type,
         )
-        .order_by(AIOutput.created_at.desc())
+        # `id` breaks created_at ties -- the same rule as the approve/reject
+        # supersession check and v2 readiness, so all three agree on which
+        # draft is current.
+        .order_by(AIOutput.created_at.desc(), AIOutput.id.desc())
         .limit(1)
     ).scalar_one_or_none()
     if row is None:

@@ -36,6 +36,16 @@ class EligibilityRead(BaseModel):
     checked_at: datetime
 
 
+class HistoricalAssessment(BaseModel):
+    """What readiness/eligibility were when this score row was computed.
+    Audit trail only -- never used to gate an action."""
+
+    readiness: ReadinessRead
+    eligibility_excluded: bool
+    eligibility_reasons: list[str]
+    computed_at: datetime
+
+
 class LeadFitScoreResponse(BaseModel):
     """Full Part C output for one lead: fit + coverage + band, readiness,
     eligibility, and every version identifier needed to reproduce or audit
@@ -53,9 +63,12 @@ class LeadFitScoreResponse(BaseModel):
     evidence_coverage_pct: float
     band: str
     criteria: list[FitCriterionRead]
+    # CURRENT readiness/eligibility, recomputed on every read.
     readiness: ReadinessRead
     readiness_is_current: bool
     eligibility: EligibilityRead
+    # The snapshot stored with this row (None for an unpersisted result).
+    at_scoring: HistoricalAssessment | None = None
     computed_at: datetime
     computation_ms: float
 
@@ -81,15 +94,41 @@ class FitProfileResponse(BaseModel):
     band_partial_min: int
 
 
-class BatchFitScoreSummary(BaseModel):
-    """Result of POST /api/batches/{id}/fit-score: bounded, side-effect-free
-    (no Lead/LeadBatch status mutation -- Part D.3) scoring of every lead in
-    a batch."""
+class CurrentReadinessResponse(BaseModel):
+    """GET /api/leads/{id}/readiness: live readiness and routing
+    eligibility, available whether or not the lead was ever fit-scored."""
+
+    lead_id: UUID
+    readiness: ReadinessRead
+    eligibility: EligibilityRead
+
+
+class BatchFitSummary(BaseModel):
+    """Distinct-lead view of a batch under the current profile version:
+    each lead counted once, in the band of its LATEST applicable score.
+    `score_rows` counts every applicable stored row (history included) so a
+    reader can see rescoring happened without it inflating the lead counts."""
 
     batch_id: UUID
+    total_leads: int
     scored_leads: int
+    unscored_leads: int
+    score_rows: int
     strong_match: int
     partial_match: int
     weak_match: int
     insufficient_evidence: int
-    average_fit_score: float
+    average_fit_score: float | None
+
+
+class BatchFitScoreRunSummary(BaseModel):
+    """Result of POST /api/batches/{id}/fit-score. Run counts describe this
+    run; `summary` is the batch's distinct-lead state after it. Scoring
+    writes LeadFitScore rows only -- no Lead/LeadBatch status change."""
+
+    batch_id: UUID
+    attempted: int
+    newly_scored: int
+    skipped_unchanged: int
+    failed: int
+    summary: BatchFitSummary

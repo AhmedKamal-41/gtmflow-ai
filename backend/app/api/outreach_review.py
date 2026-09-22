@@ -47,6 +47,7 @@ from app.schemas.outreach_review import (
     RejectOutreachRequest,
 )
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from app.services.fit_queries import newer_outreach_clause
 
 OUTREACH_OUTPUT_TYPE = "outreach_email"
 APPROVED_EVENT = "outreach_approved"
@@ -97,14 +98,11 @@ def _resolve_output_for_review(
                 "cannot be approved or rejected as outreach."
             ),
         )
+    # "Newer" uses the same (created_at, id) order as GET latest-ai-output,
+    # so a draft sharing a timestamp with another can't be both "the
+    # latest" there and "superseded" here (or neither).
     newer_exists = session.execute(
-        select(AIOutput.id)
-        .where(
-            AIOutput.lead_id == lead.id,
-            AIOutput.output_type == OUTREACH_OUTPUT_TYPE,
-            AIOutput.created_at > output.created_at,
-        )
-        .limit(1)
+        select(AIOutput.id).where(newer_outreach_clause(output)).limit(1)
     ).first()
     if newer_exists is not None:
         raise HTTPException(
@@ -123,7 +121,7 @@ def _latest_review_for_output(
     return session.execute(
         select(AIOutputReview)
         .where(AIOutputReview.ai_output_id == ai_output_id)
-        .order_by(AIOutputReview.created_at.desc())
+        .order_by(AIOutputReview.created_at.desc(), AIOutputReview.id.desc())
         .limit(1)
     ).scalar_one_or_none()
 

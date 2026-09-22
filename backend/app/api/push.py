@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.models import IntegrationPush, Lead, LeadBatch, WorkflowEvent
+from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
 from app.schemas.integration_push import (
     BatchPushResult,
     BatchPushSummary,
@@ -44,11 +45,11 @@ def _require_complete_batch(lead: Lead) -> None:
     complete (nothing to exclude) in that case.
     """
     batch = lead.batch
-    if batch is not None and batch.status == "partial":
+    if batch is not None and batch.status in INCOMPLETE_BATCH_STATUSES:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Batch {batch.id} is only partially imported (status='partial') "
+                f"Batch {batch.id} is only partially imported (status='{batch.status}') "
                 "and is excluded from Slack routing until the import completes. "
                 "This cannot be overridden with force=true."
             ),
@@ -117,11 +118,11 @@ def push_batch_hot_leads(
         raise HTTPException(status_code=404, detail="Batch not found")
 
     _validate_integration_type(request.integration_type)
-    if batch.status == "partial":
+    if batch.status in INCOMPLETE_BATCH_STATUSES:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Batch {batch.id} is only partially imported (status='partial') "
+                f"Batch {batch.id} is only partially imported (status='{batch.status}') "
                 "and is excluded from Slack routing until the import completes. "
                 "This cannot be overridden with force=true."
             ),

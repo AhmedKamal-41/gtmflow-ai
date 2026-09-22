@@ -177,8 +177,10 @@ def test_partial_batch_fit_score_flags_eligibility_and_batch_endpoint_leaves_sta
 
     summary_response = client.post(f"/api/batches/{batch_id}/fit-score")
     assert summary_response.status_code == 200
-    summary = summary_response.json()
-    assert summary["scored_leads"] == 1
+    run = summary_response.json()
+    assert run["attempted"] == 1
+    assert run["newly_scored"] == 1
+    assert run["summary"]["scored_leads"] == 1
 
     batch_after = client.get(f"/api/batches/{batch_id}").json()
     assert batch_after["status"] == "partial"  # untouched by v2 batch scoring
@@ -209,7 +211,9 @@ def test_batch_fit_score_summary_counts_and_bulk_list_endpoint(
     upload = _upload(client)
     batch_id = upload["batch_id"]
 
-    summary = client.post(f"/api/batches/{batch_id}/fit-score").json()
+    run = client.post(f"/api/batches/{batch_id}/fit-score").json()
+    assert run["newly_scored"] == 1
+    summary = run["summary"]
     assert summary["scored_leads"] == 1
     assert summary["insufficient_evidence"] == 1  # industry-only match, no structured country
 

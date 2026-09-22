@@ -411,11 +411,12 @@ class EligibilityResult:
 def compute_eligibility(lead: Any) -> EligibilityResult:
     """Current hard exclusions only -- mirrors exactly what
     app/services/integration_push.py and app/api/push.py actually enforce
-    today (DISQUALIFIED_STATUSES, partial-batch), recomputed fresh from
+    today (DISQUALIFIED_STATUSES, INCOMPLETE_BATCH_STATUSES), recomputed fresh from
     live lead/batch state every call. Never accepts a `force` parameter:
     per Part C.4, no score and no force flag can override a hard exclusion,
     so this function doesn't expose a way to ask it to.
     """
+    from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
     from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
 
     reasons: list[str] = []
@@ -424,9 +425,10 @@ def compute_eligibility(lead: Any) -> EligibilityResult:
         reasons.append(f"lead status '{status_value}' blocks outreach delivery")
 
     batch = getattr(lead, "batch", None)
-    if batch is not None and getattr(batch, "status", None) == "partial":
+    batch_status = getattr(batch, "status", None) if batch is not None else None
+    if batch_status in INCOMPLETE_BATCH_STATUSES:
         reasons.append(
-            f"batch {batch.id} is only partially imported (status='partial')"
+            f"batch {batch.id} is only partially imported (status='{batch_status}')"
         )
 
     return EligibilityResult(

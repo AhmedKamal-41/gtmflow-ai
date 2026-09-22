@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
+from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
 from app.schemas.lead_score import BatchScoreSummary, LeadScoreResponse
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
 
@@ -147,13 +148,13 @@ def score_one_batch(
         else:
             cold += 1
 
-    # "partial" is a disposition (this batch's CSV import didn't fully
+    # "partial"/"uploading" is a disposition (this batch's CSV import didn't fully
     # commit), not a workflow stage scoring should overwrite -- same
     # invariant already applied to blocked Lead.status (see
     # app/api/scoring.py's _apply_score, app/api/outreach_review.py).
     # Scoring the rows that DID commit is still fine and still happens
     # above; only the batch-level status flag is protected here.
-    if leads and batch.status != "partial":
+    if leads and batch.status not in INCOMPLETE_BATCH_STATUSES:
         batch.status = "scored"
     average = round(score_sum / len(leads), 1) if leads else 0.0
 
