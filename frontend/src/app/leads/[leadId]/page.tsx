@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AIOutputCard } from "@/components/AIOutputCard";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { CurrentReadinessCard } from "@/components/CurrentReadinessCard";
 import { ErrorMessage } from "@/components/ErrorMessage";
 import { FitScoreCard } from "@/components/FitScoreCard";
 import { Icon } from "@/components/Icon";
@@ -24,6 +25,7 @@ import {
   getLatestAIOutput,
   getLead,
   getLeadFitScore,
+  getLeadReadiness,
   getLeadScore,
   getPushes,
   pushLead,
@@ -31,7 +33,13 @@ import {
   scoreLead,
   scoreLeadFit,
 } from "@/lib/api";
-import type { AIOutput, Lead, LeadFitScore, LeadScore } from "@/types/api";
+import type {
+  AIOutput,
+  CurrentReadiness,
+  Lead,
+  LeadFitScore,
+  LeadScore,
+} from "@/types/api";
 
 type ActionLabel =
   | "Score"
@@ -53,6 +61,12 @@ export default function LeadDetailPage() {
   // v2 deterministic company-fit scorer (Phase 4) -- entirely separate
   // from `score`/`LeadScore` above (the legacy v1 Hot/Warm/Cold scorer).
   const [fitScore, setFitScore] = useState<LeadFitScore | null>(null);
+  // CURRENT readiness + routing eligibility (live state, independent of
+  // whether the lead was ever fit-scored). `undefined` = not resolved yet
+  // or the lookup failed; push stays disabled until it resolves.
+  const [readiness, setReadiness] = useState<CurrentReadiness | undefined>(
+    undefined,
+  );
   // Authoritative "what draft would approve/reject act on right now" --
   // resolved via a dedicated backend lookup (Part D.4), never by searching
   // whatever page of history happens to be loaded client-side. `null` means
@@ -120,6 +134,7 @@ export default function LeadDetailPage() {
     setLead(null);
     setScore(null);
     setFitScore(null);
+    setReadiness(undefined);
     setLatestOutreach(undefined);
     try {
       const leadData = await getLead(leadId);
@@ -140,6 +155,10 @@ export default function LeadDetailPage() {
           throw e;
         }
       }
+
+      const readinessData = await getLeadReadiness(leadId);
+      if (generationRef.current !== generation) return; // stale
+      setReadiness(readinessData);
 
       try {
         const fitData = await getLeadFitScore(leadId);
@@ -173,22 +192,52 @@ export default function LeadDetailPage() {
     label: Exclude<ActionLabel, null>,
     fn: () => Promise<unknown>,
   ) {
+    // Everything below was captured from THIS render (this lead). If the
+    // user navigates to another lead while `fn` is in flight, the
+    // follow-up refresh must not run: `load`/`reload` here still point at
+    // the old lead and would paint its data into the new lead's page.
+    const generation = generationRef.current;
     setBusy(label);
     setError(null);
     setInfo(null);
     try {
       await fn();
+      if (generationRef.current !== generation) return; // navigated away
       setInfo(`${label} complete.`);
       await load();
-      outputsHistory.reload();
-      pushesHistory.reload();
+      if (generationRef.current !== generation) return;
+      outputsHistory.refresh();
+      pushesHistory.refresh();
     } catch (e) {
+      if (generationRef.current !== generation) return;
       setError(
-        e instanceof APIError ? (e.detail ?? e.message) : `${label} failed.`,
+        e instanceof APIError
+          ? (e.detail ?? e.message)
+          : e instanceof Error
+            ? e.message
+            : `${label} failed.`,
       );
     } finally {
-      setBusy(null);
+      if (generationRef.current === generation) setBusy(null);
     }
+  }
+
+  // Current restrictions are re-checked immediately before sending, not
+  // taken from whatever this page loaded earlier (the backend enforces
+  // the same exclusions again at dispatch).
+  async function pushWithCurrentCheck() {
+    const generation = generationRef.current;
+    const fresh = await getLeadReadiness(leadId);
+    if (generationRef.current !== generation) {
+      throw new Error("Navigated to another lead before pushing; nothing sent.");
+    }
+    setReadiness(fresh);
+    if (fresh.eligibility.excluded) {
+      throw new Error(
+        `Not pushed: excluded from routing (${fresh.eligibility.reasons.join("; ")}).`,
+      );
+    }
+    return pushLead(leadId, pushForce);
   }
 
   if (loadingLead && !lead) {
@@ -198,7 +247,10 @@ export default function LeadDetailPage() {
     return error ? <ErrorMessage>{error}</ErrorMessage> : <LoadingState />;
   }
 
+  // Legacy v1 semantics, unchanged: a lead that isn't legacy-Hot is pushed
+  // with force. Force never overrides a routing exclusion (backend-enforced).
   const pushForce = score?.priority !== "Hot";
+  const pushBlocked = readiness === undefined || readiness.eligibility.excluded;
   // Actions that target a specific draft are only enabled once the
   // authoritative lookup has actually resolved to a real draft -- never
   // while it's still in flight (`undefined`, not yet resolved this
@@ -230,7 +282,7 @@ export default function LeadDetailPage() {
           loading={busy === "Score"}
           onClick={() => runAction("Score", () => scoreLead(leadId))}
         >
-          Score lead
+          Score lead (legacy v1)
         </Button>
         <Button
           variant="secondary"
@@ -287,7 +339,8 @@ export default function LeadDetailPage() {
         <Button
           variant="primary"
           loading={busy === "Push"}
-          onClick={() => runAction("Push", () => pushLead(leadId, pushForce))}
+          disabled={pushBlocked}
+          onClick={() => runAction("Push", pushWithCurrentCheck)}
         >
           Push to Slack
         </Button>
@@ -336,13 +389,15 @@ export default function LeadDetailPage() {
       </Card>
 
       <section>
-        <h2 className="mb-3 text-xl font-semibold text-slate-900">Score</h2>
+        <h2 className="mb-3 text-xl font-semibold text-slate-900">
+          Legacy priority score (v1)
+        </h2>
         {score ? (
           <ScoreBreakdown score={score} />
         ) : (
           <Card>
             <div className="text-sm text-slate-600">
-              Not scored yet. Run <em>Score lead</em> above.
+              Not scored yet. Run <em>Score lead (legacy v1)</em> above.
             </div>
           </Card>
         )}
@@ -360,6 +415,20 @@ export default function LeadDetailPage() {
               Not fit-scored yet. Run <em>Score company fit (v2 demo)</em> above.
             </div>
           </Card>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xl font-semibold text-slate-900">
+          Current readiness &amp; eligibility
+        </h2>
+        {readiness ? (
+          <CurrentReadinessCard
+            readiness={readiness.readiness}
+            eligibility={readiness.eligibility}
+          />
+        ) : (
+          <LoadingState text="Checking current readiness…" />
         )}
       </section>
 

@@ -3,9 +3,11 @@
 
 import type {
   AIOutput,
-  BatchFitScoreSummary,
+  BatchFitScoreRunSummary,
+  BatchFitSummary,
   BatchPushResponse,
   BatchScoreResponse,
+  CurrentReadiness,
   DemoRunResponse,
   FitProfile,
   IntegrationPush,
@@ -122,6 +124,17 @@ export function getLeads(
 
 export function getLead(leadId: string): Promise<Lead> {
   return request<Lead>(`/api/leads/${leadId}`);
+}
+
+// Legacy v1 scores for one page of a batch's leads (same order as
+// getLeads(batchId)) -- one request per page, not one per lead.
+export function getBatchScores(
+  batchId: string,
+  params?: PageParams,
+): Promise<Page<LeadScore>> {
+  return request<Page<LeadScore>>(
+    `/api/batches/${batchId}/scores${buildQuery({ ...params })}`,
+  );
 }
 
 export function scoreLead(leadId: string): Promise<LeadScore> {
@@ -261,10 +274,30 @@ export function getLeadFitScore(leadId: string): Promise<LeadFitScore> {
 
 export function scoreBatchFit(
   batchId: string,
-): Promise<BatchFitScoreSummary> {
-  return request<BatchFitScoreSummary>(`/api/batches/${batchId}/fit-score`, {
+): Promise<BatchFitScoreRunSummary> {
+  return request<BatchFitScoreRunSummary>(`/api/batches/${batchId}/fit-score`, {
     method: "POST",
   });
+}
+
+export function getBatchFitSummary(batchId: string): Promise<BatchFitSummary> {
+  return request<BatchFitSummary>(`/api/batches/${batchId}/fit-summary`);
+}
+
+// Current readiness + routing eligibility; works for unscored leads too.
+export function getLeadReadiness(leadId: string): Promise<CurrentReadiness> {
+  return request<CurrentReadiness>(`/api/leads/${leadId}/readiness`);
+}
+
+// Current readiness for every lead on one page of a batch (same order as
+// getLeads(batchId)).
+export function getBatchReadiness(
+  batchId: string,
+  params?: PageParams,
+): Promise<Page<CurrentReadiness>> {
+  return request<Page<CurrentReadiness>>(
+    `/api/batches/${batchId}/readiness${buildQuery({ ...params })}`,
+  );
 }
 
 export function getBatchFitScores(

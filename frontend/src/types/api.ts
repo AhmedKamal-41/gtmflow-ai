@@ -222,6 +222,20 @@ export type Eligibility = {
   checked_at: string;
 };
 
+export type HistoricalAssessment = {
+  readiness: Readiness;
+  eligibility_excluded: boolean;
+  eligibility_reasons: string[];
+  computed_at: string;
+};
+
+// GET /api/leads/{id}/readiness -- live state, independent of fit scoring.
+export type CurrentReadiness = {
+  lead_id: string;
+  readiness: Readiness;
+  eligibility: Eligibility;
+};
+
 export type LeadFitScore = {
   id: string | null;
   lead_id: string;
@@ -235,12 +249,15 @@ export type LeadFitScore = {
   evidence_coverage_pct: number;
   band: string; // "strong_match" | "partial_match" | "weak_match" | "insufficient_evidence"
   criteria: FitCriterion[];
+  // CURRENT readiness/eligibility, recomputed from live lead, batch,
+  // draft and review state on every read (single-lead and bulk alike).
   readiness: Readiness;
-  // false when this response's `readiness` is a stored historical
-  // snapshot (the bulk batch listing) rather than freshly recomputed
-  // (every single-lead fit-score request always recomputes it).
   readiness_is_current: boolean;
-  eligibility: Eligibility; // always freshly recomputed, every endpoint
+  eligibility: Eligibility;
+  // What readiness/eligibility were when this score row was computed --
+  // historical, for audit only; never used to gate an action. null for
+  // an unpersisted result.
+  at_scoring: HistoricalAssessment | null;
   computed_at: string;
   computation_ms: number;
 };
@@ -263,14 +280,30 @@ export type FitProfile = {
   band_partial_min: number;
 };
 
-export type BatchFitScoreSummary = {
+// Distinct leads, each counted once in the band of its LATEST applicable
+// score. `score_rows` counts every stored row (history included).
+export type BatchFitSummary = {
   batch_id: string;
+  total_leads: number;
   scored_leads: number;
+  unscored_leads: number;
+  score_rows: number;
   strong_match: number;
   partial_match: number;
   weak_match: number;
   insufficient_evidence: number;
-  average_fit_score: number;
+  average_fit_score: number | null;
+};
+
+// POST /api/batches/{id}/fit-score: this run's counts + the batch's
+// distinct-lead state afterwards.
+export type BatchFitScoreRunSummary = {
+  batch_id: string;
+  attempted: number;
+  newly_scored: number;
+  skipped_unchanged: number;
+  failed: number;
+  summary: BatchFitSummary;
 };
 
 export type MetricsDashboard = {
@@ -294,4 +327,10 @@ export type MetricsDashboard = {
   average_lead_score: number;
   missing_data_rate: number;
   automation_coverage: number;
+  // v2 company fit (demo profile): distinct leads by latest band.
+  fit_scored_leads: number;
+  fit_strong_match: number;
+  fit_partial_match: number;
+  fit_weak_match: number;
+  fit_insufficient_evidence: number;
 };

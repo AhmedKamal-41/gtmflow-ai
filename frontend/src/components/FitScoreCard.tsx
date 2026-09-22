@@ -1,4 +1,4 @@
-import type { ActionReadiness, LeadFitScore } from "@/types/api";
+import type { HistoricalAssessment, LeadFitScore } from "@/types/api";
 
 import { Card } from "./Card";
 import { FitBandBadge } from "./FitBandBadge";
@@ -18,10 +18,11 @@ const RESULT_CLS: Record<string, string> = {
 };
 
 /**
- * Phase 4 Part E: renders the v2 deterministic company-fit scorer's full
- * output (fit, evidence coverage, readiness gaps, eligibility reasons,
- * versions) -- deliberately separate from <ScoreBreakdown> (the legacy v1
- * Hot/Warm/Cold scorer). A `strong_match` band is a broad-demonstration-
+ * Phase 4 Part E: renders the v2 deterministic company-fit scorer's stored
+ * result (fit, evidence coverage, per-criterion explanation, versions, and
+ * the historical readiness snapshot taken at scoring time) -- deliberately
+ * separate from <ScoreBreakdown> (the legacy v1 Hot/Warm/Cold scorer) and
+ * from <CurrentReadinessCard>. A `strong_match` band is a broad-demonstration-
  * profile label, not a purchase-probability or "approved/contactable"
  * claim -- every render here says so explicitly rather than letting the
  * number speak for itself.
@@ -50,8 +51,9 @@ export function FitScoreCard({ fit }: { fit: LeadFitScore }) {
         Broad demonstration profile (<code>{fit.profile_id}</code> v
         {fit.profile_version}) -- exact industry/country match only, not a
         calibrated ideal-customer profile. This is not the same signal as
-        the legacy priority score above, and a high fit score does not mean
-        this company is contactable (see eligibility below).
+        the legacy Hot/Warm/Cold priority, and a high fit score does not
+        mean this company is contactable (see current readiness &amp;
+        eligibility).
       </div>
 
       <div className="mt-5 overflow-x-auto">
@@ -85,30 +87,7 @@ export function FitScoreCard({ fit }: { fit: LeadFitScore }) {
         </table>
       </div>
 
-      {fit.eligibility.excluded && (
-        <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          <div className="font-semibold">Excluded from routing</div>
-          <ul className="mt-1 list-inside list-disc space-y-0.5">
-            {fit.eligibility.reasons.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-          <div className="mt-1 text-xs text-red-700">
-            Not overridable by fit score or force.
-          </div>
-        </div>
-      )}
-
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ReadinessSection
-          title="Outbound email readiness"
-          readiness={fit.readiness.outbound_email}
-        />
-        <ReadinessSection
-          title="Internal Slack handoff readiness"
-          readiness={fit.readiness.internal_slack_handoff}
-        />
-      </div>
+      {fit.at_scoring && <AtScoringSnapshot snapshot={fit.at_scoring} />}
 
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-400">
         <span>
@@ -116,44 +95,39 @@ export function FitScoreCard({ fit }: { fit: LeadFitScore }) {
         </span>
         <span>·</span>
         <span>computed {new Date(fit.computed_at).toLocaleString()}</span>
-        <span>·</span>
-        <span>
-          readiness shown is{" "}
-          {fit.readiness_is_current ? "current (live)" : "a stored snapshot from last scoring"}
-        </span>
       </div>
     </Card>
   );
 }
 
-function ReadinessSection({
-  title,
-  readiness,
-}: {
-  title: string;
-  readiness: ActionReadiness;
-}) {
-  const ready = readiness.status === "ready";
+/**
+ * What readiness/eligibility were when THIS score row was computed. Shown
+ * only as an audit trail, collapsed and labeled historical -- the current
+ * values live in <CurrentReadinessCard>, and only those gate actions.
+ */
+function AtScoringSnapshot({ snapshot }: { snapshot: HistoricalAssessment }) {
+  const gaps = snapshot.readiness.outbound_email.gaps;
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">{title}</span>
-        <span
-          className={`text-xs font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}
-        >
-          {ready ? "Ready" : "Not ready"}
-        </span>
+    <details className="mt-5 rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+      <summary className="cursor-pointer font-medium text-slate-600">
+        At scoring time (historical, {new Date(snapshot.computed_at).toLocaleString()})
+      </summary>
+      <div className="mt-2 space-y-1">
+        <div>
+          Routing:{" "}
+          {snapshot.eligibility_excluded
+            ? `excluded (${snapshot.eligibility_reasons.join("; ")})`
+            : "not excluded"}
+        </div>
+        <div>
+          Outbound email: {snapshot.readiness.outbound_email.status}
+          {gaps.length > 0 && ` -- gaps: ${gaps.join(", ")}`}
+        </div>
+        <div>
+          Not current: see <em>Current readiness &amp; eligibility</em> for
+          what applies now.
+        </div>
       </div>
-      {!ready && readiness.gaps.length > 0 && (
-        <ul className="mt-2 space-y-1 text-xs text-slate-600">
-          {readiness.gaps.map((gap) => (
-            <li key={gap} className="flex gap-1.5">
-              <span className="text-amber-500">•</span>
-              <span>{readiness.gap_explanations[gap] ?? gap}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    </details>
   );
 }

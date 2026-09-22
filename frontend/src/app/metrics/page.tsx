@@ -7,6 +7,7 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Donut, Funnel, Gauge } from "@/components/charts";
 import { ErrorMessage } from "@/components/ErrorMessage";
+import { FitBandBadge } from "@/components/FitBandBadge";
 import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
@@ -114,13 +115,13 @@ function Dashboard({
           tone="brand"
         />
         <StatCard
-          label="Processed"
+          label="Processed (legacy v1 score)"
           value={m.total_leads_processed}
           hint={`${m.automation_coverage}% automation coverage`}
           icon="target"
         />
         <StatCard
-          label="Avg lead score"
+          label="Avg legacy v1 score"
           value={m.average_lead_score}
           hint="out of 100"
           icon="chart"
@@ -134,6 +135,36 @@ function Dashboard({
         />
       </div>
 
+      <Card title="Company fit (v2 demo profile)" icon="target">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <span>
+            <span className="tabular font-semibold text-slate-900">
+              {m.fit_scored_leads.toLocaleString()}
+            </span>{" "}
+            leads fit-scored
+          </span>
+          <span className="flex items-center gap-1.5">
+            <FitBandBadge band="strong_match" /> {m.fit_strong_match.toLocaleString()}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <FitBandBadge band="partial_match" /> {m.fit_partial_match.toLocaleString()}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <FitBandBadge band="weak_match" /> {m.fit_weak_match.toLocaleString()}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <FitBandBadge band="insufficient_evidence" />{" "}
+            {m.fit_insufficient_evidence.toLocaleString()}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Distinct leads, each counted once by its latest score -- rescoring
+          doesn&apos;t inflate these. Broad demonstration criteria (exact
+          industry + US), separate from legacy Hot/Warm/Cold; not a
+          purchase-probability or approval signal.
+        </p>
+      </Card>
+
       {/* Funnel + priority donut */}
       <div className="grid gap-6 lg:grid-cols-3">
         <Card
@@ -145,7 +176,7 @@ function Dashboard({
           <Funnel
             stages={[
               { label: "Uploaded", value: m.total_leads_uploaded, color: "#1d4ed8" },
-              { label: "Scored", value: m.total_leads_processed, color: "#2563eb" },
+              { label: "Scored (legacy v1)", value: m.total_leads_processed, color: "#2563eb" },
               { label: "Outreach generated", value: m.outreach_generated, color: "#3b82f6" },
               { label: "Approved", value: m.outreach_approved, color: "#60a5fa" },
               { label: "Pushed (unique)", value: m.unique_leads_pushed, color: "#10b981" },
@@ -153,7 +184,7 @@ function Dashboard({
           />
         </Card>
 
-        <Card title="Priority split" icon="flame">
+        <Card title="Legacy priority split (v1)" icon="flame">
           <div className="flex justify-center py-2">
             <Donut
               centerValue={m.total_leads_processed}

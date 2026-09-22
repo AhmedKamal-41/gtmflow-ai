@@ -13,8 +13,9 @@ export type HistoryState<T> = {
   loading: boolean; // initial load for the current key (e.g. leadId)
   loadingMore: boolean; // fetching an additional page
   error: string | null; // set on the load that failed; previously loaded items are kept
-  reload: () => void;
+  reload: () => void; // retry the failed/in-flight page, keeping loaded items
   loadMore: () => void;
+  refresh: () => void; // discard and reload from page 0
 };
 
 /**
@@ -46,11 +47,17 @@ export function usePaginatedHistory<T>(
   // Bumped every time `key` changes; a fetch started under an older
   // generation is ignored when it resolves, however late.
   const generationRef = useRef(0);
+  // The key currently on screen. A caller holding a `reload`/`loadMore`
+  // from an earlier render (e.g. an action that finished after the user
+  // navigated to another lead) must not fetch the OLD key's history into
+  // the new key's panel -- runFetch refuses any key that isn't this one.
+  const keyRef = useRef(key);
 
   const runFetch = useCallback(
     (offset: number, isInitial: boolean) => {
       const generation = generationRef.current;
       const requestKey = key;
+      if (requestKey !== keyRef.current) return; // stale caller
       if (isInitial) {
         setLoading(true);
         setError(null);
@@ -84,6 +91,7 @@ export function usePaginatedHistory<T>(
 
   useEffect(() => {
     generationRef.current += 1;
+    keyRef.current = key;
     setItems([]);
     setTotal(0);
     setHasMore(false);
@@ -107,5 +115,14 @@ export function usePaginatedHistory<T>(
     runFetch(items.length, false);
   }, [runFetch, items.length]);
 
-  return { items, total, hasMore, loading, loadingMore, error, reload, loadMore };
+  const refresh = useCallback(() => {
+    // After something changed server-side (e.g. a new output was created):
+    // start over from page 0. Not `reload` -- appending at the old offset
+    // of a newest-first list would re-fetch shifted rows as duplicates.
+    runFetch(0, true);
+  }, [runFetch]);
+
+  return {
+    items, total, hasMore, loading, loadingMore, error, reload, loadMore, refresh,
+  };
 }

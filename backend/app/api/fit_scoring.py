@@ -338,6 +338,49 @@ def get_batch_fit_summary(
 
 
 @router.get(
+    "/api/batches/{batch_id}/readiness",
+    response_model=Page[CurrentReadinessResponse],
+)
+def list_batch_readiness(
+    batch_id: UUID,
+    pagination: tuple[int, int] = Depends(pagination_params),
+    session: Session = Depends(get_session),
+) -> Page[CurrentReadinessResponse]:
+    """Current readiness/eligibility for EVERY lead on one page of the
+    batch (scored or not), same order as GET /api/leads?batch_id=... --
+    three queries per page (leads, latest drafts, their latest reviews)."""
+    batch = session.get(LeadBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    limit, offset = pagination
+    total = session.scalar(
+        select(func.count()).select_from(Lead).where(Lead.batch_id == batch_id)
+    ) or 0
+    leads = list(
+        session.execute(
+            select(Lead)
+            .where(Lead.batch_id == batch_id)
+            .order_by(Lead.created_at.desc(), Lead.id.desc())
+            .limit(limit)
+            .offset(offset)
+        ).scalars()
+    )
+    by_lead = fit_queries.current_readiness_by_lead(session, leads)
+    items = [
+        CurrentReadinessResponse(
+            lead_id=lead.id,
+            readiness=by_lead[lead.id][0].to_dict(),
+            eligibility=by_lead[lead.id][1].to_dict(),
+        )
+        for lead in leads
+    ]
+    return Page[CurrentReadinessResponse](
+        items=items, total=total, limit=limit, offset=offset,
+        has_more=(offset + len(leads)) < total,
+    )
+
+
+@router.get(
     "/api/batches/{batch_id}/fit-scores",
     response_model=Page[LeadFitScoreResponse],
 )

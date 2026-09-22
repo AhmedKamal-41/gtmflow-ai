@@ -280,6 +280,28 @@ def test_eligibility_reflects_a_block_applied_after_scoring(
     assert item["readiness"]["internal_slack_handoff"]["status"] == "not_ready"
 
 
+def test_batch_readiness_covers_every_lead_on_the_page(
+    client: TestClient, db_session: Session
+) -> None:
+    batch = _batch(db_session)
+    scored = _lead(db_session, batch, "Scored Co")
+    blocked = _lead(db_session, batch, "Blocked Co", status="unsubscribed")
+    _lead(db_session, batch, "Plain Co")
+    client.post(f"/api/leads/{scored.id}/fit-score")
+
+    page = client.get(f"/api/batches/{batch.id}/readiness?limit=2").json()
+    assert page["total"] == 3
+    assert len(page["items"]) == 2 and page["has_more"] is True
+    rest = client.get(f"/api/batches/{batch.id}/readiness?limit=2&offset=2").json()
+    by_lead = {item["lead_id"]: item for item in page["items"] + rest["items"]}
+    assert len(by_lead) == 3  # scored and unscored alike
+    assert by_lead[str(blocked.id)]["eligibility"]["excluded"] is True
+    assert by_lead[str(scored.id)]["eligibility"]["excluded"] is False
+    # Same order as the lead list.
+    leads = client.get(f"/api/leads?batch_id={batch.id}&limit=2").json()
+    assert [i["lead_id"] for i in page["items"]] == [lead["id"] for lead in leads["items"]]
+
+
 def test_current_readiness_endpoint_works_for_unscored_lead(
     client: TestClient, db_session: Session
 ) -> None:

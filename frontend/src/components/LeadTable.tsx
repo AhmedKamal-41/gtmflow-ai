@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-import type { Lead, LeadFitScore, LeadScore } from "@/types/api";
+import type {
+  CurrentReadiness,
+  Lead,
+  LeadFitScore,
+  LeadScore,
+} from "@/types/api";
 
 import { Card } from "./Card";
 import { FitBandBadge } from "./FitBandBadge";
@@ -10,14 +15,32 @@ import { StatusBadge } from "./StatusBadge";
 
 type Props = {
   leads: Lead[];
+  // Legacy v1 Hot/Warm/Cold scorer. Missing key = not loaded yet;
+  // null = loaded, never scored.
   scores: Record<string, LeadScore | null>;
-  // v2 deterministic company-fit scorer (Phase 4) -- optional and separate
-  // from `scores`/`LeadScore` above (the legacy v1 Hot/Warm/Cold scorer).
-  // Omitted keys render as "Not fit-scored", never inferred from `scores`.
+  // v2 deterministic company-fit scorer (Phase 4) -- separate from
+  // `scores`. Omitted keys render as "Not fit-scored", never inferred
+  // from the legacy score.
   fitScores?: Record<string, LeadFitScore | undefined>;
+  // Current readiness/eligibility (live state, independent of scoring).
+  readiness?: Record<string, CurrentReadiness | undefined>;
 };
 
-export function LeadTable({ leads, scores, fitScores = {} }: Props) {
+const GAP_LABEL: Record<string, string> = {
+  no_seller_profile_configured: "no seller profile",
+  missing_contact_email: "no contact email",
+  no_outreach_draft: "no draft",
+  draft_not_reviewed: "draft not reviewed",
+  draft_rejected: "draft rejected",
+  lead_excluded_from_routing: "excluded",
+};
+
+export function LeadTable({
+  leads,
+  scores,
+  fitScores = {},
+  readiness = {},
+}: Props) {
   if (leads.length === 0) {
     return (
       <Card>
@@ -34,11 +57,12 @@ export function LeadTable({ leads, scores, fitScores = {} }: Props) {
             <tr>
               <th className="px-4 py-3">Company</th>
               <th className="px-4 py-3">Industry</th>
-              <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Score</th>
-              <th className="px-4 py-3">Priority</th>
-              <th className="px-4 py-3">Fit (v2 demo)</th>
+              <th className="px-4 py-3 text-right">Legacy score (v1)</th>
+              <th className="px-4 py-3">Legacy priority (v1)</th>
+              <th className="px-4 py-3">Company fit (v2 demo)</th>
+              <th className="px-4 py-3">Routing (current)</th>
+              <th className="px-4 py-3">Email readiness (current)</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -46,6 +70,7 @@ export function LeadTable({ leads, scores, fitScores = {} }: Props) {
             {leads.map((lead) => {
               const score = scores[lead.id];
               const fit = fitScores[lead.id];
+              const current = readiness[lead.id];
               return (
                 <tr
                   key={lead.id}
@@ -61,9 +86,6 @@ export function LeadTable({ leads, scores, fitScores = {} }: Props) {
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {lead.industry ?? "-"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {lead.contact_title ?? "-"}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={lead.status} />
@@ -84,14 +106,51 @@ export function LeadTable({ leads, scores, fitScores = {} }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     {fit ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <FitBandBadge band={fit.band} />
-                        <span className="tabular text-xs text-slate-400">
-                          {fit.fit_score}/{fit.max_fit_score}
+                      <div className="space-y-0.5">
+                        <span className="inline-flex items-center gap-1.5">
+                          <FitBandBadge band={fit.band} />
+                          <span className="tabular text-xs text-slate-500">
+                            {fit.fit_score}/{fit.max_fit_score}
+                          </span>
                         </span>
-                      </span>
+                        <div className="tabular text-xs text-slate-400">
+                          coverage {fit.evidence_coverage_pct.toFixed(0)}%
+                        </div>
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-400">Not fit-scored</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {current ? (
+                      current.eligibility.excluded ? (
+                        <span
+                          className="font-medium text-red-700"
+                          title={current.eligibility.reasons.join("\n")}
+                        >
+                          Excluded: {current.eligibility.reasons.join("; ")}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700">Not excluded</span>
+                      )
+                    ) : (
+                      <span className="text-slate-300">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {current ? (
+                      current.readiness.outbound_email.status === "ready" ? (
+                        <span className="text-emerald-700">Ready</span>
+                      ) : (
+                        <span className="text-amber-700">
+                          Not ready:{" "}
+                          {current.readiness.outbound_email.gaps
+                            .map((g) => GAP_LABEL[g] ?? g)
+                            .join(", ")}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-slate-300">-</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">

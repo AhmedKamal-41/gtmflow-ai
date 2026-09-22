@@ -146,6 +146,16 @@ vi.mock("@/lib/api", async () => {
     getLeadFitScore: vi.fn(() =>
       Promise.reject(new actual.APIError(404, "not found")),
     ),
+    getLeadReadiness: vi.fn((leadId: string) =>
+      Promise.resolve({
+        lead_id: leadId,
+        readiness: {
+          outbound_email: { status: "not_ready", gaps: [], gap_explanations: {} },
+          internal_slack_handoff: { status: "ready", gaps: [], gap_explanations: {} },
+        },
+        eligibility: { excluded: false, reasons: [], checked_at: "2026-09-22T00:00:00Z" },
+      }),
+    ),
     // The authoritative endpoint correctly finds the buried draft directly.
     getLatestAIOutput: vi.fn((_leadId: string, outputType: string) => {
       if (outputType === "outreach_email") {
