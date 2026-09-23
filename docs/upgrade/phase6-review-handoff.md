@@ -2,7 +2,7 @@
 
 Date: 2026-09-23. **Stopped before Phase 7.**
 
-**Status:** the review tools are **implemented and verified**. The **100 human reviews have not been done**: zero candidates have generated outputs, and zero examples are human-reviewed. Two actions of yours come next (§8):
+**Status:** the review tools are **implemented and verified**. The **100 human reviews have not been done**: zero candidates have generated outputs, and zero examples are human-reviewed. **The workbench is running and ready for your reviews; see §11 for the URLs and exact steps.** Two actions of yours come next (§8):
 
 1. activate a seller revision, for outreach candidates;
 2. generate the candidates with a provider you choose, then review them in the workbench.
@@ -18,7 +18,7 @@ Date: 2026-09-23. **Stopped before Phase 7.**
 | GTMFlow demonstration seller profile | **Saved as draft version 1; not active** (activation is yours) | §8 |
 | Human pilot reviews | **Not started**: needs you | §8 |
 
-Phase 5 was accepted as recorded. Its uncommitted work was first checkpointed as commit `5a92df3` on branch `phase5-generation` (local, not pushed). Phase 6 work is on branch `phase6-review`, which starts from that commit, in `/workspaces/gtmflow-phase5`; it is uncommitted.
+Phase 5 was accepted as recorded. Its uncommitted work was first checkpointed as commit `5a92df3` on branch `phase5-generation` (local, not pushed). Phase 6 work is on branch `phase6-review` in `/workspaces/gtmflow-phase5`, committed as `919fc5c` (local, not pushed). The review-preparation follow-up (the opt-in dev API proxy and §11 of this document) is committed on top of it.
 
 ## 1. Exact-draft review
 
@@ -268,3 +268,101 @@ Contact-email enrichment is **not** needed for any of this.
   - reviewed pilot examples exist;
   - export validation (schema, duplicates, exact-hash checks) is written against `annotation-export-v1`;
   - validation and test annotation queues are created from their own splits of `company-groups-v1`, without reassigning any reviewed company.
+
+## 11. Start reviewing (prepared 2026-09-23)
+
+### Current pilot counts (read live from the Codespace database)
+
+| | Count |
+|---|---|
+| Pilot candidates (`pilot-v1`) | 100 (50 company summaries + 50 outreach) |
+| Unique companies | 50 (25 healthcare, 25 real estate), all in the **train** split of `company-groups-v1` |
+| Candidates with a generated output | **0** |
+| Human-reviewed examples (accepted or corrected) | **0** (0 unique companies) |
+| Skipped | 0 |
+| Validation / test companies in the pilot | 0 |
+| Seller profile | draft version 1 "GTMFlow (demonstration)" saved, **not active** (activation sequence 0) |
+
+The company-group assignments and the pilot queue are unchanged since they were frozen. No output has been generated, and no example has been marked reviewed.
+
+### Where to open it
+
+The servers run in the Codespace against the existing database:
+- backend: FastAPI on `127.0.0.1:8000`, mock AI, no Slack webhook;
+- frontend: Next.js dev server on port 3000. It proxies `/api/*` to the backend through the opt-in `API_PROXY_TARGET` setting, so the backend port stays private.
+
+- Seller profile: `https://orange-space-fortnight-pjp55vgw5jv6h9949-3000.app.github.dev/seller-profile`
+- Annotation workbench: `https://orange-space-fortnight-pjp55vgw5jv6h9949-3000.app.github.dev/annotation`
+
+Both are private Codespaces forwarded-port URLs: open them while signed in to the GitHub account that owns the Codespace. If the Codespace has stopped, first start the database, then restart both servers:
+
+```bash
+docker start gtmflow-dev-postgres
+cd /workspaces/gtmflow-phase5/backend && \
+  DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:55433/gtmflow USE_MOCK_AI=true \
+  /workspaces/gtmflow-ai/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+cd /workspaces/gtmflow-phase5/frontend && \
+  API_PROXY_TARGET=http://localhost:8000 NEXT_PUBLIC_API_BASE_URL= npx next dev -p 3000
+```
+
+### Generation provider and cost (decide before generating)
+
+- **Configured now:** `mock` (`mock-deterministic-v2-grounded`). It is free, makes no network call, and is deterministic. Its candidates are template-like, weak as training targets, and labeled mock through review and export.
+- **Real alternative:** OpenAI `gpt-4o-mini` (the client's default model), enabled by restarting the backend with `USE_MOCK_AI=false OPENAI_API_KEY=…`. Nothing has been sent to it.
+- **Measured input size:** the exact real-mode prompts for all 100 pilot candidates were built locally, without any network call. They total about **157,000 input tokens**: summaries average about 1,550 tokens (max 1,604), outreach about 1,585 (max 1,640). The count is a characters ÷ 4 approximation; no tokenizer was installed.
+- **Output estimate:** about 450 tokens per reply, based on the size of the mock's equivalent JSON; allow up to about 800 for a real model's longer replies. That is 45,000–80,000 output tokens.
+- **Cost estimate:** at `gpt-4o-mini` list prices as last known (**$0.15 per million input tokens, $0.60 per million output tokens; confirm current pricing on OpenAI's pricing page before approving**), the 100 candidates cost roughly **$0.02 input + $0.03–$0.05 output, about $0.05–$0.08 in total**. Even with a few invalid-output retries, it should stay well under $0.25. Every call is billed, including replies the validator rejects.
+- **Not done:** no paid call was made, and none will be without your explicit approval.
+
+**Important:** a candidate's output is generated **once and never replaced**. If you click "Generate with mock" on a candidate, that candidate stays a mock example. Decide on the provider first. If you want real-model targets, approve the cost and the backend will be restarted in real mode *before* any candidate is generated.
+
+### Step 1: activate demonstration profile version 1 (needed for outreach candidates)
+
+1. Open `/seller-profile`. The status banner reads **"No seller profile is active"**.
+2. Scroll to **Saved versions** and expand **"Version 1 · GTMFlow (demonstration) · Demonstration draft"**.
+3. Read it:
+   - value proposition and target customers;
+   - six capabilities: CSV and public-dataset import; deterministic, versioned fit scoring; outreach grounded in imported facts; approve, reject or correct each exact draft; Slack routing of approved leads for internal handoff; audit trail;
+   - no proof points; content hash `04588eb8e44c…`.
+4. If you accept it, tick **"I reviewed version 1 and want new outreach drafts to use it."** and **"I understand version 1 is a demonstration profile, not a real offer."**, then click **Activate version 1**.
+5. The banner changes to **"Active: version 1 · GTMFlow (demonstration) · Demonstration profile"**.
+
+Its drafts are labeled demonstration and can never become ready for outbound email. The activation is recorded as `local-demo-unauthenticated`. You can deactivate it later from the same banner.
+
+### Step 2: review your first five pilot examples
+
+Open `/annotation`. The first five queue items are:
+
+| # | Company | Task |
+|---|---|---|
+| 1 | david m bacha do | Company summary |
+| 2 | david m bacha do | Outreach (needs Step 1) |
+| 3 | one west associates inc | Company summary |
+| 4 | one west associates inc | Outreach (needs Step 1) |
+| 5 | accuhealth inc | Company summary |
+
+For each one:
+
+1. **Select it** in the Queue list (for example, "#1 david m bacha do · Summary").
+2. **Generate it** once you've chosen the provider: click **"Generate with mock"**, or "Generate with openai" after a real-mode restart you approved. The candidate then shows *Pending review*.
+3. **Check the facts:**
+   - Compare the output card with **Immutable input**: the fact ids (`fact-company_name`, `fact-industry`, …) and the "Unknown from the data" list.
+   - Every statement must come from those facts.
+   - Look for invented contact names, intent, budget, problems, tools or figures.
+   - The source note gives the data's age: a People Data Labs snapshot reported as acquired 2025-07-28, possibly outdated.
+   - For outreach, also check that it describes only the demonstration profile's capabilities and keeps the demonstration label.
+4. **Rate the original output:**
+   - **Factual support**: Fully supported / Partly supported / Unsupported;
+   - **Writing quality**: 1–5;
+   - **Missing-information handling**: Good / Acceptable / Poor;
+   - optionally **Notes**.
+5. **Save one decision:**
+   - **Accept as target**: enabled only when Factual support is *Fully supported*;
+   - **or Write a correction**: edit the "Corrected …" fields (for example "Corrected company summary", or "Corrected email body" / "Corrected subject" / "Corrected call note"), then **Save correction**. The correction is stored as a new revision; the original output stays unchanged. Unsourced figures, contact emails or unapproved claims are rejected with a message, and your text is kept;
+   - **or**, if the example is unusable, enter a **Skip reason** and click **Skip as unsuitable**.
+6. **Confirm** the message **"Saved as a human-reviewed training example."** The progress line at the top ("N of 100 pilot examples human-reviewed") increases.
+7. **If saving fails,** your entries stay. Click the same button again: the retry reuses the same submission id, so it can't create a duplicate.
+
+Review time is measured only while the page is visible and you're interacting with it; idle and hidden time are recorded separately. Reviewing an example is not permission or readiness to contact the company. Operational outreach approval (on lead pages) is separate and unaffected.
+
+After reviewing, `python -m app.annotation_cli summary` (from `backend/`, with the same `DATABASE_URL`) prints the counts. `python -m app.annotation_cli export --queue pilot-v1 --out <file>` writes the reviewed examples.
