@@ -195,18 +195,26 @@ function CandidatePanel({
   // A failed submission is retried with the same submission id so the
   // server can recognise a retry of a request that actually landed.
   const retry = useRef<{ key: string; id: string } | null>(null);
-  const requestId = useRef(0);
+  // Two separate guards. `selection` changes only when another candidate is
+  // selected: an action (generate/submit) that finishes after that must not
+  // touch the new candidate's state. `loadRequest` only orders overlapping
+  // loads. Sharing one counter made the post-save reload look like a
+  // candidate switch, so the save never cleared its pending state.
+  const selection = useRef(0);
+  const loadRequest = useRef(0);
   const timer = useReviewTimer(detail?.source_output ? `${detail.id}:${detail.source_output.id}` : null);
 
   const load = useCallback(async () => {
-    const request = ++requestId.current;
+    const current = selection.current;
+    const request = ++loadRequest.current;
+    const stale = () => request !== loadRequest.current || current !== selection.current;
     setLoadError(null);
     try {
       const value = await getAnnotationCandidate(candidateId);
-      if (request !== requestId.current) return; // stale (another candidate selected)
+      if (stale()) return; // superseded by a newer load or another candidate
       setDetail(value);
     } catch (e) {
-      if (request !== requestId.current) return;
+      if (stale()) return;
       setLoadError(errorText(e, "Could not load the candidate."));
     }
   }, [candidateId]);
@@ -221,24 +229,24 @@ function CandidatePanel({
     setPending(null);
     retry.current = null;
     void load();
-    return () => { requestId.current += 1; };
+    return () => { selection.current += 1; };
   }, [load]);
 
   async function generate() {
     if (!provider) return;
-    const request = requestId.current;
+    const current = selection.current;
     setPending("generate");
     setActionError(null);
     try {
       const value = await generateAnnotationCandidate(candidateId, provider.configured_provider);
-      if (request !== requestId.current) return;
+      if (current !== selection.current) return;
       setDetail(value);
       onChanged();
     } catch (e) {
-      if (request !== requestId.current) return;
+      if (current !== selection.current) return;
       setActionError(errorText(e, "Generation failed. Nothing was saved."));
     } finally {
-      if (request === requestId.current) setPending(null);
+      if (current === selection.current) setPending(null);
     }
   }
 
@@ -280,13 +288,13 @@ function CandidatePanel({
       timer.flag("resumed_after_failure");
     }
     retry.current = { key, id: submissionId };
-    const request = requestId.current;
+    const current = selection.current;
     setPending(decision);
     setActionError(null);
     setMessage(null);
     try {
       await submitAnnotation(detail.id, { ...body, submission_id: submissionId, timing: timer.read() });
-      if (request !== requestId.current) return;
+      if (current !== selection.current) return;
       retry.current = null;
       setMessage(
         decision === "skipped"
@@ -297,10 +305,10 @@ function CandidatePanel({
       onChanged();
       await load();
     } catch (e) {
-      if (request !== requestId.current) return;
+      if (current !== selection.current) return;
       setActionError(errorText(e, "Saving failed. Your entries are kept; try again."));
     } finally {
-      if (request === requestId.current) setPending(null);
+      if (current === selection.current) setPending(null);
     }
   }
 

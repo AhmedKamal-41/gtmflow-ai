@@ -220,3 +220,78 @@ describe("annotation workbench", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Accept as target" })).toBeInTheDocument());
   });
 });
+
+describe("pending state after a submission (regression: stuck loading after save)", () => {
+  function spinners() {
+    return document.querySelectorAll(".animate-spin").length;
+  }
+
+  function accepted(id: string): AnnotationCandidateDetail {
+    return detail(id, {
+      status: "accepted",
+      annotation_count: 1,
+      latest_annotation: {
+        id: "ann-1", submission_id: "sub-1", candidate_id: id, source_output_id: `out-${id}`,
+        source_content_hash: `hash-out-${id}`, decision: "accepted", target_output_id: `out-${id}`,
+        target_content_hash: `hash-out-${id}`, factual_support: "supported", writing_quality: 4,
+        missing_info_handling: "good", notes: null, skip_reason: null,
+        reviewer_label: "local-demo-unauthenticated", review_mode: "accept", timing: null,
+        created_at: "2026-09-23T23:37:24Z",
+      },
+    });
+  }
+
+  it.each([
+    ["accepted", "Accept as target"],
+    ["skipped", "Skip as unsuitable"],
+  ] as const)("clears after a successful %s submission and shows the refreshed candidate", async (decision, label) => {
+    vi.mocked(getAnnotationCandidate)
+      .mockResolvedValueOnce(detail("c1"))
+      .mockResolvedValue(accepted("c1"));
+    await open(/#1 Company c1/);
+    await screen.findByRole("button", { name: "Accept as target" });
+    if (decision === "accepted") assess();
+    else fireEvent.change(screen.getByLabelText("Skip reason"), { target: { value: "Too sparse" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: label })));
+
+    expect(await screen.findByLabelText("Latest annotation")).toHaveTextContent("accepted");
+    await waitFor(() => expect(spinners()).toBe(0));
+    expect(screen.getByRole("button", { name: label })).not.toContainHTML("animate-spin");
+    expect(screen.getByLabelText("Factual support")).toBeEnabled();
+    expect(screen.getByLabelText("Notes (optional)")).toBeEnabled();
+  });
+
+  it("clears after a failed submission and keeps the error visible", async () => {
+    vi.mocked(submitAnnotation).mockRejectedValueOnce(new APIError(409, "Conflict", "The content you reviewed does not match."));
+    await open(/#1 Company c1/);
+    const accept = await screen.findByRole("button", { name: "Accept as target" });
+    assess();
+    await act(async () => fireEvent.click(accept));
+    expect(await screen.findByText("The content you reviewed does not match.")).toBeInTheDocument();
+    await waitFor(() => expect(spinners()).toBe(0));
+    expect(screen.getByRole("button", { name: "Accept as target" })).toBeEnabled();
+    expect(screen.getByLabelText("Factual support")).toBeEnabled();
+    // The error stays until the next action.
+    expect(screen.getByText("The content you reviewed does not match.")).toBeInTheDocument();
+  });
+
+  it("after a successful save, another candidate opens with a usable, idle form", async () => {
+    vi.mocked(getAnnotationCandidate).mockImplementation((id: string) =>
+      Promise.resolve(id === "c1"
+        ? (vi.mocked(submitAnnotation).mock.calls.length ? accepted("c1") : detail("c1"))
+        : detail("c2", { task: "outreach_email" })));
+    await open(/#1 Company c1/);
+    const accept = await screen.findByRole("button", { name: "Accept as target" });
+    assess();
+    await act(async () => fireEvent.click(accept));
+    await screen.findByText("Saved as a human-reviewed training example.");
+
+    fireEvent.click(screen.getByRole("button", { name: /#2 Company c2/ }));
+    expect(await screen.findByText(/Company c2 · Outreach/)).toBeInTheDocument();
+    expect(screen.queryByText("Saved as a human-reviewed training example.")).not.toBeInTheDocument();
+    expect(spinners()).toBe(0);
+    expect(screen.getByLabelText("Factual support")).toBeEnabled();
+    expect(screen.getByLabelText("Factual support")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Write a correction" })).toBeEnabled();
+  });
+});
