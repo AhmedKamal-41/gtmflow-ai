@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from app.models import LeadFitScore, SellerProfileActivation, WorkflowEvent
 from app.scoring import fit
-from tests.conftest import SYNTHETIC_SELLER_PROFILE, save_and_activate
+from tests.conftest import review_json, SYNTHETIC_SELLER_PROFILE, save_and_activate
 
 
 def save(client, profile, expected_version):
@@ -104,7 +104,7 @@ def test_demo_profile_needs_explicit_acknowledgement_and_never_makes_email_ready
     }).json()
     lead = client.get(f"/api/leads?batch_id={upload['batch_id']}").json()["items"][0]
     draft = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
-    client.post(f"/api/leads/{lead['id']}/approve-outreach", json={"ai_output_id": draft["id"]})
+    client.post(f"/api/leads/{lead['id']}/approve-outreach", json=review_json(client, lead['id'], draft["id"]))
     email = client.get(f"/api/leads/{lead['id']}/readiness").json()["readiness"]["outbound_email"]
     assert email["status"] == "not_ready"
     assert email["gaps"] == ["seller_profile_is_demonstration"]

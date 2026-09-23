@@ -102,6 +102,7 @@ def _latest_outreach_by_lead(
         .where(
             AIOutput.lead_id.in_(lead_ids),
             AIOutput.output_type == OUTREACH_OUTPUT_TYPE,
+            AIOutput.purpose == "operational",
         )
         .subquery()
     )
@@ -134,10 +135,14 @@ def _latest_review_decision_by_output(
 def current_readiness_by_lead(
     session: Session, leads: list[Lead]
 ) -> dict[UUID, tuple[fit.ReadinessResult, fit.EligibilityResult]]:
-    """Live readiness + eligibility for a page of leads in three queries
-    (active seller revision, latest drafts, then their latest reviews). Eligibility reads
-    `lead.status` / `lead.batch.status` as currently loaded."""
-    lead_ids = [lead.id for lead in leads]
+    """Live readiness + eligibility for a page of leads in a bounded number
+    of queries: the active seller revision plus the shared review state
+    (app/services/draft_review.py: current drafts, their latest reviews,
+    current fit rows). Slack delivery enforces the same review state, so
+    what readiness reports and what delivery allows can't diverge.
+    Eligibility reads `lead.status` / `lead.batch.status` as loaded."""
+    from app.services.draft_review import review_states
+
     active = active_seller_profile(session)
     if active is None:
         seller_state = fit.SELLER_STATE_NONE
@@ -145,26 +150,25 @@ def current_readiness_by_lead(
         seller_state = fit.SELLER_STATE_DEMO
     else:
         seller_state = fit.SELLER_STATE_SELLER
-    drafts = _latest_outreach_by_lead(session, lead_ids)
-    decisions = _latest_review_decision_by_output(
-        session, [d.id for d in drafts.values()]
-    )
+    states = review_states(session, leads)
     out: dict[UUID, tuple[fit.ReadinessResult, fit.EligibilityResult]] = {}
     for lead in leads:
-        draft = drafts.get(lead.id)
+        state = states[lead.id]
         eligibility = fit.compute_eligibility(lead)
         readiness = fit.compute_readiness(
             lead,
             has_contact_email=bool(lead.contact_email),
-            latest_outreach_exists=draft is not None,
-            latest_outreach_review_decision=decisions.get(draft.id) if draft else None,
+            latest_outreach_exists=state.draft is not None,
+            latest_outreach_review_decision=state.review.decision if state.review else None,
             eligibility_excluded=eligibility.excluded,
             seller_profile_state=seller_state,
             latest_outreach_uses_active_profile=(
-                draft is not None
+                state.draft is not None
                 and active is not None
-                and draft.seller_profile_id == active.id
+                and state.draft.seller_profile_id == active.id
             ),
+            outreach_review_blockers=state.delivery_blockers,
+            email_review_blockers=state.email_blockers,
         )
         out[lead.id] = (readiness, eligibility)
     return out
@@ -232,6 +236,7 @@ def newer_outreach_clause(output: AIOutput):
     return and_(
         AIOutput.lead_id == output.lead_id,
         AIOutput.output_type == OUTREACH_OUTPUT_TYPE,
+        AIOutput.purpose == "operational",
         or_(
             AIOutput.created_at > output.created_at,
             and_(AIOutput.created_at == output.created_at, AIOutput.id > output.id),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import approve_current_draft, review_json
 
 # These tests generate outreach, which needs an explicitly activated
 # seller revision (Phase 5). The fixture activates a synthetic one.
@@ -131,15 +132,15 @@ def test_metrics_approval_rate_and_counts(client: TestClient) -> None:
     ]
     client.post(
         f"/api/leads/{leads[0]['id']}/approve-outreach",
-        json={"ai_output_id": outputs[0]["id"]},
+        json=review_json(client, leads[0]['id'], outputs[0]["id"]),
     )
     client.post(
         f"/api/leads/{leads[1]['id']}/approve-outreach",
-        json={"ai_output_id": outputs[1]["id"]},
+        json=review_json(client, leads[1]['id'], outputs[1]["id"]),
     )
     client.post(
         f"/api/leads/{leads[2]['id']}/reject-outreach",
-        json={"ai_output_id": outputs[2]["id"], "reason": "Too generic"},
+        json=review_json(client, leads[2]['id'], outputs[2]["id"], reason="Too generic"),
     )
 
     body = client.get("/api/metrics/dashboard").json()
@@ -154,6 +155,7 @@ def test_metrics_push_success_rate_counts_mock_and_success(
 ) -> None:
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
+    approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
     body = client.get("/api/metrics/dashboard").json()
     assert body["leads_pushed"] == 1
@@ -168,6 +170,7 @@ def test_metrics_unique_leads_pushed_dedupes_repeat_pushes(
     """Same lead pushed twice -> leads_pushed=2, unique_leads_pushed=1."""
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
+    approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
     body = client.get("/api/metrics/dashboard").json()
@@ -190,6 +193,7 @@ def test_metrics_failed_push_count_uses_monkeypatched_sender(
 
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
+    approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
 
     body = client.get("/api/metrics/dashboard").json()

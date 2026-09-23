@@ -70,6 +70,7 @@ function groundedDraft(overrides: Record<string, unknown> = {}) {
     output_schema_version: "v2", model_revision: "mock-deterministic-v2-grounded", adapter_revision: null,
     seller_profile_id: "profile-2", seller_profile_version: 2,
     seller_profile_content_hash: "c0ffee20000000000000000", seller_profile_kind: "seller",
+    content_hash: "grounded-hash", purpose: "operational", author_label: null, review_status: "pending",
     ...overrides,
   };
 }
@@ -85,6 +86,7 @@ const LEGACY_DRAFT = {
   output_schema_version: null, model_revision: null, adapter_revision: null,
   seller_profile_id: null, seller_profile_version: null, seller_profile_content_hash: null,
   seller_profile_kind: null,
+  content_hash: "legacy-hash", purpose: "operational", author_label: null, review_status: "pending",
 };
 
 vi.mock("@/lib/api", async () => {
@@ -97,6 +99,15 @@ vi.mock("@/lib/api", async () => {
     getLead: vi.fn((id: string) => Promise.resolve({ ...LEAD, id })),
     getLeadScore: vi.fn(nf),
     getLeadFitScore: vi.fn(nf),
+    getReviewState: vi.fn((leadId: string) =>
+      Promise.resolve({
+        lead_id: leadId, status: "approved", draft_id: null, draft_content_hash: null,
+        draft_origin: null, draft_parent_output_id: null, approval_applicable: true,
+        delivery_blockers: [], email_blockers: [], blocker_explanations: {}, latest_review: null,
+        source: { batch_source: "pdl_import", provider: null, source_snapshot_id: null,
+          reported_acquisition_date: null, retrieved_at: null, license: null, freshness_note: "fixture" },
+      }),
+    ),
     getLeadReadiness: vi.fn((id: string) => Promise.resolve({
       lead_id: id,
       readiness: {

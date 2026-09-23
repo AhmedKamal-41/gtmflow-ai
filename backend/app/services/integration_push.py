@@ -1,8 +1,18 @@
 """Lead -> Slack push orchestration.
 
 Caller is responsible for the request-level validation gates (lead exists,
-integration_type=slack, lead is scored, lead is Hot OR force=true). This
-module assumes those gates have already passed and focuses on:
+integration_type=slack, lead is scored, lead is Hot OR force=true -- the
+score threshold is the ONLY thing `force` can bypass). This module is the
+single dispatch point for every route and enforces, before any payload is
+built or the transport is touched:
+
+  * the lead's status is not a blocked disposition (BlockedLeadError);
+  * its batch import is complete (IncompleteImportError);
+  * its current outreach draft carries an approval that still applies to
+    that exact content and its current inputs (DeliveryNotApprovedError;
+    see app/services/draft_review.py).
+
+It then focuses on:
 
   * gathering the latest AI summary + outreach as context
   * building the Slack payload
@@ -25,7 +35,10 @@ from app.integrations.slack import (
     send_slack_payload,
 )
 from app.models import AIOutput, IntegrationPush, Lead, WorkflowEvent
+from app.models.ai_output import PURPOSE_OPERATIONAL
+from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from app.services.draft_review import review_state
 
 SLACK = "slack"
 SUCCESS_STATUSES = ("success", "mock_success")
@@ -50,6 +63,48 @@ class BlockedLeadError(RuntimeError):
         )
 
 
+class IncompleteImportError(RuntimeError):
+    """The lead's batch is only partially imported. Not overridable."""
+
+    def __init__(self, lead_id: UUID, batch_status: str) -> None:
+        self.lead_id = lead_id
+        self.batch_status = batch_status
+        super().__init__(
+            f"Lead {lead_id} belongs to a batch that is only partially imported "
+            f"(status='{batch_status}')."
+        )
+
+
+class DeliveryNotApprovedError(RuntimeError):
+    """The current draft has no approval that applies to its exact content
+    and current inputs. Not overridable by force."""
+
+    def __init__(self, lead_id: UUID, blockers: list[str]) -> None:
+        self.lead_id = lead_id
+        self.blockers = blockers
+        super().__init__(
+            "Delivery needs a current approval of the exact outreach draft: "
+            + ", ".join(blockers)
+        )
+
+
+def _block(session: Session, lead: Lead, reason: str, **details: Any) -> None:
+    session.add(
+        WorkflowEvent(
+            lead_id=lead.id,
+            event_type="lead_push_blocked",
+            event_data={
+                "integration_type": SLACK,
+                "reason": reason,
+                "lead_status": lead.status,
+                "priority": lead.score.priority if lead.score else None,
+                "score": lead.score.total_score if lead.score else None,
+                **details,
+            },
+        )
+    )
+
+
 def _latest_output_content(
     session: Session, lead_id: UUID, output_type: str
 ) -> dict[str, Any] | None:
@@ -58,8 +113,9 @@ def _latest_output_content(
         .where(
             AIOutput.lead_id == lead_id,
             AIOutput.output_type == output_type,
+            AIOutput.purpose == PURPOSE_OPERATIONAL,
         )
-        .order_by(AIOutput.created_at.desc())
+        .order_by(AIOutput.created_at.desc(), AIOutput.id.desc())
         .limit(1)
     ).scalar_one_or_none()
     if row is None:
@@ -99,22 +155,23 @@ def push_lead_to_slack(session: Session, lead: Lead) -> IntegrationPush:
     assert lead.score is not None, "push_lead_to_slack requires a scored lead"
 
     if lead.status in BLOCKED_STATUSES:
-        session.add(
-            WorkflowEvent(
-                lead_id=lead.id,
-                event_type="lead_push_blocked",
-                event_data={
-                    "integration_type": SLACK,
-                    "lead_status": lead.status,
-                    "priority": lead.score.priority,
-                    "score": lead.score.total_score,
-                },
-            )
-        )
+        _block(session, lead, "blocked_lead_status")
         raise BlockedLeadError(lead.id, lead.status)
 
+    batch = lead.batch
+    if batch is not None and batch.status in INCOMPLETE_BATCH_STATUSES:
+        _block(session, lead, "incomplete_import", batch_status=batch.status)
+        raise IncompleteImportError(lead.id, batch.status)
+
+    state = review_state(session, lead)
+    if not state.approval_applicable:
+        _block(session, lead, "no_applicable_approval", blockers=state.delivery_blockers)
+        raise DeliveryNotApprovedError(lead.id, state.delivery_blockers)
+    approved_draft = state.draft
+    assert approved_draft is not None
+
     summary = _latest_output_content(session, lead.id, "company_summary")
-    outreach = _latest_output_content(session, lead.id, "outreach_email")
+    outreach = dict(approved_draft.content)
 
     detected_pains: list[str] = []
     fit_reasoning: str | None = lead.score.reasoning
@@ -130,6 +187,8 @@ def push_lead_to_slack(session: Session, lead: Lead) -> IntegrationPush:
     if outreach:
         if outreach.get("subject"):
             outreach_subject = str(outreach["subject"])
+            if approved_draft.seller_profile_kind == "demo":
+                outreach_subject = f"[Demonstration] {outreach_subject}"
         if outreach.get("call_note"):
             call_note = str(outreach["call_note"])
 
@@ -169,6 +228,10 @@ def push_lead_to_slack(session: Session, lead: Lead) -> IntegrationPush:
                 "status": status,
                 "priority": lead.score.priority,
                 "score": lead.score.total_score,
+                "approved_output_id": str(approved_draft.id),
+                "approved_content_hash": state.draft_content_hash,
+                "approval_review_id": str(state.review.id) if state.review else None,
+                "seller_profile_kind": approved_draft.seller_profile_kind,
             },
         )
     )

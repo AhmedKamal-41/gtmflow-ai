@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.core.hashing import content_hash as _content_hash
 
 
 class AIOutputBase(BaseModel):
@@ -41,3 +43,28 @@ class AIOutputRead(AIOutputBase):
     seller_profile_version: int | None = None
     seller_profile_content_hash: str | None = None
     seller_profile_kind: str | None = None
+
+    # Phase 6. `purpose`: "operational" (a lead's drafts) or "annotation"
+    # (training candidates, never delivered). `author_label` is set on human
+    # revisions. `review_status` is filled by endpoints that list drafts:
+    # pending / approved / rejected / superseded, or None when the output
+    # isn't an operational outreach draft.
+    purpose: str = "operational"
+    author_label: str | None = None
+    review_status: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def content_hash(self) -> str:
+        """Identity of the exact content shown; reviews must send it back."""
+        return _content_hash(self.content)
+
+
+class AIOutputRevisionCreate(BaseModel):
+    """A human correction. Creates a new immutable revision; the output it
+    revises (and the original model response) are never changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_content_hash: str = Field(min_length=64, max_length=64)
+    content: dict[str, Any]

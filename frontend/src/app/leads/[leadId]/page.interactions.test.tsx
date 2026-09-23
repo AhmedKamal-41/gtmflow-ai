@@ -93,6 +93,15 @@ vi.mock("@/lib/api", async () => {
         last_activation: null, active_profile: null, latest_is_active: false,
       }),
     ),
+    getReviewState: vi.fn((leadId: string) =>
+      Promise.resolve({
+        lead_id: leadId, status: "approved", draft_id: null, draft_content_hash: null,
+        draft_origin: null, draft_parent_output_id: null, approval_applicable: true,
+        delivery_blockers: [], email_blockers: [], blocker_explanations: {}, latest_review: null,
+        source: { batch_source: "pdl_import", provider: null, source_snapshot_id: null,
+          reported_acquisition_date: null, retrieved_at: null, license: null, freshness_note: "fixture" },
+      }),
+    ),
     getLeadReadiness: vi.fn((id: string) =>
       call("getLeadReadiness", id, () => Promise.resolve(state.readiness[id])),
     ),
@@ -152,6 +161,7 @@ function base(id: string, leadId: string, type: string) {
     input_snapshot: null, input_hash: null, output_schema_version: "v1",
     model_revision: "mock-deterministic-v1", adapter_revision: null,
     seller_profile_id: null, seller_profile_version: null, seller_profile_content_hash: null, seller_profile_kind: null,
+    content_hash: `hash-${id}`, purpose: "operational", author_label: null, review_status: null,
   };
 }
 
@@ -402,24 +412,31 @@ describe("approval target", () => {
   it.each(["approve", "reject"])("%s sends exactly the draft rendered on screen, before and after loading older history", async (decision) => {
     const api = await import("@/lib/api");
     const action = decision === "approve" ? api.approveOutreach : api.rejectOutreach;
+    // Phase 6: the exact content hash displayed is sent too, and a
+    // rejection carries its required reason.
     const args = decision === "approve"
-      ? ["lead-a", "lead-a-draft"]
-      : ["lead-a", "lead-a-draft", undefined];
+      ? ["lead-a", "lead-a-draft", "hash-lead-a-draft"]
+      : ["lead-a", "lead-a-draft", "hash-lead-a-draft", "Off-target"];
+    const act_ = async () => {
+      await act(async () =>
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(`${decision} outreach`, "i") })),
+      );
+      if (decision === "reject") {
+        fireEvent.change(screen.getByLabelText("Reason for rejecting (required)"), { target: { value: "Off-target" } });
+        await act(async () => fireEvent.click(screen.getByRole("button", { name: "Confirm rejection" })));
+      }
+    };
     render(<LeadDetailPage />);
     const current = await currentDraftSection();
     await within(current).findByText("Alpha Co current draft");
 
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: new RegExp(`${decision} outreach`, "i") })),
-    );
+    await act_();
     expect(action).toHaveBeenLastCalledWith(...args);
 
     await loadAll("All AI outputs (history)", 231);
     // The draft is also now visible deep in history; the target is unchanged.
     expect(within(current).getByText("Alpha Co current draft")).toBeInTheDocument();
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: new RegExp(`${decision} outreach`, "i") })),
-    );
+    await act_();
     expect(action).toHaveBeenLastCalledWith(...args);
   });
 

@@ -23,6 +23,13 @@ import type {
   SellerProfileContent,
   SellerProfileStatus,
   UploadResponse,
+  ReviewState,
+  AnnotationCandidateDetail,
+  AnnotationCandidateSummary,
+  AnnotationProvider,
+  AnnotationSubmit,
+  AnnotationSummary,
+  TrainingAnnotation,
 } from "@/types/api";
 
 export type PageParams = { limit?: number; offset?: number };
@@ -276,15 +283,17 @@ export function getPushes(
 // ai_output_id is required: the caller must say exactly which draft it's
 // approving/rejecting, so a stale/out-of-date UI can't silently act on a
 // different draft than the one it's showing (docs/upgrade/audit.md C.2).
+// Phase 6: every review names the exact output AND the content hash shown.
 export function approveOutreach(
   leadId: string,
   aiOutputId: string,
+  contentHash: string,
 ): Promise<OutreachReviewResponse> {
   return request<OutreachReviewResponse>(
     `/api/leads/${leadId}/approve-outreach`,
     {
       method: "POST",
-      body: JSON.stringify({ ai_output_id: aiOutputId }),
+      body: JSON.stringify({ ai_output_id: aiOutputId, content_hash: contentHash }),
     },
   );
 }
@@ -292,15 +301,70 @@ export function approveOutreach(
 export function rejectOutreach(
   leadId: string,
   aiOutputId: string,
-  reason?: string,
+  contentHash: string,
+  reason: string,
 ): Promise<OutreachReviewResponse> {
   return request<OutreachReviewResponse>(
     `/api/leads/${leadId}/reject-outreach`,
     {
       method: "POST",
-      body: JSON.stringify({ ai_output_id: aiOutputId, reason: reason ?? null }),
+      body: JSON.stringify({ ai_output_id: aiOutputId, content_hash: contentHash, reason }),
     },
   );
+}
+
+export function getReviewState(leadId: string): Promise<ReviewState> {
+  return request<ReviewState>(`/api/leads/${leadId}/review-state`);
+}
+
+export function reviseOutput(
+  leadId: string,
+  aiOutputId: string,
+  expectedContentHash: string,
+  content: Record<string, unknown>,
+): Promise<AIOutput> {
+  return request<AIOutput>(`/api/leads/${leadId}/ai-outputs/${aiOutputId}/revisions`, {
+    method: "POST",
+    body: JSON.stringify({ expected_content_hash: expectedContentHash, content }),
+  });
+}
+
+export function getAnnotationProvider(): Promise<AnnotationProvider> {
+  return request<AnnotationProvider>("/api/annotation/provider");
+}
+
+export function getAnnotationSummary(queue: string): Promise<AnnotationSummary> {
+  return request<AnnotationSummary>(`/api/annotation/queues/${queue}/summary`);
+}
+
+export function getAnnotationCandidates(
+  queue: string,
+  params?: PageParams,
+): Promise<Page<AnnotationCandidateSummary>> {
+  return request<Page<AnnotationCandidateSummary>>(
+    `/api/annotation/queues/${queue}/candidates${buildQuery({ ...params })}`,
+  );
+}
+
+export function getAnnotationCandidate(id: string): Promise<AnnotationCandidateDetail> {
+  return request<AnnotationCandidateDetail>(`/api/annotation/candidates/${id}`);
+}
+
+export function generateAnnotationCandidate(
+  id: string,
+  provider: string,
+): Promise<AnnotationCandidateDetail> {
+  return request<AnnotationCandidateDetail>(`/api/annotation/candidates/${id}/generate`, {
+    method: "POST",
+    body: JSON.stringify({ provider }),
+  });
+}
+
+export function submitAnnotation(id: string, body: AnnotationSubmit): Promise<TrainingAnnotation> {
+  return request<TrainingAnnotation>(`/api/annotation/candidates/${id}/annotations`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getMetricsDashboard(): Promise<MetricsDashboard> {

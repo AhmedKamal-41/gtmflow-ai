@@ -307,6 +307,9 @@ GAP_LEAD_EXCLUDED = "lead_excluded_from_routing"
 # Phase 5: seller-profile state is read live, like every other gap.
 GAP_SELLER_PROFILE_DEMO = "seller_profile_is_demonstration"
 GAP_DRAFT_NOT_FROM_ACTIVE_PROFILE = "draft_not_from_active_seller_profile"
+# Phase 6: an approval only authorizes the exact content and inputs it saw.
+GAP_DRAFT_INPUTS_CHANGED = "draft_inputs_changed_since_generation"
+GAP_APPROVAL_WITHOUT_CONTENT_IDENTITY = "approval_does_not_identify_content"
 
 SELLER_STATE_NONE = "none"
 SELLER_STATE_DEMO = "demo"
@@ -334,6 +337,14 @@ _GAP_EXPLANATIONS: dict[str, str] = {
     GAP_DRAFT_NOT_REVIEWED: "The current outreach draft has not been approved or rejected yet.",
     GAP_DRAFT_REJECTED: "The current outreach draft was rejected and has not been replaced.",
     GAP_LEAD_EXCLUDED: "This lead is currently excluded from routing (see eligibility reasons).",
+    GAP_DRAFT_INPUTS_CHANGED: (
+        "Company facts, fit, restrictions or seller content changed after this "
+        "draft was generated. Generate a new draft and review it."
+    ),
+    GAP_APPROVAL_WITHOUT_CONTENT_IDENTITY: (
+        "The approval on record predates exact-content review and does not "
+        "identify the content it approved. Review the draft again."
+    ),
 }
 
 
@@ -371,6 +382,8 @@ def compute_readiness(
     eligibility_excluded: bool,
     seller_profile_state: str = SELLER_STATE_NONE,
     latest_outreach_uses_active_profile: bool = False,
+    outreach_review_blockers: list[str] | None = None,
+    email_review_blockers: list[str] | None = None,
 ) -> ReadinessResult:
     """Deterministic status + ordered gap list for two distinct actions
     (Part C.3/E): outbound email send readiness, and the internal Slack
@@ -387,6 +400,15 @@ def compute_readiness(
     "seller"); `latest_outreach_uses_active_profile` says whether the
     current draft was generated from exactly the active revision. Both
     default to the most restrictive value.
+
+    `outreach_review_blockers` (Phase 6) is the ordered list of reasons the
+    current draft's review can't authorize delivery right now, from the
+    shared review state (app/services/draft_review.py) that Slack delivery
+    also enforces. When given, it replaces the draft/review checks above
+    for both actions, so readiness and delivery can never disagree.
+    `email_review_blockers` (defaults to the same list) can add stricter
+    reasons for outbound email only -- e.g. a built-in demonstration draft
+    may be handed off internally in the demo but is never an email to send.
     """
     email_gaps: list[str] = []
     if seller_profile_state == SELLER_STATE_NONE:
@@ -412,6 +434,21 @@ def compute_readiness(
     handoff_gaps: list[str] = []
     if eligibility_excluded:
         handoff_gaps.append(GAP_LEAD_EXCLUDED)
+
+    if outreach_review_blockers is not None:
+        # Same order as above: seller state, contact, draft/review, exclusion.
+        email_gaps = [
+            g for g in email_gaps
+            if g in (GAP_NO_SELLER_PROFILE, GAP_SELLER_PROFILE_DEMO, GAP_MISSING_CONTACT_EMAIL)
+        ]
+        email_gaps += list(
+            email_review_blockers
+            if email_review_blockers is not None
+            else outreach_review_blockers
+        )
+        if eligibility_excluded:
+            email_gaps.append(GAP_LEAD_EXCLUDED)
+        handoff_gaps = list(outreach_review_blockers) + handoff_gaps
 
     return ReadinessResult(
         outbound_email=ActionReadiness(

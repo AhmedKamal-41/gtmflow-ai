@@ -17,6 +17,13 @@ if TYPE_CHECKING:
 ORIGIN_GENERATED = "generated"
 ORIGIN_HUMAN_EDITED = "human_edited"
 
+# Phase 6: why a row exists. Operational rows are the lead's drafts that the
+# review buttons, readiness and Slack delivery act on. Annotation rows are
+# training-annotation candidates and their corrections; they never become a
+# lead's current draft and can never be approved for delivery.
+PURPOSE_OPERATIONAL = "operational"
+PURPOSE_ANNOTATION = "annotation"
+
 
 class AIOutput(Base):
     """One immutable generation or human edit of a lead's AI content.
@@ -81,6 +88,18 @@ class AIOutput(Base):
     seller_profile_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     seller_profile_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     seller_profile_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    # -- Phase 6: purpose + human-revision author. A human edit is a NEW row
+    # (origin="human_edited", parent_output_id -> the row it revises) that
+    # copies the parent's input/seller/prompt provenance; the model response
+    # itself is never overwritten. `author_label` is the honest,
+    # unauthenticated operator label for human revisions (NULL for model
+    # output).
+    purpose: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=PURPOSE_OPERATIONAL,
+        server_default=PURPOSE_OPERATIONAL, index=True,
+    )
+    author_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

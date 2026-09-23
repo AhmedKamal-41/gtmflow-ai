@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models import IntegrationPush, WorkflowEvent
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from tests.conftest import approve_current_draft
 
 # Same shape as the Hot-scoring row used in test_push_endpoints.py, plus a
 # blocked `status` column (a real CSV column the ingestion pipeline already
@@ -177,6 +178,7 @@ def test_batch_push_blocked_status_distinguished_from_pushed(
     assert rows == []
 
 
+@pytest.mark.usefixtures("active_seller_profile")
 def test_batch_push_mixes_blocked_and_deliverable_leads(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -198,6 +200,10 @@ def test_batch_push_mixes_blocked_and_deliverable_leads(
         "/api/batches/upload", files=files, data={"batch_name": "mixed-blocked"}
     ).json()
     client.post(f"/api/batches/{up['batch_id']}/score")
+    # Delivery needs a current approval of the exact draft (Phase 6); the
+    # blocked lead is approved too, to prove approval can't unblock it.
+    for lead in client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]:
+        approve_current_draft(client, lead["id"])
 
     response = client.post(
         f"/api/batches/{up['batch_id']}/push-hot",

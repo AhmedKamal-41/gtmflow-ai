@@ -17,6 +17,7 @@ backend/.pytest_cache/
 # see docs/upgrade/phase3-data-handoff.md for how to reproduce them.
 backend/.cache/
 backend/data/pdl_curated/
+backend/data/manifests/
 
 # Node / Next.js
 frontend/node_modules/

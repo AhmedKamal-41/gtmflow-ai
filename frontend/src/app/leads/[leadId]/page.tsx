@@ -29,9 +29,11 @@ import {
   getLeadReadiness,
   getLeadScore,
   getPushes,
+  getReviewState,
   getSellerProfileStatus,
   pushLead,
   rejectOutreach,
+  reviseOutput,
   scoreLead,
   scoreLeadFit,
 } from "@/lib/api";
@@ -41,6 +43,7 @@ import type {
   Lead,
   LeadFitScore,
   LeadScore,
+  ReviewState,
   SellerProfileStatus,
 } from "@/types/api";
 
@@ -52,6 +55,7 @@ type ActionLabel =
   | "Push"
   | "Approve"
   | "Reject"
+  | "Edit"
   | "Refresh"
   | null;
 
@@ -92,6 +96,14 @@ export default function LeadDetailPage() {
   const [sellerStatusError, setSellerStatusError] = useState<string | null>(
     null,
   );
+  // Phase 6: the shared review state (the same one Slack delivery
+  // enforces). `undefined` = not resolved yet or the lookup failed.
+  const [reviewState, setReviewState] = useState<ReviewState | undefined>(undefined);
+  const [reviewStateError, setReviewStateError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editFields, setEditFields] = useState({ subject: "", email_body: "", call_note: "" });
   const [loadingLead, setLoadingLead] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -155,9 +167,26 @@ export default function LeadDetailPage() {
     }
   }, []);
 
+  const refreshReviewState = useCallback(async (generation: number) => {
+    setReviewStateError(null);
+    try {
+      const value = await getReviewState(leadId);
+      if (generationRef.current !== generation) return; // stale
+      setReviewState(value);
+    } catch (e) {
+      if (generationRef.current !== generation) return; // stale
+      setReviewState(undefined);
+      setReviewStateError(
+        e instanceof APIError ? (e.detail ?? e.message) : "Could not load the review state.",
+      );
+    }
+  }, [leadId]);
+
   const load = useCallback(async () => {
     if (!leadId) return;
     const generation = generationRef.current;
+    setReviewState(undefined);
+    void refreshReviewState(generation);
     // Independent of the lead's own data: a failure here must not hide the
     // lead, so it runs alongside the sequential loads below.
     void refreshSellerStatus(generation);
@@ -212,12 +241,15 @@ export default function LeadDetailPage() {
     } finally {
       if (generationRef.current === generation) setLoadingLead(false);
     }
-  }, [leadId, refreshLatestOutreach, refreshSellerStatus]);
+  }, [leadId, refreshLatestOutreach, refreshSellerStatus, refreshReviewState]);
 
   useEffect(() => {
     generationRef.current += 1;
     setBusy(null);
     setInfo(null);
+    setRejecting(false);
+    setRejectReason("");
+    setEditing(false);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
@@ -225,7 +257,7 @@ export default function LeadDetailPage() {
   async function runAction(
     label: Exclude<ActionLabel, null>,
     fn: () => Promise<unknown>,
-  ) {
+  ): Promise<boolean> {
     // Everything below was captured from THIS render (this lead). If the
     // user navigates to another lead while `fn` is in flight, the
     // follow-up refresh must not run: `load`/`reload` here still point at
@@ -236,14 +268,15 @@ export default function LeadDetailPage() {
     setInfo(null);
     try {
       await fn();
-      if (generationRef.current !== generation) return; // navigated away
+      if (generationRef.current !== generation) return false; // navigated away
       setInfo(`${label} complete.`);
       await load();
-      if (generationRef.current !== generation) return;
+      if (generationRef.current !== generation) return true;
       outputsHistory.refresh();
       pushesHistory.refresh();
+      return true;
     } catch (e) {
-      if (generationRef.current !== generation) return;
+      if (generationRef.current !== generation) return false;
       setError(
         e instanceof APIError
           ? (e.detail ?? e.message)
@@ -251,6 +284,7 @@ export default function LeadDetailPage() {
             ? e.message
             : `${label} failed.`,
       );
+      return false;
     } finally {
       if (generationRef.current === generation) setBusy(null);
     }
@@ -284,13 +318,57 @@ export default function LeadDetailPage() {
   // Legacy v1 semantics, unchanged: a lead that isn't legacy-Hot is pushed
   // with force. Force never overrides a routing exclusion (backend-enforced).
   const pushForce = score?.priority !== "Hot";
-  const pushBlocked = readiness === undefined || readiness.eligibility.excluded;
+  // Delivery also needs a current approval of the exact draft; the backend
+  // enforces it at dispatch, this only avoids offering a doomed push.
+  const pushBlocked =
+    readiness === undefined ||
+    readiness.eligibility.excluded ||
+    (reviewState !== undefined && !reviewState.approval_applicable);
   // Actions that target a specific draft are only enabled once the
   // authoritative lookup has actually resolved to a real draft -- never
   // while it's still in flight (`undefined`, not yet resolved this
   // navigation) or failed (Part A.2: "disable stale actions during
   // navigation or lookup failure").
   const canReviewOutreach = latestOutreach !== undefined && latestOutreach !== null;
+  const canEditOutreach =
+    canReviewOutreach && latestOutreach?.output_schema_version === "v2";
+
+  function startEditing() {
+    if (!latestOutreach) return;
+    const content = latestOutreach.content as Record<string, unknown>;
+    setEditFields({
+      subject: String(content.subject ?? ""),
+      email_body: String(content.email_body ?? ""),
+      call_note: String(content.call_note ?? ""),
+    });
+    setRejecting(false);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!latestOutreach) return;
+    const target = latestOutreach;
+    const saved = await runAction("Edit", () =>
+      reviseOutput(leadId, target.id, target.content_hash, {
+        ...(target.content as Record<string, unknown>),
+        ...editFields,
+      }),
+    );
+    // On failure the editor stays open with the text intact.
+    if (saved) setEditing(false);
+  }
+
+  async function confirmReject() {
+    if (!latestOutreach || !rejectReason.trim()) return;
+    const target = latestOutreach;
+    const done = await runAction("Reject", () =>
+      rejectOutreach(leadId, target.id, target.content_hash, rejectReason.trim()),
+    );
+    if (done) {
+      setRejecting(false);
+      setRejectReason("");
+    }
+  }
   // Known to have no active seller revision: generation would be refused,
   // so don't offer it. When the status is unknown the backend decides.
   const outreachUnavailable =
@@ -353,7 +431,7 @@ export default function LeadDetailPage() {
               loading={busy === "Approve"}
               onClick={() =>
                 runAction("Approve", () =>
-                  approveOutreach(leadId, latestOutreach.id),
+                  approveOutreach(leadId, latestOutreach.id, latestOutreach.content_hash),
                 )
               }
             >
@@ -361,20 +439,19 @@ export default function LeadDetailPage() {
             </Button>
             <Button
               variant="danger"
-              loading={busy === "Reject"}
+              disabled={busy !== null}
               onClick={() => {
-                const reason =
-                  typeof window !== "undefined"
-                    ? window.prompt("Reason for rejecting? (optional)")
-                    : null;
-                if (reason === null) return;
-                void runAction("Reject", () =>
-                  rejectOutreach(leadId, latestOutreach.id, reason || undefined),
-                );
+                setEditing(false);
+                setRejecting(true);
               }}
             >
               Reject outreach
             </Button>
+            {canEditOutreach && (
+              <Button variant="secondary" disabled={busy !== null} onClick={startEditing}>
+                Edit draft
+              </Button>
+            )}
           </>
         )}
         <Button
@@ -399,6 +476,65 @@ export default function LeadDetailPage() {
         error={sellerStatusError}
         onRetry={() => void refreshSellerStatus(generationRef.current)}
       />
+
+      {rejecting && latestOutreach && (
+        <Card title="Reject this draft" subtitle={`Draft ${latestOutreach.id.slice(0, 8)} · content ${latestOutreach.content_hash.slice(0, 12)}`}>
+          <label className="block text-sm font-medium text-slate-700">
+            Reason for rejecting (required)
+            <textarea
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              rows={2}
+              maxLength={2000}
+              value={rejectReason}
+              disabled={busy !== null}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+          </label>
+          <div className="mt-3 flex gap-2">
+            <Button
+              variant="danger"
+              loading={busy === "Reject"}
+              disabled={!rejectReason.trim()}
+              onClick={() => void confirmReject()}
+            >
+              Confirm rejection
+            </Button>
+            <Button variant="ghost" disabled={busy === "Reject"} onClick={() => setRejecting(false)}>
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {editing && latestOutreach && (
+        <Card
+          title="Edit draft"
+          subtitle="Saving creates a new revision. The original model output is kept unchanged, and the new revision needs its own review."
+        >
+          <div className="space-y-3">
+            {(["subject", "email_body", "call_note"] as const).map((field) => (
+              <label key={field} className="block text-sm font-medium text-slate-700">
+                {field === "subject" ? "Subject" : field === "email_body" ? "Body" : "Call note"}
+                <textarea
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  rows={field === "email_body" ? 8 : 2}
+                  value={editFields[field]}
+                  disabled={busy === "Edit"}
+                  onChange={(e) => setEditFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                />
+              </label>
+            ))}
+            <div className="flex gap-2">
+              <Button loading={busy === "Edit"} onClick={() => void saveEdit()}>
+                Save as new revision
+              </Button>
+              <Button variant="ghost" disabled={busy === "Edit"} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {info && (
         <div className="flex items-center gap-2.5 rounded-lg border border-brand-200 bg-brand-50 p-3.5 text-sm text-brand-900">
@@ -477,6 +613,15 @@ export default function LeadDetailPage() {
         ) : (
           <LoadingState text="Checking current readiness…" />
         )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-xl font-semibold text-slate-900">Review</h2>
+        <ReviewStateCard
+          state={reviewState}
+          error={reviewStateError}
+          onRetry={() => void refreshReviewState(generationRef.current)}
+        />
       </section>
 
       <section>
@@ -573,6 +718,94 @@ export default function LeadDetailPage() {
         />
       </section>
     </div>
+  );
+}
+
+const STATUS_LABELS: Record<ReviewState["status"], string> = {
+  no_draft: "No outreach draft",
+  pending: "Pending review",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+/**
+ * Phase 6 review workspace summary: status of the exact current draft,
+ * whether its approval (if any) still authorizes delivery and why not,
+ * the latest decision, and where the company facts came from.
+ */
+function ReviewStateCard({
+  state,
+  error,
+  onRetry,
+}: {
+  state: ReviewState | undefined;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  if (error) {
+    return (
+      <Card>
+        <div className="space-y-2">
+          <ErrorMessage>{error}</ErrorMessage>
+          <Button variant="secondary" onClick={onRetry}>
+            Retry review state
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+  if (!state) return <LoadingState text="Loading review state…" />;
+  const review = state.latest_review;
+  return (
+    <Card>
+      <div aria-label="Review status" className="space-y-3 text-sm text-slate-700">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-slate-900">{STATUS_LABELS[state.status]}</span>
+          {state.draft_origin === "human_edited" && (
+            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs">
+              human-edited revision of {state.draft_parent_output_id?.slice(0, 8)}
+            </span>
+          )}
+          {state.draft_content_hash && (
+            <span className="font-mono text-xs text-slate-400">
+              content {state.draft_content_hash.slice(0, 12)}
+            </span>
+          )}
+        </div>
+        {state.approval_applicable ? (
+          <p className="text-emerald-700">
+            The approval applies to this exact draft and its current inputs.
+          </p>
+        ) : (
+          <div>
+            <p>Not authorized for delivery:</p>
+            <ul className="mt-1 list-inside list-disc">
+              {state.delivery_blockers.map((code) => (
+                <li key={code}>{state.blocker_explanations[code] ?? code}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {review && (
+          <p>
+            Last decision: <strong>{review.decision}</strong> by {review.reviewer_label} on{" "}
+            {new Date(review.created_at).toLocaleString()}
+            {review.reason ? ` · reason: ${review.reason}` : ""}
+          </p>
+        )}
+        <p className="text-xs text-slate-500">
+          Reviews are recorded as &quot;local-demo-unauthenticated&quot;: this app has no sign-in,
+          so no personal identity is claimed.
+        </p>
+        <p className="text-xs text-slate-500" aria-label="Source freshness">
+          Source: {state.source.provider ?? state.source.batch_source ?? "unknown"}
+          {state.source.reported_acquisition_date
+            ? ` · reported acquisition ${state.source.reported_acquisition_date}`
+            : ""}
+          . {state.source.freshness_note}
+        </p>
+      </div>
+    </Card>
   );
 }
 

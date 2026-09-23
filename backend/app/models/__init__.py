@@ -1,5 +1,11 @@
 from app.models.ai_output import AIOutput
 from app.models.ai_output_review import AIOutputReview
+from app.models.annotation import (
+    AnnotationCandidate,
+    CompanySplitAssignment,
+    SplitManifest,
+    TrainingAnnotation,
+)
 from app.models.company_identity import CompanyIdentity
 from app.models.import_run import ImportRun
 from app.models.integration_push import IntegrationPush
@@ -14,6 +20,8 @@ from app.models.workflow_event import WorkflowEvent
 __all__ = [
     "AIOutput",
     "AIOutputReview",
+    "AnnotationCandidate",
+    "CompanySplitAssignment",
     "CompanyIdentity",
     "ImportRun",
     "IntegrationPush",
@@ -24,5 +32,7 @@ __all__ = [
     "SourceSnapshot",
     "SellerProfile",
     "SellerProfileActivation",
+    "SplitManifest",
+    "TrainingAnnotation",
     "WorkflowEvent",
 ]

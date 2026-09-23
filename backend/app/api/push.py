@@ -19,6 +19,8 @@ from app.schemas.pagination import Page
 from app.services.integration_push import (
     SLACK,
     BlockedLeadError,
+    DeliveryNotApprovedError,
+    IncompleteImportError,
     lead_has_successful_slack_push,
     push_lead_to_slack,
 )
@@ -98,6 +100,27 @@ def push_one_lead(
                 "delivery. This cannot be overridden with force=true."
             ),
         ) from e
+    except IncompleteImportError as e:
+        session.commit()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The lead's batch is only partially imported (status='{e.batch_status}'). "
+                "This cannot be overridden with force=true."
+            ),
+        ) from e
+    except DeliveryNotApprovedError as e:
+        session.commit()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Not delivered: the current outreach draft has no approval that "
+                "applies to its exact content and current inputs ("
+                + ", ".join(e.blockers)
+                + "). Review the current draft first. This cannot be overridden "
+                "with force=true."
+            ),
+        ) from e
     session.commit()
     session.refresh(push)
     return push
@@ -171,6 +194,23 @@ def push_batch_hot_leads(
                         f"lead status is '{e.lead_status}'; blocked from "
                         "outreach delivery, not overridable by force=true"
                     ),
+                )
+            )
+            continue
+        except (IncompleteImportError, DeliveryNotApprovedError) as e:
+            blocked += 1
+            reason = (
+                "no current approval of the exact draft ("
+                + ", ".join(e.blockers) + "); not overridable by force=true"
+                if isinstance(e, DeliveryNotApprovedError)
+                else f"batch only partially imported (status='{e.batch_status}')"
+            )
+            results.append(
+                BatchPushResult(
+                    lead_id=lead.id,
+                    company_name=lead.company_name,
+                    status="blocked",
+                    reason=reason,
                 )
             )
             continue

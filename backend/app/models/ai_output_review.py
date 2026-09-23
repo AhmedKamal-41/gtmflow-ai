@@ -69,6 +69,10 @@ class AIOutputReview(Base):
     legacy_unlinked: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # Phase 6: SHA-256 of the exact content the reviewer was shown. NULL on
+    # reviews recorded before Phase 6; those never authorize delivery
+    # because they don't identify the content they approved.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

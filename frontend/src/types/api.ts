@@ -138,6 +138,11 @@ export type AIOutput = {
   seller_profile_version: number | null;
   seller_profile_content_hash: string | null;
   seller_profile_kind: string | null;
+  // Phase 6: exact-content identity and review.
+  content_hash: string;
+  purpose: string; // "operational" | "annotation"
+  author_label: string | null;
+  review_status: string | null; // pending | approved | rejected | superseded
 };
 
 export type IntegrationPush = {
@@ -404,4 +409,137 @@ export type SellerProfileStatus = {
   last_activation: SellerProfileActivation | null;
   active_profile: SellerProfile | null;
   latest_is_active: boolean;
+};
+
+// ---------------------------------------------------------------- Phase 6
+
+export type Review = {
+  id: string;
+  ai_output_id: string | null;
+  decision: "approved" | "rejected";
+  reason: string | null;
+  reviewer_label: string;
+  content_hash: string | null;
+  legacy_unlinked: boolean;
+  created_at: string;
+};
+
+export type SourceInfo = {
+  batch_source: string | null;
+  provider: string | null;
+  source_snapshot_id: string | null;
+  reported_acquisition_date: string | null;
+  retrieved_at: string | null;
+  license: string | null;
+  freshness_note: string;
+};
+
+export type ReviewState = {
+  lead_id: string;
+  status: "no_draft" | "pending" | "approved" | "rejected";
+  draft_id: string | null;
+  draft_content_hash: string | null;
+  draft_origin: string | null;
+  draft_parent_output_id: string | null;
+  approval_applicable: boolean;
+  delivery_blockers: string[];
+  email_blockers: string[];
+  blocker_explanations: Record<string, string>;
+  latest_review: Review | null;
+  source: SourceInfo;
+};
+
+export type ReviewTiming = {
+  active_ms: number;
+  wall_ms: number;
+  hidden_ms: number;
+  idle_ms: number;
+  interaction_count: number;
+  idle_threshold_ms: number;
+  flags: ("was_hidden" | "had_idle_gap" | "resumed_after_failure" | "content_changed_during_session")[];
+};
+
+export type TrainingAnnotation = {
+  id: string;
+  submission_id: string;
+  candidate_id: string;
+  source_output_id: string;
+  source_content_hash: string;
+  decision: "accepted" | "corrected" | "skipped";
+  target_output_id: string | null;
+  target_content_hash: string | null;
+  factual_support: string | null;
+  writing_quality: number | null;
+  missing_info_handling: string | null;
+  notes: string | null;
+  skip_reason: string | null;
+  reviewer_label: string;
+  review_mode: string;
+  timing: (ReviewTiming & { source: string; incomplete: boolean }) | null;
+  created_at: string;
+};
+
+export type AnnotationCandidateSummary = {
+  id: string;
+  queue: string;
+  position: number;
+  task: "company_summary" | "outreach_email";
+  split: string;
+  group_key: string;
+  lead_id: string;
+  company_name: string;
+  status: "awaiting_generation" | "pending_review" | "accepted" | "corrected" | "skipped";
+  source_output_id: string | null;
+  is_mock: boolean | null;
+};
+
+export type AnnotationCandidateDetail = AnnotationCandidateSummary & {
+  manifest_version: string;
+  lead_facts: Record<string, string | null>;
+  source: SourceInfo;
+  source_output: AIOutput | null;
+  target_output: AIOutput | null;
+  latest_annotation: TrainingAnnotation | null;
+  annotation_count: number;
+};
+
+export type AnnotationSubmit = {
+  submission_id: string;
+  source_output_id: string;
+  source_content_hash: string;
+  decision: "accepted" | "corrected" | "skipped";
+  corrected_content?: Record<string, unknown>;
+  factual_support?: "supported" | "partially_supported" | "unsupported";
+  writing_quality?: number;
+  missing_info_handling?: "good" | "acceptable" | "poor";
+  notes?: string;
+  skip_reason?: string;
+  timing?: ReviewTiming;
+};
+
+export type AnnotationProvider = {
+  configured_provider: string;
+  model_revision: string | null;
+  is_mock: boolean;
+  available: boolean;
+  detail: string;
+};
+
+export type AnnotationSummary = {
+  queue: string;
+  manifest_version: string | null;
+  candidates: number;
+  unique_companies: number;
+  generated: number;
+  awaiting_generation: number;
+  pending_review: number;
+  reviewed_examples: number;
+  reviewed_unique_companies: number;
+  accepted: number;
+  corrected: number;
+  skipped: number;
+  mock_candidates: number;
+  by_task: Record<string, number>;
+  by_split: Record<string, number>;
+  experiment_targets: Record<string, number>;
 };

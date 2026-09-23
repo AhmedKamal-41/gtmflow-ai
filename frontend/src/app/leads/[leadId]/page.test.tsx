@@ -76,6 +76,10 @@ const { LEAD, LEAD_B, OLD_OUTREACH_DRAFT, ALL_HISTORY } = vi.hoisted(() => {
     seller_profile_version: null,
     seller_profile_content_hash: null,
     seller_profile_kind: null,
+    content_hash: "hash-fixture",
+    purpose: "operational",
+    author_label: null,
+    review_status: null,
   };
 
   const summaries = Array.from({ length: 200 }, (_, i) => ({
@@ -104,6 +108,10 @@ const { LEAD, LEAD_B, OLD_OUTREACH_DRAFT, ALL_HISTORY } = vi.hoisted(() => {
     seller_profile_version: null,
     seller_profile_content_hash: null,
     seller_profile_kind: null,
+    content_hash: "hash-fixture",
+    purpose: "operational",
+    author_label: null,
+    review_status: null,
   }));
 
   const leadB = {
@@ -158,6 +166,15 @@ vi.mock("@/lib/api", async () => {
       Promise.resolve({
         state: "missing", latest_version: null, activation_sequence: 0,
         last_activation: null, active_profile: null, latest_is_active: false,
+      }),
+    ),
+    getReviewState: vi.fn((leadId: string) =>
+      Promise.resolve({
+        lead_id: leadId, status: "approved", draft_id: null, draft_content_hash: null,
+        draft_origin: null, draft_parent_output_id: null, approval_applicable: true,
+        delivery_blockers: [], email_blockers: [], blocker_explanations: {}, latest_review: null,
+        source: { batch_source: "pdl_import", provider: null, source_snapshot_id: null,
+          reported_acquisition_date: null, retrieved_at: null, license: null, freshness_note: "fixture" },
       }),
     ),
     getLeadReadiness: vi.fn((leadId: string) =>

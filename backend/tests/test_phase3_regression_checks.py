@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import review_json
 
 # These tests generate outreach, which needs an explicitly activated
 # seller revision (Phase 5). The fixture activates a synthetic one.
@@ -57,13 +58,13 @@ def test_approve_reject_approve_still_inflates_approval_rate(client: TestClient)
     lead, output = _upload_score_generate(client, CSV, "phase3-a1")
 
     client.post(
-        f"/api/leads/{lead['id']}/approve-outreach", json={"ai_output_id": output["id"]}
+        f"/api/leads/{lead['id']}/approve-outreach", json=review_json(client, lead['id'], output["id"])
     )
     client.post(
-        f"/api/leads/{lead['id']}/reject-outreach", json={"ai_output_id": output["id"]}
+        f"/api/leads/{lead['id']}/reject-outreach", json=review_json(client, lead['id'], output["id"], reason="Not suitable (test rejection)")
     )
     client.post(
-        f"/api/leads/{lead['id']}/approve-outreach", json={"ai_output_id": output["id"]}
+        f"/api/leads/{lead['id']}/approve-outreach", json=review_json(client, lead['id'], output["id"])
     )
 
     metrics = client.get("/api/metrics/dashboard").json()
@@ -84,7 +85,7 @@ def test_blocked_status_survives_approve_outreach(client: TestClient) -> None:
 
     output = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
     approve = client.post(
-        f"/api/leads/{lead['id']}/approve-outreach", json={"ai_output_id": output["id"]}
+        f"/api/leads/{lead['id']}/approve-outreach", json=review_json(client, lead['id'], output["id"])
     )
     assert approve.status_code == 200
 
@@ -112,7 +113,7 @@ def test_blocked_status_survives_reject_outreach(client: TestClient) -> None:
 
     output = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
     client.post(
-        f"/api/leads/{lead['id']}/reject-outreach", json={"ai_output_id": output["id"]}
+        f"/api/leads/{lead['id']}/reject-outreach", json=review_json(client, lead['id'], output["id"], reason="Not suitable (test rejection)")
     )
 
     lead_after = client.get(f"/api/leads/{lead['id']}").json()

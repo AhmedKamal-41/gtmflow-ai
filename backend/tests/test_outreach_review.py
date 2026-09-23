@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AIOutputReview, WorkflowEvent
+from tests.conftest import review_json
 
 # These tests generate outreach, which needs an explicitly activated
 # seller revision (Phase 5). The fixture activates a synthetic one.
@@ -53,7 +54,7 @@ def test_approve_outreach_creates_workflow_event_and_review(
 
     response = client.post(
         f"/api/leads/{lead_id}/approve-outreach",
-        json={"ai_output_id": output_id},
+        json=review_json(client, lead_id, output_id),
     )
     assert response.status_code == 200
     body = response.json()
@@ -94,7 +95,7 @@ def test_approve_outreach_creates_workflow_event_and_review(
 def test_approve_outreach_sets_lead_status(client: TestClient) -> None:
     lead_id, output_id = _scored_lead_with_outreach(client)
     client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, output_id)
     )
     lead = client.get(f"/api/leads/{lead_id}").json()
     assert lead["status"] == "outreach_approved"
@@ -111,7 +112,7 @@ def test_approve_outreach_missing_ai_output_id_returns_422(client: TestClient) -
 def test_approve_outreach_unknown_output_id_returns_404(client: TestClient) -> None:
     lead_id = _scored_lead_without_outreach(client)
     response = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": str(uuid4())}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, str(uuid4()))
     )
     assert response.status_code == 404
 
@@ -119,7 +120,7 @@ def test_approve_outreach_unknown_output_id_returns_404(client: TestClient) -> N
 def test_approve_outreach_404_for_unknown_lead(client: TestClient) -> None:
     response = client.post(
         f"/api/leads/{ZERO_UUID}/approve-outreach",
-        json={"ai_output_id": str(uuid4())},
+        json=review_json(client, ZERO_UUID, str(uuid4())),
     )
     assert response.status_code == 404
 
@@ -134,7 +135,7 @@ def test_reject_outreach_creates_workflow_event_with_reason(
 
     response = client.post(
         f"/api/leads/{lead_id}/reject-outreach",
-        json={"ai_output_id": output_id, "reason": "Too generic"},
+        json=review_json(client, lead_id, output_id, reason="Too generic"),
     )
     assert response.status_code == 200
     body = response.json()
@@ -154,12 +155,13 @@ def test_reject_outreach_creates_workflow_event_with_reason(
     assert rejected[0].event_data["output_type"] == "outreach_email"
 
 
-def test_reject_outreach_without_reason(client: TestClient, db_session: Session) -> None:
+def test_reject_outreach_requires_a_reason(client: TestClient, db_session: Session) -> None:
+    """Phase 6: a rejection must say why. Missing or blank reasons are
+    refused before anything is written."""
     lead_id, output_id = _scored_lead_with_outreach(client)
-    response = client.post(
-        f"/api/leads/{lead_id}/reject-outreach", json={"ai_output_id": output_id}
-    )
-    assert response.status_code == 200
+    for body in (review_json(client, lead_id, output_id), review_json(client, lead_id, output_id, reason="")):
+        response = client.post(f"/api/leads/{lead_id}/reject-outreach", json=body)
+        assert response.status_code == 422
 
     events = (
         db_session.execute(
@@ -168,15 +170,13 @@ def test_reject_outreach_without_reason(client: TestClient, db_session: Session)
         .scalars()
         .all()
     )
-    rejected = [e for e in events if e.event_type == "outreach_rejected"]
-    assert len(rejected) == 1
-    assert rejected[0].event_data["reason"] is None
+    assert [e for e in events if e.event_type == "outreach_rejected"] == []
 
 
 def test_reject_outreach_sets_lead_status(client: TestClient) -> None:
     lead_id, output_id = _scored_lead_with_outreach(client)
     client.post(
-        f"/api/leads/{lead_id}/reject-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/reject-outreach", json=review_json(client, lead_id, output_id, reason="Not suitable (test rejection)")
     )
     lead = client.get(f"/api/leads/{lead_id}").json()
     assert lead["status"] == "outreach_rejected"
@@ -193,7 +193,7 @@ def test_reject_outreach_missing_ai_output_id_returns_422(client: TestClient) ->
 def test_reject_outreach_404_for_unknown_lead(client: TestClient) -> None:
     response = client.post(
         f"/api/leads/{ZERO_UUID}/reject-outreach",
-        json={"ai_output_id": str(uuid4()), "reason": "n/a"},
+        json=review_json(client, ZERO_UUID, str(uuid4()), reason="n/a"),
     )
     assert response.status_code == 404
 
@@ -208,7 +208,7 @@ def test_review_rejects_output_belonging_to_another_lead(client: TestClient) -> 
 
     response = client.post(
         f"/api/leads/{lead_b_id}/approve-outreach",
-        json={"ai_output_id": output_a_id},
+        json=review_json(client, lead_b_id, output_a_id),
     )
     assert response.status_code == 400
     assert "different lead" in response.json()["detail"].lower()
@@ -222,7 +222,7 @@ def test_review_rejects_non_outreach_output_type(client: TestClient) -> None:
 
     response = client.post(
         f"/api/leads/{lead['id']}/approve-outreach",
-        json={"ai_output_id": summary["id"]},
+        json=review_json(client, lead['id'], summary["id"]),
     )
     assert response.status_code == 400
     assert "not outreach" in response.json()["detail"].lower()
@@ -237,14 +237,14 @@ def test_stale_tab_cannot_approve_superseded_draft(client: TestClient) -> None:
     assert v2["id"] != v1_id
 
     stale_approve = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": v1_id}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, v1_id)
     )
     assert stale_approve.status_code == 409
     assert "superseded" in stale_approve.json()["detail"].lower()
 
     # The current draft can still be approved normally.
     current_approve = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": v2["id"]}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, v2["id"])
     )
     assert current_approve.status_code == 200
     assert current_approve.json()["ai_output_id"] == v2["id"]
@@ -259,10 +259,10 @@ def test_repeated_identical_approval_is_idempotent(
     lead_id, output_id = _scored_lead_with_outreach(client)
 
     first = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, output_id)
     )
     second = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, output_id)
     )
     assert first.status_code == 200
     assert second.status_code == 200
@@ -306,10 +306,10 @@ def test_approve_then_reject_is_a_new_auditable_event_not_idempotent(
     lead_id, output_id = _scored_lead_with_outreach(client)
 
     approve = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, output_id)
     )
     reject = client.post(
-        f"/api/leads/{lead_id}/reject-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/reject-outreach", json=review_json(client, lead_id, output_id, reason="Not suitable (test rejection)")
     )
     assert approve.json()["idempotent_replay"] is False
     assert reject.json()["idempotent_replay"] is False
@@ -331,6 +331,6 @@ def test_approve_then_reject_is_a_new_auditable_event_not_idempotent(
 
     # Re-approving after the reject is, in turn, its own new event.
     re_approve = client.post(
-        f"/api/leads/{lead_id}/approve-outreach", json={"ai_output_id": output_id}
+        f"/api/leads/{lead_id}/approve-outreach", json=review_json(client, lead_id, output_id)
     )
     assert re_approve.json()["idempotent_replay"] is False

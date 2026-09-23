@@ -36,7 +36,7 @@ from app.ai.grounding import (
 from app.ai.json_parser import AIJSONParseError
 from app.ai.prompts import PROMPT_VERSION
 from app.models import AIOutput, Lead, WorkflowEvent
-from app.models.ai_output import ORIGIN_GENERATED
+from app.models.ai_output import ORIGIN_GENERATED, PURPOSE_OPERATIONAL
 from app.scoring import fit
 from app.services import fit_queries
 from app.services.seller_profiles import (
@@ -144,10 +144,42 @@ def _provenance(lead: Lead) -> dict[str, Any]:
     }
 
 
+def seller_context_for_output(
+    output: AIOutput, active: SellerContext | None
+) -> SellerContext | None:
+    """The seller context that would reproduce `output`'s input *today*, or
+    None when that seller is no longer the one in force: an active-revision
+    draft needs that exact revision to still be active; a built-in demo
+    draft needs the built-in profile's content to be unchanged."""
+    if output.seller_profile_content_hash is None:
+        return None
+    if output.seller_profile_id is None:
+        demo = builtin_demo_seller()
+        return demo if demo.content_hash == output.seller_profile_content_hash else None
+    if active is not None and active.profile_id == output.seller_profile_id:
+        return active
+    return None
+
+
+def current_input_hash(
+    lead: Lead, task: str, seller: SellerContext | None, fit_row: Any
+) -> str:
+    """Hash of the context generation would build right now -- compared with
+    a draft's recorded `input_hash` to detect changed company or seller
+    inputs. `fit_row` is the lead's current fit score (or None), prefetched
+    so a page of leads needs one fit query, not one per lead."""
+    return _hash_input(_context_from(lead, task, seller, fit_row))
+
+
 def _build_context(
     session: Session, lead: Lead, task: str, seller: SellerContext | None
 ) -> dict[str, Any]:
-    score = fit_queries.latest_fit_score(session, lead.id)
+    return _context_from(lead, task, seller, fit_queries.latest_fit_score(session, lead.id))
+
+
+def _context_from(
+    lead: Lead, task: str, seller: SellerContext | None, score: Any
+) -> dict[str, Any]:
     fit_block = None
     if score is not None:
         fit_block = {
@@ -187,8 +219,10 @@ def _generate(
     output_type: str,
     event_type: str,
     seller: SellerContext | None,
+    purpose: str = PURPOSE_OPERATIONAL,
+    client: AIClient | None = None,
 ) -> AIOutput:
-    client = get_ai_client()
+    client = client if client is not None else get_ai_client()
     ctx = _build_context(session, lead, output_type, seller)
     content = _run(client, output_type, ctx)
     input_hash = _hash_input(ctx)
@@ -208,6 +242,7 @@ def _generate(
         seller_profile_version=seller.version if seller else None,
         seller_profile_content_hash=seller.content_hash if seller else None,
         seller_profile_kind=seller.kind if seller else None,
+        purpose=purpose,
     )
     session.add(output)
     session.flush()
@@ -218,6 +253,7 @@ def _generate(
             event_data={
                 "output_type": output_type,
                 "ai_output_id": str(output.id),
+                "purpose": purpose,
                 "model_used": client.name,
                 "model_revision": client.model_revision,
                 "prompt_version": PROMPT_VERSION,

@@ -30,8 +30,9 @@ GTMFLOW_DEMO_PROFILE = SellerProfileContent(
     value_proposition=(
         "GTMFlow is a portfolio demonstration that imports company lists, "
         "scores company fit with a versioned rubric, drafts outreach for a "
-        "person to review, and records each step in an audit trail. This "
-        "demonstration profile is not a commercial offer."
+        "person to approve, reject or correct, routes approved leads to "
+        "Slack, and records each step in an audit trail. This demonstration "
+        "profile is not a commercial offer and has no customer results to cite."
     ),
     target_customer=(
         "Demonstration only: teams evaluating a lead-workflow prototype. "
@@ -40,7 +41,9 @@ GTMFLOW_DEMO_PROFILE = SellerProfileContent(
     capabilities=[
         "Imports company lists from CSV files and a public company dataset",
         "Scores company fit with a deterministic, versioned rubric",
-        "Drafts outreach that a person reviews before any use",
+        "Drafts outreach grounded in the imported company facts",
+        "Lets a person approve, reject or correct each exact draft",
+        "Routes approved leads to a Slack channel for internal handoff",
         "Records workflow events for an audit trail",
     ],
     proof_points=[],

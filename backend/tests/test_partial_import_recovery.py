@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import approve_current_draft
 
 
 def _transport_spy(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
@@ -86,6 +87,7 @@ def test_partial_batch_excluded_from_batch_push_even_with_force(
     assert calls == []
 
 
+@pytest.mark.usefixtures("active_seller_profile")
 def test_complete_batch_is_not_affected_by_the_partial_guard(
     client: TestClient,
 ) -> None:
@@ -102,6 +104,7 @@ def test_complete_batch_is_not_affected_by_the_partial_guard(
 
     leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]
     client.post(f"/api/leads/{leads[0]['id']}/score")
+    approve_current_draft(client, leads[0]["id"])
     response = client.post(
         f"/api/leads/{leads[0]['id']}/push",
         json={"integration_type": "slack", "force": True},

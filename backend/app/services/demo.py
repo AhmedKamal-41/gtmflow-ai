@@ -19,8 +19,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import AIOutputReview, Lead, LeadBatch, LeadScore, WorkflowEvent
-from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
+from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
 
 DEMO_REVIEWER_LABEL = "demo-auto-approve"
@@ -30,6 +29,7 @@ from app.services.ai_generation import (
     generate_summary_for_lead,
 )
 from app.services.csv_ingestion import parse_csv
+from app.services.draft_review import DECISION_APPROVED, apply_review
 from app.services.integration_push import SUCCESS_STATUSES, push_lead_to_slack
 
 DEMO_BATCH_NAME = "Demo: sample leads"
@@ -124,35 +124,14 @@ def _score(session: Session, lead: Lead) -> str:
     return result["priority"]
 
 
-def _approve(session: Session, lead: Lead, ai_output_id: Any) -> None:
-    # Mirrors app/api/outreach_review.py's approve path so demo-generated
-    # approvals are structurally identical to real ones -- a real
-    # AIOutputReview row, not just a WorkflowEvent. Honestly labeled as
-    # automated (not the same reviewer_label the interactive UI uses), since
-    # this endpoint approves on the demo's behalf, not a human's.
-    session.add(
-        AIOutputReview(
-            lead_id=lead.id,
-            ai_output_id=ai_output_id,
-            decision="approved",
-            review_kind=REVIEW_KIND_OPERATIONAL_OUTREACH,
-            reviewer_label=DEMO_REVIEWER_LABEL,
-            legacy_unlinked=False,
-        )
+def _approve(session: Session, lead: Lead, outreach: Any) -> None:
+    # The same exact-content review the approve endpoint records, labeled
+    # as the demo's auto-approval rather than a human decision. It only
+    # exists for this synthetic demo batch.
+    apply_review(
+        session, lead=lead, output=outreach, decision=DECISION_APPROVED,
+        reviewer_label=DEMO_REVIEWER_LABEL,
     )
-    session.add(
-        WorkflowEvent(
-            lead_id=lead.id,
-            event_type="outreach_approved",
-            event_data={
-                "ai_output_id": str(ai_output_id),
-                "output_type": "outreach_email",
-                "lead_id": str(lead.id),
-            },
-        )
-    )
-    if lead.status not in DISQUALIFIED_STATUSES:
-        lead.status = "outreach_approved"
 
 
 def run_demo(session: Session) -> dict[str, Any]:
@@ -188,7 +167,7 @@ def run_demo(session: Session) -> dict[str, Any]:
         outreach = generate_outreach_for_lead(session, lead, seller=demo_seller)
         session.flush()
         generated += 1
-        _approve(session, lead, outreach.id)
+        _approve(session, lead, outreach)
         approved += 1
         push = push_lead_to_slack(session, lead)
         session.flush()

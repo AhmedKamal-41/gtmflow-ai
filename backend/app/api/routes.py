@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.ai import router as ai_router
+from app.api.annotation import router as annotation_router
 from app.api.batches import router as batches_router
 from app.api.demo import router as demo_router
 from app.api.fit_scoring import router as fit_scoring_router
@@ -24,3 +25,4 @@ router.include_router(outreach_review_router)
 router.include_router(metrics_router)
 router.include_router(demo_router)
 router.include_router(seller_profile_router)
+router.include_router(annotation_router)

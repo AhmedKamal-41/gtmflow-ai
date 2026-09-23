@@ -25,6 +25,7 @@ from app.models import (
     WorkflowEvent,
 )
 from app.scoring import fit
+from tests.conftest import review_json
 
 
 def _batch(db_session: Session, status: str = "uploaded") -> LeadBatch:
@@ -251,7 +252,7 @@ def test_listing_readiness_is_current_and_snapshot_is_labeled_historical(
 
     draft = client.post(f"/api/leads/{lead.id}/generate-outreach").json()
     approve = client.post(
-        f"/api/leads/{lead.id}/approve-outreach", json={"ai_output_id": draft["id"]}
+        f"/api/leads/{lead.id}/approve-outreach", json=review_json(client, lead.id, draft["id"])
     )
     assert approve.status_code == 200, approve.text
 
@@ -425,10 +426,10 @@ def test_drafts_sharing_a_timestamp_have_one_current_draft(
     assert latest["id"] == str(high.id)
 
     stale = client.post(
-        f"/api/leads/{lead.id}/approve-outreach", json={"ai_output_id": str(low.id)}
+        f"/api/leads/{lead.id}/approve-outreach", json=review_json(client, lead.id, str(low.id))
     )
     assert stale.status_code == 409
     current = client.post(
-        f"/api/leads/{lead.id}/approve-outreach", json={"ai_output_id": str(high.id)}
+        f"/api/leads/{lead.id}/approve-outreach", json=review_json(client, lead.id, str(high.id))
     )
     assert current.status_code == 200, current.text

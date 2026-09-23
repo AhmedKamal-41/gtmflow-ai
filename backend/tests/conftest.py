@@ -112,3 +112,34 @@ def active_seller_profile(client: TestClient) -> dict:
     """A synthetic, explicitly activated seller revision. Tests that generate
     outreach opt in; everything else runs with no active profile."""
     return save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+
+
+def review_json(client: TestClient, lead_id: str, output_id: str, reason: str | None = None,
+                owner_lead_id: str | None = None) -> dict:
+    """A review body naming the exact output AND the content hash the
+    reviewer was shown (Phase 6). The hash is read the way the UI reads it:
+    from the output as listed for its owning lead. Unknown outputs get a
+    placeholder hash so the server's own existence check answers."""
+    owner = owner_lead_id or lead_id
+    response = client.get(f"/api/leads/{owner}/ai-outputs?limit=200")
+    items = response.json().get("items", []) if response.status_code == 200 else []
+    content_hash = next((i["content_hash"] for i in items if i["id"] == output_id), "0" * 64)
+    body = {"ai_output_id": output_id, "content_hash": content_hash}
+    if reason is not None:
+        body["reason"] = reason
+    return body
+
+
+def approve_current_draft(client: TestClient, lead_id: str) -> dict:
+    """Generate a grounded outreach draft for the lead (needs an active
+    seller profile) and approve exactly that draft -- what delivery now
+    requires (Phase 6)."""
+    draft = client.post(f"/api/leads/{lead_id}/generate-outreach")
+    assert draft.status_code == 200, draft.text
+    draft = draft.json()
+    approved = client.post(
+        f"/api/leads/{lead_id}/approve-outreach",
+        json={"ai_output_id": draft["id"], "content_hash": draft["content_hash"]},
+    )
+    assert approved.status_code == 200, approved.text
+    return draft

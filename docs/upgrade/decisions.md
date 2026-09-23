@@ -186,6 +186,26 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Readiness reads the active profile live; the fit rubric and stored scores are untouched | `compute_readiness` gains seller-state inputs with restrictive defaults. No scoring constant or criterion changed, and historical `at_scoring` snapshots are not rewritten (tested). |
 | No new dependency | Existing FastAPI, SQLAlchemy, Alembic, pydantic, React and Vitest only. |
 
+## Decisions made in Phase 6 (review, correction, annotation)
+
+| Decision | Reason / status |
+|---|---|
+| One shared review state (`app/services/draft_review.py`) used by review endpoints, readiness and Slack delivery | Readiness and delivery can't disagree. An approval authorizes delivery only while it names the current draft's exact content hash, the draft is grounded, its seller is still in force, and its recomputed `input_hash` is unchanged. Otherwise ordered blocker codes are returned. |
+| Reviews carry the displayed `content_hash`; review requests reject extra fields | They prove what was seen; a posted reviewer name is refused. The label stays `local-demo-unauthenticated`. Pre-Phase-6 reviews (no hash) are kept but authorize nothing. |
+| A rejection requires a reason (API and UI) | Required by the Phase 6 brief. The old "reject without reason" test now asserts 422. `window.prompt` replaced by an inline form. |
+| Human edits are new immutable `ai_outputs` rows (`origin="human_edited"`, `parent_output_id`, `author_label`, copied input/seller provenance), validated like model output | The model response is never overwritten. An edit supersedes the draft and needs its own review. Identical retries are idempotent. |
+| Delivery requires an applicable approval at the shared dispatch point; the incomplete-import check also moved there | Every route (single, batch, demo) inherits it. `force` bypasses only the Hot score threshold. On the batch route it also keeps its existing, documented "re-push already delivered" meaning, a deduplication rule left to Phase 11. |
+| `internal_slack_handoff` readiness now requires a current approval | Mirrors enforcement. Historical `at_scoring` snapshots unchanged. |
+| `ai_outputs.purpose` (`operational` / `annotation`) instead of a separate candidate table | Annotation candidates reuse generation and provenance but never become a lead's draft, can't be approved for delivery, and are excluded from operational queries. |
+| Training annotations in their own append-only table with a client `submission_id` | Kept separate from operational `AIOutputReview` (the unused `training_annotation` review kind stays unused). Latest row per candidate wins; retries are idempotent. Accept requires "fully supported"; skip requires a reason. |
+| Split isolation by union-find groups (identity, domain, LinkedIn, normalized name) with a seeded hash split 4:1:1; a manifest version is frozen once | Over-grouping is the safe failure; identities are never merged. Group keys use provider record ids, so the manifest is reproducible across databases (verified: real and restored-copy digests identical). |
+| Pilot: 50 training companies × 2 tasks, one company per group, segments alternated, seeded order, excluded leads skipped | Keeps a company's tasks together, uses only training groups, and reports examples and unique companies separately. |
+| Candidates are generated only on explicit request with the configured provider named; nothing is pre-generated on the real database | Provider choice (labeled mock vs paid real model) and demo-profile activation are the user's decisions. |
+| GTMFlow demonstration profile saved as a draft on the real database, not activated | Preparation only. Activation needs the user's explicit confirmation. Capabilities now include human review and Slack routing; no proof points. |
+| Review timing measured only in the browser (active / hidden / idle / wall, flags) and validated server-side | No inference from timestamps; sessions without interaction are flagged `incomplete`. |
+| Split manifest file git-ignored under `backend/data/manifests/` | Same rule as other derived cohort outputs. The database copy is authoritative; the digest is in the handoff. |
+| Migration `0009_review_annotation`, additive; explicit short FK name | The first restored-copy upgrade failed on Postgres's 63-character identifier limit (rolled back cleanly). Fixed before touching the real database. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
@@ -206,7 +226,12 @@ Still open, listed in the order they'll come up:
    - a contact source if outbound email is the goal.
 
    Alternatively, an explicit decision to use the labeled GTMFlow demonstration profile. See `phase5-generation-handoff.md` §8. Whether the size criterion should become active is a separate versioned-rubric decision.
-2. **Training data source for Phases 6–9**, beyond "100-example pilot, human-annotated, possibly corrected from company facts" (confirmed in Phase 2). Still open: who performs the pilot annotation, and over what time frame, since it gates how much data exists by Phase 7/8. 5,000 real PDL leads (now with v2 fit scores) exist to draw candidates from, but the actual annotation workflow (Phase 6) still doesn't exist.
+2. **Training data for Phases 6–9.** The annotation workflow now exists (Phase 6). The frozen split manifest `company-groups-v1` and the 100-candidate `pilot-v1` queue are on the real database, with 0 reviewed. Still open:
+   - who reviews, and over what time frame;
+   - which candidate provider: labeled mock or a paid real model (needs go-ahead);
+   - whether to activate the GTMFlow demonstration profile for outreach candidates.
+
+   See `phase6-review-handoff.md` §8.
 3. **Concurrent-push idempotency mechanism for Phase 11** (D.3) — a DB-level unique constraint / row lock vs. an application-level idempotency key vs. a queue-based dedup once Phase 10's background jobs exist. Not decided; explicitly deferred per the user's instruction to keep delivery reliability in Phase 11.
 4. **Company-identity resolution/merge strategy for a future second PDL snapshot.** Phase 3 imported exactly one snapshot, so no two `Lead` rows have ever needed to be resolved to the same `CompanyIdentity`. The matching strategy (fuzzy name match? domain + locality heuristic? manual review queue?) is still undesigned — flagging now since it wasn't yet a live question with only one snapshot in the database, but will be the moment a second PDL pull happens.
 5. **Whether `outreach_rejected` should become a real hard routing-eligibility exclusion**, not just a v2 readiness gap. Verified in Phase 4 that the current Slack-push pipeline does not treat it as a hard block (`BLOCKED_STATUSES` excludes it); left unchanged since modifying that enforcement was out of Phase 4's scope, but flagging since the Phase 4 brief's own wording assumed it already was one.

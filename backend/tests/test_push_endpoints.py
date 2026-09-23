@@ -9,6 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import IntegrationPush, WorkflowEvent
+from tests.conftest import approve_current_draft
+
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 
@@ -29,9 +32,15 @@ def _upload(client: TestClient, csv: str = MIXED_CSV, name: str = "push-test") -
 
 
 def _scored_setup(client: TestClient) -> tuple[str, list[dict]]:
+    """Scored leads whose current outreach drafts are approved -- delivery
+    requires that since Phase 6 (missing/stale approval is covered in
+    tests/test_delivery_review_enforcement.py)."""
     up = _upload(client)
     batch_id = up["batch_id"]
     client.post(f"/api/batches/{batch_id}/score")
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
+    for lead in leads:
+        approve_current_draft(client, lead["id"])
     leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     return batch_id, leads
 
