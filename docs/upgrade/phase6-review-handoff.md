@@ -311,7 +311,7 @@ cd /workspaces/gtmflow-phase5/frontend && \
 - **Real alternative:** OpenAI `gpt-4o-mini` (the client's default model), enabled by restarting the backend with `USE_MOCK_AI=false OPENAI_API_KEY=…`. Nothing has been sent to it.
 - **Measured input size:** the exact real-mode prompts for all 100 pilot candidates were built locally, without any network call. They total about **157,000 input tokens**: summaries average about 1,550 tokens (max 1,604), outreach about 1,585 (max 1,640). The count is a characters ÷ 4 approximation; no tokenizer was installed.
 - **Output estimate:** about 450 tokens per reply, based on the size of the mock's equivalent JSON; allow up to about 800 for a real model's longer replies. That is 45,000–80,000 output tokens.
-- **Cost estimate:** at `gpt-4o-mini` list prices as last known (**$0.15 per million input tokens, $0.60 per million output tokens; confirm current pricing on OpenAI's pricing page before approving**), the 100 candidates cost roughly **$0.02 input + $0.03–$0.05 output, about $0.05–$0.08 in total**. Even with a few invalid-output retries, it should stay well under $0.25. Every call is billed, including replies the validator rejects.
+- **Cost estimate:** at `gpt-4o-mini` standard-tier prices, **verified 2026-09-23** on OpenAI's pricing page (developers.openai.com/api/docs/pricing): **$0.15 per million input tokens, $0.60 per million output tokens** ($0.075 per million cached input). The model is not listed as deprecated (developers.openai.com/api/docs/deprecations). The 100 candidates cost roughly **$0.024 input + $0.027–$0.048 output, about $0.05–$0.07 in total**. Even allowing 30% token undercount and some invalid-output retries, it should stay well under $0.25. Every call is billed, including replies the validator rejects.
 - **Not done:** no paid call was made, and none will be without your explicit approval.
 
 **Important:** a candidate's output is generated **once and never replaced**. If you click "Generate with mock" on a candidate, that candidate stays a mock example. Decide on the provider first. If you want real-model targets, approve the cost and the backend will be restarted in real mode *before* any candidate is generated.
@@ -366,3 +366,35 @@ For each one:
 Review time is measured only while the page is visible and you're interacting with it; idle and hidden time are recorded separately. Reviewing an example is not permission or readiness to contact the company. Operational outreach approval (on lead pages) is separate and unaffected.
 
 After reviewing, `python -m app.annotation_cli summary` (from `backend/`, with the same `DATABASE_URL`) prints the counts. `python -m app.annotation_cli export --queue pilot-v1 --out <file>` writes the reviewed examples.
+
+## 12. Pilot progress log
+
+Counts: **usable examples** = accepted + corrected (exported); **skipped** examples are counted separately and never exported.
+
+### Session 2026-09-23 (continuation)
+
+**State at start:** unchanged since §11. The pilot has 100 candidates from 50 companies, 0 generated, 0 accepted, 0 corrected (0 usable), 0 skipped. The demo profile is draft version 1, not active (activation sequence 0). The tree is clean at `e1b28e7`.
+
+**Failures and recoveries:**
+- The Codespace had been suspended again: `gtmflow-dev-postgres` had exited, and both servers were down. The container was restarted, followed by the backend (mock AI, no Slack webhook) and the frontend (opt-in API proxy). `/seller-profile`, `/annotation` and the proxied API all answered 200.
+- No database migration or integrity work was repeated; §6 is unchanged.
+
+**Real provider readiness (checked, nothing called):**
+- Pricing and deprecation status were verified on OpenAI's pages (§11).
+- **No OpenAI API key is configured.** The check covered the shell environment, `backend/.env` and root `.env` in both worktrees (none exist), and other key-like variable names. Values were never printed.
+- The installed `openai` SDK (3.17.0) exposes `OpenAI` and `chat.completions.create(model, messages, response_format)`, the exact call shape `app/ai/client.py` uses (checked offline by introspection). Real mode has still never made a live call; the first approved generation will be its first real exercise.
+- **No paid call was made. No mock candidates were generated.** Generation stays blocked on your decision (§11: an output is attached once and never replaced).
+
+**First five candidates** (facts as recorded; unknown fields listed):
+
+| # | Company | Task | Recorded facts | Not in the record |
+|---|---|---|---|---|
+| 1 | david m bacha do | Summary | medical practice; 1-10; tenafly, new jersey, united states | website, contact name/title/email |
+| 2 | david m bacha do | Outreach | same as #1 | same as #1 |
+| 3 | one west associates inc | Summary | real estate; 1-10; st. louis, missouri, united states; website onewest.com | contact name/title/email |
+| 4 | one west associates inc | Outreach | same as #3 | same as #3 |
+| 5 | accuhealth inc | Summary | hospital & health care; 11-50; oklahoma city, oklahoma, united states; website accuhealthsleep.com | contact name/title/email |
+
+**Review note for #3/#4:** `onewest.com` is what the record says, but it may not belong to a 1–10 person St. Louis firm. "Factual support" means *supported by the recorded facts*. An output repeating the recorded website is supported. Flag the doubt in Notes rather than treating the record as verified truth, and correct or skip if the output asserts anything beyond it.
+
+**Progress at end of session:** 0 generated, 0 usable (0 accepted, 0 corrected), 0 skipped, 0 unique companies reviewed. No reviews were submitted on your behalf.
