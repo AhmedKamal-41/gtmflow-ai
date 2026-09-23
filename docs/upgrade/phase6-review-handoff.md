@@ -398,3 +398,31 @@ Counts: **usable examples** = accepted + corrected (exported); **skipped** examp
 **Review note for #3/#4:** `onewest.com` is what the record says, but it may not belong to a 1–10 person St. Louis firm. "Factual support" means *supported by the recorded facts*. An output repeating the recorded website is supported. Flag the doubt in Notes rather than treating the record as verified truth, and correct or skip if the output asserts anything beyond it.
 
 **Progress at end of session:** 0 generated, 0 usable (0 accepted, 0 corrected), 0 skipped, 0 unique companies reviewed. No reviews were submitted on your behalf.
+
+### Session 2026-09-23 (first real generation)
+
+**Configuration:**
+- **Where the key went:** the OpenAI key had first been saved into the tracked template `/workspaces/gtmflow-ai/backend/.env.example` (uncommitted). With your approval it was moved into the git-ignored `/workspaces/gtmflow-phase5/backend/.env` (mode 600), and the template was restored with `git checkout`. Neither checkout's tracked files contain the key, it was never printed, and the backend log has no key-like strings.
+- **What the `.env` holds:** `DATABASE_URL`, `USE_MOCK_AI=false`, `OPENAI_API_KEY` and an empty `SLACK_WEBHOOK_URL`, so Slack pushes stay on the mock sender.
+- **Backend:** restarted with no environment overrides, from `start_backend.sh`, so the `.env` file is the only configuration source. The workbench reports `openai` / `gpt-4o-mini` / available.
+
+**Failures:**
+- A first restart attempt used `pkill -f`, whose pattern matched the invoking shell and killed it (exit 144). The old backend had already stopped; the new one was started from a script, and later restarts stop it by exact process ID.
+- **Demonstration profile version 1 is still not active.** The database has 0 activation rows, and the backend log shows no activation request.
+
+**Generation run** (candidates #1–#5 in order, the configured provider named explicitly, stop at first error):
+
+| # | Company | Task | Result |
+|---|---|---|---|
+| 1 | david m bacha do | Summary | **Generated.** One paid `gpt-4o-mini` call; the output passed v2 validation. Output `2dbcde43-7579-4a01-9faf-cd949be2665c`, prompt `grounded-v2`, purpose `annotation`, no seller, content hash `4b13f4aa2b5f…`. It cites only recorded fact ids and lists website, contact fields, intent, budget, problems and tools as unknown. **Pending your review.** |
+| 2 | david m bacha do | Outreach | **Refused (409):** "Outreach candidates need an active seller profile revision." The seller check runs before any provider call, so this cost nothing. **Run stopped here.** |
+| 3–5 | — | — | Not attempted. |
+
+**Paid calls:** 1. At the verified prices, about $0.0005.
+
+**Progress at end of session:**
+- 1 generated, 1 pending your review, 99 awaiting generation;
+- 0 usable (0 accepted, 0 corrected), 0 skipped, 0 mock candidates;
+- 0 reviews, 0 operational reviews, 0 pushes.
+
+**Next:** activate version 1 on `/seller-profile`, then generate #2–#5. Review #1 at any time.
