@@ -43,8 +43,65 @@ class SellerProfileRead(BaseModel):
 
     id: UUID
     version: int
-    status: Literal["draft"] = "draft"
+    # Every stored revision is a draft until explicitly activated; the
+    # router marks the one revision that is currently active.
+    status: Literal["draft", "active"] = "draft"
     profile: SellerProfileContent
     content_hash: str
     editor_label: str
     created_at: datetime
+
+
+class SellerProfileActivate(BaseModel):
+    """Explicit activation of one immutable revision.
+
+    `confirm_reviewed` must be true: the operator states they reviewed this
+    exact revision. `acknowledge_demo` is additionally required for a
+    demonstration profile, so one is never activated by accident.
+    `expected_activation_sequence` is the activation state the operator saw
+    (0 = never activated); a different current state returns 409.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    seller_profile_id: UUID
+    expected_activation_sequence: int = Field(ge=0, strict=True)
+    confirm_reviewed: Literal[True]
+    acknowledge_demo: bool = False
+
+
+class SellerProfileDeactivate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_activation_sequence: int = Field(ge=1, strict=True)
+
+
+class SellerProfileActivationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    sequence: int
+    action: Literal["activate", "deactivate"]
+    seller_profile_id: UUID | None
+    seller_profile_version: int | None
+    content_hash: str | None
+    reviewed_confirmation: bool
+    demo_acknowledged: bool
+    actor_label: str
+    created_at: datetime
+
+
+class SellerProfileStatus(BaseModel):
+    """What generation would use right now.
+
+    state: `missing` (nothing saved), `draft_only` (revisions exist, none
+    active), `active` (a revision is active; `active_profile.profile_kind`
+    says whether it is a demonstration).
+    """
+
+    state: Literal["missing", "draft_only", "active"]
+    latest_version: int | None
+    activation_sequence: int
+    last_activation: SellerProfileActivationRead | None
+    active_profile: SellerProfileRead | None
+    latest_is_active: bool

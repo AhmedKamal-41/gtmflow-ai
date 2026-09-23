@@ -304,15 +304,30 @@ GAP_NO_OUTREACH_DRAFT = "no_outreach_draft"
 GAP_DRAFT_NOT_REVIEWED = "draft_not_reviewed"
 GAP_DRAFT_REJECTED = "draft_rejected"
 GAP_LEAD_EXCLUDED = "lead_excluded_from_routing"
+# Phase 5: seller-profile state is read live, like every other gap.
+GAP_SELLER_PROFILE_DEMO = "seller_profile_is_demonstration"
+GAP_DRAFT_NOT_FROM_ACTIVE_PROFILE = "draft_not_from_active_seller_profile"
+
+SELLER_STATE_NONE = "none"
+SELLER_STATE_DEMO = "demo"
+SELLER_STATE_SELLER = "seller"
 
 READY = "ready"
 NOT_READY = "not_ready"
 
 _GAP_EXPLANATIONS: dict[str, str] = {
     GAP_NO_SELLER_PROFILE: (
-        "No versioned seller product/ICP profile is configured yet (Phase 5 "
-        "scope) -- outreach content today comes from GTMFlow's hardcoded "
-        "demo pitch, not a configured seller context."
+        "No seller profile revision is active. Outreach generation needs an "
+        "explicitly activated, reviewed revision."
+    ),
+    GAP_SELLER_PROFILE_DEMO: (
+        "The active seller profile is a labeled demonstration, not a real "
+        "offer, so outbound email cannot be ready."
+    ),
+    GAP_DRAFT_NOT_FROM_ACTIVE_PROFILE: (
+        "The current outreach draft was not generated from the active seller "
+        "profile revision (it predates grounded generation or used another "
+        "revision). Generate a new draft."
     ),
     GAP_MISSING_CONTACT_EMAIL: "Lead has no contact_email on file.",
     GAP_NO_OUTREACH_DRAFT: "No outreach draft has been generated for this lead yet.",
@@ -354,6 +369,8 @@ def compute_readiness(
     latest_outreach_exists: bool,
     latest_outreach_review_decision: str | None,
     eligibility_excluded: bool,
+    seller_profile_state: str = SELLER_STATE_NONE,
+    latest_outreach_uses_active_profile: bool = False,
 ) -> ReadinessResult:
     """Deterministic status + ordered gap list for two distinct actions
     (Part C.3/E): outbound email send readiness, and the internal Slack
@@ -365,12 +382,26 @@ def compute_readiness(
     (draft generated but never approved/rejected), "approved", or
     "rejected" -- the caller resolves this from AIOutputReview so this
     function stays pure/testable.
+
+    `seller_profile_state` is the live activation state ("none", "demo" or
+    "seller"); `latest_outreach_uses_active_profile` says whether the
+    current draft was generated from exactly the active revision. Both
+    default to the most restrictive value.
     """
-    email_gaps: list[str] = [GAP_NO_SELLER_PROFILE]
+    email_gaps: list[str] = []
+    if seller_profile_state == SELLER_STATE_NONE:
+        email_gaps.append(GAP_NO_SELLER_PROFILE)
+    elif seller_profile_state == SELLER_STATE_DEMO:
+        email_gaps.append(GAP_SELLER_PROFILE_DEMO)
     if not has_contact_email:
         email_gaps.append(GAP_MISSING_CONTACT_EMAIL)
     if not latest_outreach_exists:
         email_gaps.append(GAP_NO_OUTREACH_DRAFT)
+    elif (
+        seller_profile_state != SELLER_STATE_NONE
+        and not latest_outreach_uses_active_profile
+    ):
+        email_gaps.append(GAP_DRAFT_NOT_FROM_ACTIVE_PROFILE)
     elif latest_outreach_review_decision == "rejected":
         email_gaps.append(GAP_DRAFT_REJECTED)
     elif latest_outreach_review_decision is None:

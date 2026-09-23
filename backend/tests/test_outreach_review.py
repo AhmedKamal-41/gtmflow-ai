@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AIOutputReview, WorkflowEvent
+
+# These tests generate outreach, which needs an explicitly activated
+# seller revision (Phase 5). The fixture activates a synthetic one.
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 

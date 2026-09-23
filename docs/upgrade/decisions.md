@@ -168,6 +168,24 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Draft content does not activate readiness, alter fit criteria, or replace the existing generator | A draft is not an approved seller profile. The Phase 4 rubric remains `demo-us-sectors-v1`; future scoring changes need an explicit versioned rubric decision. |
 | Reuse existing SQLAlchemy, Alembic, React, Vitest and shared pagination | No new dependency. The editor distinguishes empty state from failed loading, preserves failed-save input, and exposes read-only paginated history. |
 
+## Decisions made in Phase 5 (activation and grounded generation)
+
+| Decision | Reason / status |
+|---|---|
+| Activation is a separate, explicit, append-only record (`seller_profile_activations`, migration `0008_seller_activation`) | Saving a draft can never change what generation uses. The highest `sequence` row is current, a NULL profile id records a deactivation, and history is kept. It requires `confirm_reviewed: true` plus the `expected_activation_sequence` the operator saw (409 on mismatch, database-unique `sequence` for races). The event `seller_profile_activated`/`_deactivated` is written in the same transaction. The actor stays `local-demo-unauthenticated`: the confirmation is a statement, not a verified approval. |
+| A demonstration revision needs a separate `acknowledge_demo`, and readiness flags it (`seller_profile_is_demonstration`) | A demo profile is never activated by accident or treated as a real offer. Nothing was activated on the real database. |
+| Outreach without an active revision is refused (409); summaries work without one | A draft pitching nothing, or a hardcoded pitch, would be a misleading success record. Summaries describe only the lead record. |
+| Resolve the seller revision once per request and copy its immutable content | An activation mid-request cannot change what an output used or records (mutation-checked test). |
+| Record exact provenance in four new nullable `ai_outputs` columns, plus the existing prompt/schema/model/input-hash fields | Queryable for readiness (`draft_not_from_active_seller_profile`) and for the UI. Old outputs keep NULL and their recorded `v1` versions and are never relabeled or backfilled. |
+| Grounded context `grounded-context-v1`, `PROMPT_VERSION = "grounded-v2"`, `OUTPUT_SCHEMA_VERSION = "v2"`, mock `mock-deterministic-v2-grounded` | Lead facts have ids and origins. Buying intent, budget, problems and product usage are always unknown. Fit is included only with an explicit "not evidence of interest" note. Previously generated content is excluded; v1 fed the stored summary into outreach, and that was removed. |
+| Validate before saving: a versioned pydantic schema plus deterministic reference, contact and figure checks | Invalid output saves no `AIOutput`, only an `ai_generation_rejected` event with fixed reason codes, and returns 502. Figures must appear in an approved claim or a structured lead field, never only in free text. This is a guard, not a truth verifier; human review is still required. |
+| Real-mode prompts fence the context as `<untrusted_data>` and JSON-escape `<`/`>` | Imported text is data, not instructions, and cannot close the fence. |
+| Provider exceptions become `AIProviderError` naming only the exception class; unconfigured real mode returns 503 before any call | Provider messages can embed keys or request details, and they are never forwarded (tested with a key in the message). |
+| The standalone demo passes a built-in, labeled GTMFlow demonstration profile per call | The demo still works with no paid service and no saved profile, and it never activates anything. Its drafts are labeled `demo` and begin with a demonstration notice. |
+| Keep allowing generation for currently excluded leads | Generation changes no status, and every push path still refuses them. Two Phase 3 regression tests depend on this. The draft stores `restrictions_at_generation`. Refusing outright is a possible later decision. |
+| Readiness reads the active profile live; the fit rubric and stored scores are untouched | `compute_readiness` gains seller-state inputs with restrictive defaults. No scoring constant or criterion changed, and historical `at_scoring` snapshots are not rewritten (tested). |
+| No new dependency | Existing FastAPI, SQLAlchemy, Alembic, pydantic, React and Vitest only. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
@@ -181,7 +199,13 @@ Resolved since Phase 2 (moved out of this list): PDL curation criteria (fixed ru
 
 Still open, listed in the order they'll come up:
 
-1. **The seller/service profile itself (Phase 5's core input).** Phase 4 confirmed this is now the single hardest blocker: v2's `outbound_email` outreach-readiness gap `no_seller_profile_configured` fires on all 5,000 real leads and will fire on every future one until this exists, and the company-size scoring criterion has nothing to compare against without it. The Phase 5 draft editor/storage now exists. Still needed: seller company name, product/service, value proposition, target customers and supportable claims for review. The single global profile scope is already agreed; saving a draft does not yet activate it.
+1. **The seller/service profile content (Phase 5's remaining input).** The mechanism is complete: drafts, explicit activation, grounded generation and provenance, with migrations applied to the real database. No real profile exists, so `no_seller_profile_configured` still fires on all 5,000 real leads. Still needed from the user:
+   - seller company and product names, value proposition, and target customers (segments, geography, size ranges, roles);
+   - capabilities, sourced proof points, and exclusions;
+   - who reviews and activates the revision;
+   - a contact source if outbound email is the goal.
+
+   Alternatively, an explicit decision to use the labeled GTMFlow demonstration profile. See `phase5-generation-handoff.md` §8. Whether the size criterion should become active is a separate versioned-rubric decision.
 2. **Training data source for Phases 6–9**, beyond "100-example pilot, human-annotated, possibly corrected from company facts" (confirmed in Phase 2). Still open: who performs the pilot annotation, and over what time frame, since it gates how much data exists by Phase 7/8. 5,000 real PDL leads (now with v2 fit scores) exist to draw candidates from, but the actual annotation workflow (Phase 6) still doesn't exist.
 3. **Concurrent-push idempotency mechanism for Phase 11** (D.3) — a DB-level unique constraint / row lock vs. an application-level idempotency key vs. a queue-based dedup once Phase 10's background jobs exist. Not decided; explicitly deferred per the user's instruction to keep delivery reliability in Phase 11.
 4. **Company-identity resolution/merge strategy for a future second PDL snapshot.** Phase 3 imported exactly one snapshot, so no two `Lead` rows have ever needed to be resolved to the same `CompanyIdentity`. The matching strategy (fuzzy name match? domain + locality heuristic? manual review queue?) is still undesigned — flagging now since it wasn't yet a live question with only one snapshot in the database, but will be the moment a second PDL pull happens.
@@ -219,7 +243,9 @@ Lead     (1) ──── (N) AIOutputReview
 
 ## The seller/service profile requirement (F.4 in the audit, detailed here)
 
-**Problem, restated precisely:** `MockAIClient.generate_outreach` (`backend/app/ai/mock_client.py:243-247`) hardcodes the pitch as GTMFlow itself — "GTMFlow turns lead lists into prioritized outreach..." There is no model, config field, or prompt input anywhere in the codebase that says what a *deployment* of this tool is meant to be selling on behalf of an actual seller. This is fine for a portfolio demo where the tool is pitching itself, but it cannot produce meaningful outreach for a real company's product without this.
+**Status (Phase 5):** resolved in code. The hardcoded pitch was removed. Outreach is generated from an explicitly activated seller revision through a grounded context (`app/ai/grounding.py`), and every output records the revision it used. What remains is the actual seller content (see the unresolved questions above). The original problem statement is kept below for history.
+
+**Problem, restated precisely (pre-Phase 5):** `MockAIClient.generate_outreach` (`backend/app/ai/mock_client.py:243-247`) hardcoded the pitch as GTMFlow itself — "GTMFlow turns lead lists into prioritized outreach..." There is no model, config field, or prompt input anywhere in the codebase that says what a *deployment* of this tool is meant to be selling on behalf of an actual seller. This is fine for a portfolio demo where the tool is pitching itself, but it cannot produce meaningful outreach for a real company's product without this.
 
 **What's needed, at minimum**, for Phase 5 to be attemptable:
 
@@ -227,7 +253,7 @@ Lead     (1) ──── (N) AIOutputReview
 - This profile needs to be injected into `_build_lead_context` (`app/services/ai_generation.py:22-46`) alongside the existing lead facts, and the prompt rules in `app/ai/prompts.py` need updating so the model is told explicitly "here is what you're selling" rather than being asked to write outreach with nothing to pitch.
 - Scope is already agreed: one versioned seller profile for the single-workspace app. Phase 5 needs its actual content; per-batch/per-campaign configuration is not required.
 
-**Demonstration assumption (label, don't treat as a requirement):** for continuing to demo GTMFlow-as-the-product-being-sold, the existing hardcoded pitch is fine and doesn't need to change. The requirement above only applies once this tool is meant to generate outreach for an actual different seller's product — which is implied by pairing it with a real external company dataset (PDL) rather than only the synthetic demo CSV.
+**Demonstration assumption (label, don't treat as a requirement):** for continuing to demo GTMFlow-as-the-product-being-sold, Phase 5 replaced the hardcoded pitch with an explicitly labeled built-in demonstration profile. The standalone demo passes it per call, and the seller page offers it as a template that must be saved and explicitly activated with a demonstration acknowledgement. The requirement above only applies once this tool is meant to generate outreach for an actual different seller's product — which is implied by pairing it with a real external company dataset (PDL) rather than only the synthetic demo CSV.
 
 ## Demonstration assumptions to keep separate from real requirements
 

@@ -10,13 +10,42 @@ from app.core.database import get_session
 from app.models import AIOutput, Lead
 from app.schemas.ai_output import AIOutputRead
 from app.schemas.pagination import Page
+from app.ai.client import AIConfigError, AIProviderError
 from app.services.ai_generation import (
+    GenerationOutputInvalid,
+    SellerProfileRequired,
     generate_outreach_for_lead,
     generate_summary_for_lead,
+    record_generation_rejected,
 )
 from app.services.pagination import pagination_params, paginate
 
 router = APIRouter(prefix="/api/leads", tags=["ai"])
+
+
+def _generate_or_raise(session: Session, lead: Lead, output_type: str, generate) -> AIOutput:
+    """Map generation failures to clear responses. None of them saves an
+    AIOutput; a validation failure records only its reason codes."""
+    lead_id = lead.id
+    try:
+        return generate(session, lead)
+    except SellerProfileRequired as error:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(error)) from None
+    except AIConfigError as error:
+        # Our own configuration message; it never contains a key.
+        session.rollback()
+        raise HTTPException(status_code=503, detail=str(error)) from None
+    except AIProviderError as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=502, detail=f"{error} No output was saved."
+        ) from None
+    except GenerationOutputInvalid as error:
+        session.rollback()
+        record_generation_rejected(session, lead_id, output_type, error.reason_codes)
+        session.commit()
+        raise HTTPException(status_code=502, detail=str(error)) from None
 
 
 @router.post(
@@ -31,7 +60,7 @@ def post_generate_summary(
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    output = generate_summary_for_lead(session, lead)
+    output = _generate_or_raise(session, lead, "company_summary", generate_summary_for_lead)
     session.commit()
     session.refresh(output)
     return output
@@ -49,7 +78,7 @@ def post_generate_outreach(
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    output = generate_outreach_for_lead(session, lead)
+    output = _generate_or_raise(session, lead, "outreach_email", generate_outreach_for_lead)
     session.commit()
     session.refresh(output)
     return output

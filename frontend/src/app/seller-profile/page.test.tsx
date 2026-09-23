@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { APIError, getSellerProfile, getSellerProfileVersions, saveSellerProfile } from "@/lib/api";
+import { APIError, getSellerProfile, getSellerProfileStatus, getSellerProfileVersions, saveSellerProfile } from "@/lib/api";
 import type { Page, SellerProfile } from "@/types/api";
 import SellerProfilePage from "./page";
 
@@ -10,6 +10,10 @@ vi.mock("@/lib/api", async () => ({
   getSellerProfile: vi.fn(),
   getSellerProfileVersions: vi.fn(),
   saveSellerProfile: vi.fn(),
+  getSellerProfileStatus: vi.fn(),
+  getSellerProfileDemoTemplate: vi.fn(),
+  activateSellerProfile: vi.fn(),
+  deactivateSellerProfile: vi.fn(),
 }));
 
 function row(version = 1): SellerProfile {
@@ -33,6 +37,10 @@ beforeEach(() => {
   vi.mocked(getSellerProfile).mockRejectedValue(new APIError(404, "No seller profile"));
   vi.mocked(getSellerProfileVersions).mockResolvedValue(page([]));
   vi.mocked(saveSellerProfile).mockResolvedValue(row());
+  vi.mocked(getSellerProfileStatus).mockResolvedValue({
+    state: "missing", latest_version: null, activation_sequence: 0,
+    last_activation: null, active_profile: null, latest_is_active: false,
+  });
 });
 
 describe("seller profile drafts", () => {

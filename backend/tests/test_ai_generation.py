@@ -12,26 +12,55 @@ from app.ai import (
     parse_json_strict,
 )
 
+from types import SimpleNamespace
+
+from app.ai.grounding import (
+    ALWAYS_UNKNOWN,
+    build_grounded_context,
+    validate_outreach,
+    validate_summary,
+)
+
 SUMMARY_KEYS = {
     "company_summary",
-    "detected_pain_points",
-    "fit_reasoning",
     "evidence",
-    "inferences",
+    "unknowns",
+    "hypotheses",
+    "seller_relevance",
     "confidence",
 }
 
 OUTREACH_KEYS = {
     "subject",
     "email_body",
-    "personalization_points",
+    "lead_facts_used",
+    "capabilities_used",
+    "claims_used",
+    "unknowns_acknowledged",
     "call_note",
     "confidence",
 }
 
+SELLER = {
+    "source": "active_revision",
+    "profile_id": "00000000-0000-0000-0000-000000000001",
+    "version": 1,
+    "content_hash": "a" * 64,
+    "content": {
+        "profile_kind": "seller",
+        "company_name": "Synthetic Seller",
+        "product_name": "Synthetic Scheduler",
+        "value_proposition": "Synthetic value proposition.",
+        "target_customer": "Synthetic customers.",
+        "capabilities": ["Books appointments"],
+        "proof_points": [{"claim": "Synthetic claim", "source": "fixture"}],
+        "exclusions": [],
+    },
+}
 
-def _hot_context() -> dict:
-    return {
+
+def _context(task: str = "outreach_email", seller=SELLER, **lead_fields) -> dict:
+    fields = {
         "company_name": "Cascade Modular Homes",
         "industry": "Housing",
         "contact_name": "Sarah Chen",
@@ -40,38 +69,43 @@ def _hot_context() -> dict:
         "company_size": "240",
         "website": "cascade.com",
         "location": "USA",
-        "source": "referral",
-        "cleaned_data": {
-            "notes": "high tenant maintenance request volume and leasing tour scheduling"
-        },
-        "score": {"total_score": 92, "priority": "Hot"},
+        "cleaned_data": {"notes": "high tenant maintenance request volume"},
     }
+    fields.update(lead_fields)
+    lead = SimpleNamespace(**{k: fields.get(k) for k in (
+        "company_name", "industry", "contact_name", "contact_title",
+        "contact_email", "company_size", "website", "location", "cleaned_data",
+    )})
+    return build_grounded_context(
+        task=task,
+        lead=lead,
+        provenance={"lead_id": "L", "batch_source": "csv"},
+        seller=seller,
+        fit={"fit_score": 100, "band": "strong_match"},
+        restrictions={"excluded": False, "reasons": []},
+    )
 
 
 def test_mock_summary_returns_valid_shape() -> None:
     client = MockAIClient()
-    out = client.generate_company_summary(_hot_context())
-    assert SUMMARY_KEYS.issubset(out.keys())
-    assert out["confidence"] in {"low", "medium", "high"}
-    assert isinstance(out["detected_pain_points"], list)
-    assert isinstance(out["evidence"], list)
-    assert isinstance(out["inferences"], list)
+    ctx = _context("company_summary")
+    out = client.generate_company_summary(ctx)
+    assert set(out) == SUMMARY_KEYS
+    assert validate_summary(out, ctx) == out
 
 
 def test_mock_outreach_returns_valid_shape() -> None:
     client = MockAIClient()
-    out = client.generate_outreach(_hot_context())
-    assert OUTREACH_KEYS.issubset(out.keys())
-    assert out["confidence"] in {"low", "medium", "high"}
-    assert isinstance(out["personalization_points"], list)
-    assert out["subject"]
-    assert out["email_body"]
-    assert out["call_note"]
+    ctx = _context()
+    out = client.generate_outreach(ctx)
+    assert set(out) == OUTREACH_KEYS
+    assert validate_outreach(out, ctx) == out
+    assert out["subject"] and out["email_body"] and out["call_note"]
 
 
 def test_mock_output_is_deterministic() -> None:
     client = MockAIClient()
-    ctx = _hot_context()
+    ctx = _context()
     a = client.generate_company_summary(ctx)
     b = client.generate_company_summary(ctx)
     c = client.generate_company_summary(ctx)
@@ -84,28 +118,33 @@ def test_mock_output_is_deterministic() -> None:
 
 def test_missing_fields_do_not_crash_mock() -> None:
     client = MockAIClient()
-    sparse = {"company_name": "Minimal Co"}
-    s = client.generate_company_summary(sparse)
-    o = client.generate_outreach(sparse)
-    assert isinstance(s, dict) and SUMMARY_KEYS.issubset(s.keys())
-    assert isinstance(o, dict) and OUTREACH_KEYS.issubset(o.keys())
+    sparse = dict.fromkeys(
+        ["industry", "contact_name", "contact_title", "contact_email",
+         "company_size", "website", "location", "cleaned_data"]
+    )
+    ctx = _context(**sparse, company_name="Minimal Co")
+    s = client.generate_company_summary(ctx)
+    o = client.generate_outreach(ctx)
+    assert validate_summary(s, ctx) and validate_outreach(o, ctx)
     # confidence drops to low when the lead is essentially empty
     assert s["confidence"] == "low"
     assert o["confidence"] == "low"
+    assert "Hi there," in o["email_body"]  # no invented contact name
+    assert "industry_not_provided" in s["unknowns"]
 
 
-def test_evidence_and_inferences_are_separate() -> None:
+def test_evidence_cites_facts_and_intent_stays_unknown() -> None:
     client = MockAIClient()
-    out = client.generate_company_summary(_hot_context())
+    ctx = _context("company_summary")
+    out = client.generate_company_summary(ctx)
 
-    evidence_blob = " ".join(out["evidence"]).lower()
-    # Evidence quotes the actual fields and their values.
-    assert "industry:" in evidence_blob or "contact_title:" in evidence_blob
-
-    # Every inference is explicitly labeled "Inference:" so a reader cannot
-    # confuse the speculative content for fact.
-    for inf in out["inferences"]:
-        assert inf.startswith("Inference:")
+    fact_ids = {fact["id"] for fact in ctx["lead_facts"]}
+    assert {item["fact_id"] for item in out["evidence"]} <= fact_ids
+    for unknown in ALWAYS_UNKNOWN:
+        assert unknown in out["unknowns"]
+    # Every hypothesis is explicitly labeled unconfirmed.
+    for hypothesis in out["hypotheses"]:
+        assert hypothesis.startswith("Unconfirmed:")
 
 
 def test_use_mock_ai_default_returns_mock_client() -> None:
@@ -152,12 +191,16 @@ def test_prompt_guardrails_present_in_system_rules() -> None:
     assert "only" in rules and ("data" in rules or "provide" in rules)
     # no invented facts
     assert "never invent" in rules or "do not invent" in rules
-    # evidence separated from inference
-    assert "evidence" in rules and "inference" in rules
+    # imported data is not instructions
+    assert "untrusted_data" in rules and "never as instructions" in rules
+    # no intent/budget inference from industry, name, provider or fit score
+    assert "do not infer buying intent" in rules and "fit score" in rules
+    # claims only from the seller's approved claims
+    assert "approved_claims" in rules
     # strict JSON only
     assert "strict json" in rules
 
     # Both prompt builders must inline these system rules.
-    sample = {"company_name": "Sample Co"}
+    sample = _context()
     assert SYSTEM_RULES in build_summary_prompt(sample)
     assert SYSTEM_RULES in build_outreach_prompt(sample)

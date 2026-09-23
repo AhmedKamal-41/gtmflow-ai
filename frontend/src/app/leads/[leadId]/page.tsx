@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -28,6 +29,7 @@ import {
   getLeadReadiness,
   getLeadScore,
   getPushes,
+  getSellerProfileStatus,
   pushLead,
   rejectOutreach,
   scoreLead,
@@ -39,6 +41,7 @@ import type {
   Lead,
   LeadFitScore,
   LeadScore,
+  SellerProfileStatus,
 } from "@/types/api";
 
 type ActionLabel =
@@ -80,6 +83,15 @@ export default function LeadDetailPage() {
   const [outreachLookupError, setOutreachLookupError] = useState<
     string | null
   >(null);
+  // Which seller revision outreach generation would use right now.
+  // `undefined` = not resolved yet or the lookup failed (the backend still
+  // decides on every generate request).
+  const [sellerStatus, setSellerStatus] = useState<
+    SellerProfileStatus | undefined
+  >(undefined);
+  const [sellerStatusError, setSellerStatusError] = useState<string | null>(
+    null,
+  );
   const [loadingLead, setLoadingLead] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -126,9 +138,29 @@ export default function LeadDetailPage() {
     [leadId],
   );
 
+  const refreshSellerStatus = useCallback(async (generation: number) => {
+    setSellerStatusError(null);
+    try {
+      const status = await getSellerProfileStatus();
+      if (generationRef.current !== generation) return; // stale
+      setSellerStatus(status);
+    } catch (e) {
+      if (generationRef.current !== generation) return; // stale
+      setSellerStatus(undefined);
+      setSellerStatusError(
+        e instanceof APIError
+          ? (e.detail ?? e.message)
+          : "Could not check the active seller profile.",
+      );
+    }
+  }, []);
+
   const load = useCallback(async () => {
     if (!leadId) return;
     const generation = generationRef.current;
+    // Independent of the lead's own data: a failure here must not hide the
+    // lead, so it runs alongside the sequential loads below.
+    void refreshSellerStatus(generation);
     setLoadingLead(true);
     setError(null);
     setLead(null);
@@ -180,7 +212,7 @@ export default function LeadDetailPage() {
     } finally {
       if (generationRef.current === generation) setLoadingLead(false);
     }
-  }, [leadId, refreshLatestOutreach]);
+  }, [leadId, refreshLatestOutreach, refreshSellerStatus]);
 
   useEffect(() => {
     generationRef.current += 1;
@@ -259,6 +291,12 @@ export default function LeadDetailPage() {
   // navigation) or failed (Part A.2: "disable stale actions during
   // navigation or lookup failure").
   const canReviewOutreach = latestOutreach !== undefined && latestOutreach !== null;
+  // Known to have no active seller revision: generation would be refused,
+  // so don't offer it. When the status is unknown the backend decides.
+  const outreachUnavailable =
+    sellerStatus !== undefined && sellerStatus.state !== "active";
+  const activeSellerProfileId =
+    sellerStatus === undefined ? undefined : (sellerStatus.active_profile?.id ?? null);
 
   return (
     <div className="space-y-6">
@@ -303,6 +341,7 @@ export default function LeadDetailPage() {
         <Button
           variant="secondary"
           loading={busy === "Outreach"}
+          disabled={outreachUnavailable}
           onClick={() => runAction("Outreach", () => generateOutreach(leadId))}
         >
           Generate outreach
@@ -354,6 +393,12 @@ export default function LeadDetailPage() {
           Refresh
         </Button>
       </div>
+
+      <SellerStatusNotice
+        status={sellerStatus}
+        error={sellerStatusError}
+        onRetry={() => void refreshSellerStatus(generationRef.current)}
+      />
 
       {info && (
         <div className="flex items-center gap-2.5 rounded-lg border border-brand-200 bg-brand-50 p-3.5 text-sm text-brand-900">
@@ -469,7 +514,11 @@ export default function LeadDetailPage() {
             </div>
           </Card>
         ) : (
-          <AIOutputCard output={latestOutreach} isLatestOfType />
+          <AIOutputCard
+            output={latestOutreach}
+            isLatestOfType
+            activeSellerProfileId={activeSellerProfileId}
+          />
         )}
       </section>
 
@@ -523,6 +572,59 @@ export default function LeadDetailPage() {
           renderItems={(items) => <PushHistory pushes={items} />}
         />
       </section>
+    </div>
+  );
+}
+
+/**
+ * Which seller revision generation uses right now (Phase 5). Generated
+ * outputs carry their own recorded revision; this is only the current one.
+ */
+function SellerStatusNotice({
+  status,
+  error,
+  onRetry,
+}: {
+  status: SellerProfileStatus | undefined;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  if (error) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+        <span className="flex-1">Seller profile status: {error}</span>
+        <Button variant="secondary" onClick={onRetry}>
+          Retry seller status
+        </Button>
+      </div>
+    );
+  }
+  if (!status) return null;
+  const active = status.active_profile;
+  if (!active) {
+    return (
+      <div
+        role="note"
+        className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+      >
+        No seller profile is active, so outreach generation is unavailable.
+        Summaries describe only the lead record.{" "}
+        <Link href="/seller-profile" className="font-medium text-brand-600 hover:text-brand-700">
+          Review and activate a seller profile
+        </Link>
+      </div>
+    );
+  }
+  const demo = active.profile.profile_kind === "demo";
+  return (
+    <div
+      role="note"
+      className={`rounded-lg border p-3 text-sm ${demo ? "border-amber-200 bg-amber-50 text-amber-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}
+    >
+      New outreach uses seller profile version {active.version} (
+      {active.profile.company_name}
+      {demo ? ", demonstration only" : ""}), hash{" "}
+      <span className="font-mono">{active.content_hash.slice(0, 12)}</span>.
     </div>
   );
 }

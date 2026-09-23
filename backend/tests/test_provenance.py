@@ -12,6 +12,7 @@ import hashlib
 import json
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -144,6 +145,7 @@ def test_lead_can_link_to_company_identity_and_source_snapshot(
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("active_seller_profile")
 def test_generated_output_stores_real_input_snapshot_and_hash(
     client: TestClient,
 ) -> None:
@@ -151,15 +153,18 @@ def test_generated_output_stores_real_input_snapshot_and_hash(
     output = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
 
     assert output["origin"] == "generated"
-    assert output["model_revision"] == "mock-deterministic-v1"
-    assert output["output_schema_version"] == "v1"
+    assert output["model_revision"] == "mock-deterministic-v2-grounded"
+    assert output["prompt_version"] == "grounded-v2"
+    assert output["output_schema_version"] == "v2"
     assert output["parent_output_id"] is None
     assert output["adapter_revision"] is None  # no adapters exist yet (Phase 8)
 
     snapshot = output["input_snapshot"]
     assert snapshot is not None
-    assert snapshot["company_name"] == "Cascade Modular"
-    assert snapshot["industry"] == "Housing"
+    facts = {fact["field"]: fact["value"] for fact in snapshot["lead_facts"]}
+    assert facts["company_name"] == "Cascade Modular"
+    assert facts["industry"] == "Housing"
+    assert snapshot["lead_provenance"]["lead_id"] == lead["id"]
 
     recomputed = hashlib.sha256(
         json.dumps(snapshot, sort_keys=True, default=str).encode("utf-8")
@@ -167,19 +172,20 @@ def test_generated_output_stores_real_input_snapshot_and_hash(
     assert output["input_hash"] == recomputed
 
 
+@pytest.mark.usefixtures("active_seller_profile")
 def test_generated_summary_and_outreach_have_independent_input_snapshots(
     client: TestClient,
 ) -> None:
-    """generate-outreach folds the latest summary into its context -- the two
-    outputs' input snapshots must differ, proving each snapshot reflects
-    what was *actually* sent for that specific call, not a shared/reused
-    blob."""
+    """Each output's snapshot reflects what was *actually* sent for that
+    specific call (the task differs), not a shared/reused blob. Neither
+    contains previously generated content."""
     lead = _upload_and_score(client)
     summary = client.post(f"/api/leads/{lead['id']}/generate-summary").json()
     outreach = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
 
-    assert "latest_summary" not in summary["input_snapshot"]
-    assert "latest_summary" in outreach["input_snapshot"]
+    assert summary["input_snapshot"]["task"] == "company_summary"
+    assert outreach["input_snapshot"]["task"] == "outreach_email"
+    assert "latest_summary" not in outreach["input_snapshot"]
     assert outreach["input_hash"] != summary["input_hash"]
 
 

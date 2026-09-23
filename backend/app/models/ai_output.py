@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
@@ -68,6 +68,19 @@ class AIOutput(Base):
     )
     model_revision: Mapped[str | None] = mapped_column(String(128), nullable=True)
     adapter_revision: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    # -- Phase 5: the exact seller-profile revision a grounded generation
+    # used, resolved once per request. NULL on every row generated before
+    # grounded prompting (prompt_version "v1") and on summaries generated
+    # without an active profile -- never backfilled. The built-in demo
+    # profile has no stored row: id/version stay NULL, the hash and
+    # kind="demo" identify it, and input_snapshot.seller.source says so.
+    seller_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("seller_profiles.id"), nullable=True, index=True
+    )
+    seller_profile_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    seller_profile_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    seller_profile_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

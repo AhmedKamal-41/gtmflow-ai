@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+# These tests generate outreach, which needs an explicitly activated
+# seller revision (Phase 5). The fixture activates a synthetic one.
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 # Cascade + Northbridge -> Hot, Vault -> Cold.
 SCORED_CSV = (

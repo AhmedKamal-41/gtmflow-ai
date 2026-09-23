@@ -14,6 +14,12 @@ class AIConfigError(RuntimeError):
     """Raised when an AI client cannot be constructed or invoked."""
 
 
+class AIProviderError(RuntimeError):
+    """The provider call failed. The message names only the exception class:
+    provider errors can embed request details, so their text is never
+    forwarded to API responses."""
+
+
 class AIClient(ABC):
     """Both summary and outreach generators implement this interface."""
 
@@ -26,11 +32,13 @@ class AIClient(ABC):
 
     @abstractmethod
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        """Return the company-summary JSON object."""
+        """Return the company-summary JSON object for a grounded context
+        (app/ai/grounding.py). The caller validates it before saving."""
 
     @abstractmethod
     def generate_outreach(self, ctx: dict[str, Any]) -> dict[str, Any]:
-        """Return the outreach JSON object."""
+        """Return the outreach JSON object for a grounded context. The
+        caller validates it before saving."""
 
 
 class OpenAIClient(AIClient):
@@ -62,21 +70,26 @@ class OpenAIClient(AIClient):
                 "Real OpenAI mode requires the `openai` package. "
                 "Install it (`pip install openai`) or set USE_MOCK_AI=true."
             ) from e
-        client = OpenAI(api_key=self._api_key)
-        response = client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Reply with strict JSON only -- no commentary, no "
-                        "markdown fences."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
+        try:
+            client = OpenAI(api_key=self._api_key)
+            response = client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Reply with strict JSON only -- no commentary, no "
+                            "markdown fences."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
+        except Exception as e:  # noqa: BLE001 -- sanitized, see AIProviderError
+            raise AIProviderError(
+                f"AI provider request failed ({type(e).__name__})."
+            ) from None
         return response.choices[0].message.content or ""
 
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:

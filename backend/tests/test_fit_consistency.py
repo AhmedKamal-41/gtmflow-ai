@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -240,6 +241,7 @@ def test_filter_then_paginate_keeps_unique_totals_after_rescoring(
 
 # ------------------------------------------------ current vs historical
 
+@pytest.mark.usefixtures("active_seller_profile")
 def test_listing_readiness_is_current_and_snapshot_is_labeled_historical(
     client: TestClient, db_session: Session
 ) -> None:
@@ -258,6 +260,9 @@ def test_listing_readiness_is_current_and_snapshot_is_labeled_historical(
     current_gaps = item["readiness"]["outbound_email"]["gaps"]
     assert "no_outreach_draft" not in current_gaps
     assert "draft_not_reviewed" not in current_gaps
+    # Active real-kind seller revision + contact email + an approved draft
+    # generated from exactly that revision: nothing blocks outbound email.
+    assert item["readiness"]["outbound_email"]["status"] == "ready"
     # The stored snapshot still says what was true at scoring time.
     assert "no_outreach_draft" in item["at_scoring"]["readiness"]["outbound_email"]["gaps"]
 

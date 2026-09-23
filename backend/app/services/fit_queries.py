@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.models import AIOutput, AIOutputReview, Lead, LeadFitScore
 from app.scoring import fit
+from app.services.seller_profiles import active_seller_profile
 
 OUTREACH_OUTPUT_TYPE = "outreach_email"
 
@@ -133,10 +134,17 @@ def _latest_review_decision_by_output(
 def current_readiness_by_lead(
     session: Session, leads: list[Lead]
 ) -> dict[UUID, tuple[fit.ReadinessResult, fit.EligibilityResult]]:
-    """Live readiness + eligibility for a page of leads in two queries
-    (latest drafts, then their latest reviews). Eligibility reads
+    """Live readiness + eligibility for a page of leads in three queries
+    (active seller revision, latest drafts, then their latest reviews). Eligibility reads
     `lead.status` / `lead.batch.status` as currently loaded."""
     lead_ids = [lead.id for lead in leads]
+    active = active_seller_profile(session)
+    if active is None:
+        seller_state = fit.SELLER_STATE_NONE
+    elif active.profile.get("profile_kind") == "demo":
+        seller_state = fit.SELLER_STATE_DEMO
+    else:
+        seller_state = fit.SELLER_STATE_SELLER
     drafts = _latest_outreach_by_lead(session, lead_ids)
     decisions = _latest_review_decision_by_output(
         session, [d.id for d in drafts.values()]
@@ -151,6 +159,12 @@ def current_readiness_by_lead(
             latest_outreach_exists=draft is not None,
             latest_outreach_review_decision=decisions.get(draft.id) if draft else None,
             eligibility_excluded=eligibility.excluded,
+            seller_profile_state=seller_state,
+            latest_outreach_uses_active_profile=(
+                draft is not None
+                and active is not None
+                and draft.seller_profile_id == active.id
+            ),
         )
         out[lead.id] = (readiness, eligibility)
     return out

@@ -87,6 +87,12 @@ vi.mock("@/lib/api", async () => {
     getLeadFitScore: vi.fn((id: string) =>
       call("getLeadFitScore", id, () => (state.fit[id] ? Promise.resolve(state.fit[id]) : nf())),
     ),
+    getSellerProfileStatus: vi.fn(() =>
+      Promise.resolve({
+        state: "missing", latest_version: null, activation_sequence: 0,
+        last_activation: null, active_profile: null, latest_is_active: false,
+      }),
+    ),
     getLeadReadiness: vi.fn((id: string) =>
       call("getLeadReadiness", id, () => Promise.resolve(state.readiness[id])),
     ),
@@ -145,6 +151,7 @@ function base(id: string, leadId: string, type: string) {
     created_at: "2026-01-01T00:00:00Z", parent_output_id: null, origin: "generated",
     input_snapshot: null, input_hash: null, output_schema_version: "v1",
     model_revision: "mock-deterministic-v1", adapter_revision: null,
+    seller_profile_id: null, seller_profile_version: null, seller_profile_content_hash: null, seller_profile_kind: null,
   };
 }
 

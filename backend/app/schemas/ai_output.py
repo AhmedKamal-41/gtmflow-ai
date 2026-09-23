@@ -34,3 +34,10 @@ class AIOutputRead(AIOutputBase):
     output_schema_version: str | None = None
     model_revision: str | None = None
     adapter_revision: str | None = None
+
+    # Phase 5 seller provenance: NULL on outputs generated before grounded
+    # prompting (prompt_version "v1") -- those are never relabeled.
+    seller_profile_id: UUID | None = None
+    seller_profile_version: int | None = None
+    seller_profile_content_hash: str | None = None
+    seller_profile_kind: str | None = None

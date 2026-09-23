@@ -8,7 +8,7 @@ from app.models.lead_batch import LeadBatch
 from app.models.lead_fit_score import LeadFitScore
 from app.models.lead_score import LeadScore
 from app.models.source_snapshot import SourceSnapshot
-from app.models.seller_profile import SellerProfile
+from app.models.seller_profile import SellerProfile, SellerProfileActivation
 from app.models.workflow_event import WorkflowEvent
 
 __all__ = [
@@ -23,5 +23,6 @@ __all__ = [
     "LeadScore",
     "SourceSnapshot",
     "SellerProfile",
+    "SellerProfileActivation",
     "WorkflowEvent",
 ]

@@ -25,6 +25,7 @@ from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
 
 DEMO_REVIEWER_LABEL = "demo-auto-approve"
 from app.services.ai_generation import (
+    builtin_demo_seller,
     generate_outreach_for_lead,
     generate_summary_for_lead,
 )
@@ -174,12 +175,17 @@ def run_demo(session: Session) -> dict[str, Any]:
             cold += 1
     batch.status = "scored"
 
+    # The demo sells GTMFlow itself through the explicitly labeled built-in
+    # demonstration profile. It is passed per call, never activated, so the
+    # demo neither needs nor changes the workspace's seller profile, and its
+    # drafts record seller_profile_kind="demo".
+    demo_seller = builtin_demo_seller()
     generated = approved = pushed = 0
     for lead in leads:
         if lead.score is None or lead.score.priority != "Hot":
             continue
-        generate_summary_for_lead(session, lead)
-        outreach = generate_outreach_for_lead(session, lead)
+        generate_summary_for_lead(session, lead, seller=demo_seller)
+        outreach = generate_outreach_for_lead(session, lead, seller=demo_seller)
         session.flush()
         generated += 1
         _approve(session, lead, outreach.id)

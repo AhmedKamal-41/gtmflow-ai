@@ -76,6 +76,8 @@ export type LeadScore = {
   reasoning: string;
 };
 
+// Historical (prompt v1) content shapes. Kept so outputs generated before
+// grounded prompting still render as they were produced.
 export type SummaryContent = {
   company_summary: string;
   detected_pain_points: string[];
@@ -89,6 +91,28 @@ export type OutreachContent = {
   subject: string;
   email_body: string;
   personalization_points: string[];
+  call_note: string;
+  confidence: string;
+};
+
+// Grounded (output schema v2) content shapes, validated by the backend
+// before saving (app/ai/grounding.py).
+export type GroundedSummaryContent = {
+  company_summary: string;
+  evidence: { fact_id: string; statement: string }[];
+  unknowns: string[];
+  hypotheses: string[];
+  seller_relevance: string | null;
+  confidence: string;
+};
+
+export type GroundedOutreachContent = {
+  subject: string;
+  email_body: string;
+  lead_facts_used: string[];
+  capabilities_used: string[];
+  claims_used: string[];
+  unknowns_acknowledged: string[];
   call_note: string;
   confidence: string;
 };
@@ -109,6 +133,11 @@ export type AIOutput = {
   output_schema_version: string | null;
   model_revision: string | null;
   adapter_revision: string | null;
+  // Phase 5 seller provenance; null on pre-grounding (prompt v1) outputs.
+  seller_profile_id: string | null;
+  seller_profile_version: number | null;
+  seller_profile_content_hash: string | null;
+  seller_profile_kind: string | null;
 };
 
 export type IntegrationPush = {
@@ -348,9 +377,31 @@ export type SellerProfileContent = {
 export type SellerProfile = {
   id: string;
   version: number;
-  status: "draft";
+  status: "draft" | "active";
   profile: SellerProfileContent;
   content_hash: string;
   editor_label: string;
   created_at: string;
+};
+
+export type SellerProfileActivation = {
+  id: string;
+  sequence: number;
+  action: "activate" | "deactivate";
+  seller_profile_id: string | null;
+  seller_profile_version: number | null;
+  content_hash: string | null;
+  reviewed_confirmation: boolean;
+  demo_acknowledged: boolean;
+  actor_label: string;
+  created_at: string;
+};
+
+export type SellerProfileStatus = {
+  state: "missing" | "draft_only" | "active";
+  latest_version: number | null;
+  activation_sequence: number;
+  last_activation: SellerProfileActivation | null;
+  active_profile: SellerProfile | null;
+  latest_is_active: boolean;
 };

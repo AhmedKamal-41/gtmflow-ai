@@ -72,6 +72,10 @@ const { LEAD, LEAD_B, OLD_OUTREACH_DRAFT, ALL_HISTORY } = vi.hoisted(() => {
     output_schema_version: "v1",
     model_revision: "mock-deterministic-v1",
     adapter_revision: null,
+    seller_profile_id: null,
+    seller_profile_version: null,
+    seller_profile_content_hash: null,
+    seller_profile_kind: null,
   };
 
   const summaries = Array.from({ length: 200 }, (_, i) => ({
@@ -96,6 +100,10 @@ const { LEAD, LEAD_B, OLD_OUTREACH_DRAFT, ALL_HISTORY } = vi.hoisted(() => {
     output_schema_version: "v1",
     model_revision: "mock-deterministic-v1",
     adapter_revision: null,
+    seller_profile_id: null,
+    seller_profile_version: null,
+    seller_profile_content_hash: null,
+    seller_profile_kind: null,
   }));
 
   const leadB = {
@@ -145,6 +153,12 @@ vi.mock("@/lib/api", async () => {
     ),
     getLeadFitScore: vi.fn(() =>
       Promise.reject(new actual.APIError(404, "not found")),
+    ),
+    getSellerProfileStatus: vi.fn(() =>
+      Promise.resolve({
+        state: "missing", latest_version: null, activation_sequence: 0,
+        last_activation: null, active_profile: null, latest_is_active: false,
+      }),
     ),
     getLeadReadiness: vi.fn((leadId: string) =>
       Promise.resolve({

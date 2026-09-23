@@ -19,7 +19,9 @@ import type {
   OutreachReviewResponse,
   Page,
   SellerProfile,
+  SellerProfileActivation,
   SellerProfileContent,
+  SellerProfileStatus,
   UploadResponse,
 } from "@/types/api";
 
@@ -41,6 +43,39 @@ export function saveSellerProfile(
 
 export function getSellerProfileVersions(params?: PageParams): Promise<Page<SellerProfile>> {
   return request<Page<SellerProfile>>(`/api/seller-profile/versions${buildQuery({ ...params })}`);
+}
+
+export function getSellerProfileStatus(): Promise<SellerProfileStatus> {
+  return request<SellerProfileStatus>("/api/seller-profile/status");
+}
+
+export function getSellerProfileDemoTemplate(): Promise<SellerProfileContent> {
+  return request<SellerProfileContent>("/api/seller-profile/demonstration-template");
+}
+
+export function activateSellerProfile(
+  sellerProfileId: string,
+  expectedActivationSequence: number,
+  acknowledgeDemo: boolean,
+): Promise<SellerProfileActivation> {
+  return request<SellerProfileActivation>("/api/seller-profile/activate", {
+    method: "POST",
+    body: JSON.stringify({
+      seller_profile_id: sellerProfileId,
+      expected_activation_sequence: expectedActivationSequence,
+      confirm_reviewed: true,
+      acknowledge_demo: acknowledgeDemo,
+    }),
+  });
+}
+
+export function deactivateSellerProfile(
+  expectedActivationSequence: number,
+): Promise<SellerProfileActivation> {
+  return request<SellerProfileActivation>("/api/seller-profile/deactivate", {
+    method: "POST",
+    body: JSON.stringify({ expected_activation_sequence: expectedActivationSequence }),
+  });
 }
 
 function buildQuery(params: Record<string, string | number | undefined>): string {

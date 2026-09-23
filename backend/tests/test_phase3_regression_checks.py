@@ -19,7 +19,12 @@ any real PDL data is imported.
 """
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+
+# These tests generate outreach, which needs an explicitly activated
+# seller revision (Phase 5). The fixture activates a synthetic one.
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 CSV = (
     "company_name,industry,contact_title,company_size,source,notes\n"

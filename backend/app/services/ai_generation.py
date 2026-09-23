@@ -1,22 +1,120 @@
-"""Orchestrates lead -> AI client -> AIOutput persistence."""
+"""Orchestrates lead -> grounded context -> AI client -> validation ->
+AIOutput persistence.
+
+Order of operations for one request:
+1. Resolve the seller revision ONCE (the active one, or an explicit
+   override such as the demo's built-in profile) and copy its immutable
+   content. Activating another revision mid-request cannot change what this
+   output used or records.
+2. Build the grounded context (app/ai/grounding.py) from current lead
+   facts, provenance, the current fit score and current restrictions.
+3. Call the client, then validate the result against the versioned schema
+   and the context's fact/capability/claim ids. Invalid output is never
+   saved as an AIOutput.
+4. Add the output and its audit event to the session; the caller commits.
+
+Generation never changes lead status, batch status, reviews or pushes.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.client import get_ai_client
-from app.core.config import settings
+from app.ai.client import AIClient, get_ai_client
+from app.ai.grounding import (
+    AIOutputValidationError,
+    build_grounded_context,
+    validate_outreach,
+    validate_summary,
+)
+from app.ai.json_parser import AIJSONParseError
+from app.ai.prompts import PROMPT_VERSION
 from app.models import AIOutput, Lead, WorkflowEvent
 from app.models.ai_output import ORIGIN_GENERATED
+from app.scoring import fit
+from app.services import fit_queries
+from app.services.seller_profiles import (
+    GTMFLOW_DEMO_PROFILE,
+    active_seller_profile,
+    profile_content_hash,
+)
 
-PROMPT_VERSION = "v1"
-OUTPUT_SCHEMA_VERSION = "v1"
+# PROMPT_VERSION lives with the prompts (app/ai/prompts.py). Historical rows
+# keep "v1" for both fields.
+OUTPUT_SCHEMA_VERSION = "v2"
+
+SELLER_SOURCE_ACTIVE = "active_revision"
+SELLER_SOURCE_BUILTIN_DEMO = "builtin_demo"
+
+
+class SellerProfileRequired(RuntimeError):
+    """Outreach needs an explicitly activated seller revision."""
+
+
+class GenerationOutputInvalid(RuntimeError):
+    def __init__(self, reason_codes: list[str]) -> None:
+        self.reason_codes = reason_codes
+        super().__init__(
+            "The AI output failed validation ("
+            + ", ".join(reason_codes)
+            + "). No output was saved."
+        )
+
+
+@dataclass(frozen=True)
+class SellerContext:
+    """An immutable copy of the seller revision used for one request."""
+
+    source: str
+    profile_id: UUID | None
+    version: int | None
+    content_hash: str
+    content: dict[str, Any]
+
+    @property
+    def kind(self) -> str:
+        return self.content["profile_kind"]
+
+    def as_context(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "profile_id": str(self.profile_id) if self.profile_id else None,
+            "version": self.version,
+            "content_hash": self.content_hash,
+            "content": self.content,
+        }
+
+
+def resolve_active_seller(session: Session) -> SellerContext | None:
+    row = active_seller_profile(session)
+    if row is None:
+        return None
+    return SellerContext(
+        source=SELLER_SOURCE_ACTIVE,
+        profile_id=row.id,
+        version=row.version,
+        content_hash=row.content_hash,
+        content=json.loads(json.dumps(row.profile)),
+    )
+
+
+def builtin_demo_seller() -> SellerContext:
+    """The labeled GTMFlow demonstration profile, used by the standalone
+    mock demo without storing or activating anything."""
+    content = GTMFLOW_DEMO_PROFILE.model_dump(mode="json")
+    return SellerContext(
+        source=SELLER_SOURCE_BUILTIN_DEMO,
+        profile_id=None,
+        version=None,
+        content_hash=profile_content_hash(content),
+        content=content,
+    )
 
 
 def _hash_input(ctx: dict[str, Any]) -> str:
@@ -30,79 +128,105 @@ def _hash_input(ctx: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _model_label() -> str:
-    return "mock" if settings.use_mock_ai else "openai"
+def _provenance(lead: Lead) -> dict[str, Any]:
+    def _id(value: Any) -> str | None:
+        return str(value) if value is not None else None
 
-
-def _build_lead_context(lead: Lead) -> dict[str, Any]:
-    """Compose the dict handed to the AI client.
-
-    Strictly facts only -- the AI client (real or mock) sees no fields we
-    don't already have stored.
-    """
-    ctx: dict[str, Any] = {
-        "company_name": lead.company_name,
-        "website": lead.website,
-        "industry": lead.industry,
-        "contact_name": lead.contact_name,
-        "contact_title": lead.contact_title,
-        "contact_email": lead.contact_email,
-        "company_size": lead.company_size,
-        "location": lead.location,
-        "source": lead.source,
+    return {
+        "lead_id": str(lead.id),
+        "batch_id": str(lead.batch_id),
+        "batch_source": lead.batch.source if lead.batch is not None else None,
+        "record_source_field": lead.source,
+        "source_snapshot_id": _id(lead.source_snapshot_id),
+        "import_run_id": _id(lead.import_run_id),
+        "source_record_id": lead.source_record_id,
+        "company_identity_id": _id(lead.company_identity_id),
     }
-    if isinstance(lead.cleaned_data, dict):
-        ctx["cleaned_data"] = lead.cleaned_data
-    if lead.score is not None:
-        ctx["score"] = {
-            "total_score": lead.score.total_score,
-            "priority": lead.score.priority,
+
+
+def _build_context(
+    session: Session, lead: Lead, task: str, seller: SellerContext | None
+) -> dict[str, Any]:
+    score = fit_queries.latest_fit_score(session, lead.id)
+    fit_block = None
+    if score is not None:
+        fit_block = {
+            "fit_score": score.fit_score,
+            "band": score.band,
+            "evidence_coverage_pct": score.evidence_coverage_pct,
+            "profile_id": score.profile_id,
+            "profile_version": score.profile_version,
         }
-    return ctx
+    eligibility = fit.compute_eligibility(lead)
+    return build_grounded_context(
+        task=task,  # type: ignore[arg-type]
+        lead=lead,
+        provenance=_provenance(lead),
+        seller=seller.as_context() if seller is not None else None,
+        fit=fit_block,
+        restrictions={"excluded": eligibility.excluded, "reasons": eligibility.reasons},
+    )
 
 
-def _latest_summary_content(
-    session: Session, lead_id: UUID
-) -> dict[str, Any] | None:
-    row = session.execute(
-        select(AIOutput)
-        .where(
-            AIOutput.lead_id == lead_id,
-            AIOutput.output_type == "company_summary",
-        )
-        .order_by(AIOutput.created_at.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    if row is None:
-        return None
-    return dict(row.content) if isinstance(row.content, dict) else None
+def _run(
+    client: AIClient, output_type: str, ctx: dict[str, Any]
+) -> dict[str, Any]:
+    try:
+        if output_type == "company_summary":
+            return validate_summary(client.generate_company_summary(ctx), ctx)
+        return validate_outreach(client.generate_outreach(ctx), ctx)
+    except AIJSONParseError:
+        raise GenerationOutputInvalid(["invalid_json"]) from None
+    except AIOutputValidationError as e:
+        raise GenerationOutputInvalid(e.reason_codes) from None
 
 
-def generate_summary_for_lead(session: Session, lead: Lead) -> AIOutput:
+def _generate(
+    session: Session,
+    lead: Lead,
+    output_type: str,
+    event_type: str,
+    seller: SellerContext | None,
+) -> AIOutput:
     client = get_ai_client()
-    ctx = _build_lead_context(lead)
-    content = client.generate_company_summary(ctx)
+    ctx = _build_context(session, lead, output_type, seller)
+    content = _run(client, output_type, ctx)
+    input_hash = _hash_input(ctx)
 
     output = AIOutput(
         lead_id=lead.id,
-        output_type="company_summary",
+        output_type=output_type,
         content=content,
-        model_used=_model_label(),
+        model_used=client.name,
         prompt_version=PROMPT_VERSION,
         origin=ORIGIN_GENERATED,
         input_snapshot=ctx,
-        input_hash=_hash_input(ctx),
+        input_hash=input_hash,
         output_schema_version=OUTPUT_SCHEMA_VERSION,
         model_revision=client.model_revision,
+        seller_profile_id=seller.profile_id if seller else None,
+        seller_profile_version=seller.version if seller else None,
+        seller_profile_content_hash=seller.content_hash if seller else None,
+        seller_profile_kind=seller.kind if seller else None,
     )
     session.add(output)
+    session.flush()
     session.add(
         WorkflowEvent(
             lead_id=lead.id,
-            event_type="ai_summary_generated",
+            event_type=event_type,
             event_data={
-                "output_type": "company_summary",
-                "model_used": _model_label(),
+                "output_type": output_type,
+                "ai_output_id": str(output.id),
+                "model_used": client.name,
+                "model_revision": client.model_revision,
+                "prompt_version": PROMPT_VERSION,
+                "output_schema_version": OUTPUT_SCHEMA_VERSION,
+                "input_hash": input_hash,
+                "seller_profile_source": seller.source if seller else None,
+                "seller_profile_id": str(seller.profile_id) if seller and seller.profile_id else None,
+                "seller_profile_version": seller.version if seller else None,
+                "seller_profile_content_hash": seller.content_hash if seller else None,
                 "confidence": content.get("confidence"),
             },
         )
@@ -110,38 +234,47 @@ def generate_summary_for_lead(session: Session, lead: Lead) -> AIOutput:
     return output
 
 
-def generate_outreach_for_lead(session: Session, lead: Lead) -> AIOutput:
-    client = get_ai_client()
-    ctx = _build_lead_context(lead)
+def generate_summary_for_lead(
+    session: Session, lead: Lead, *, seller: SellerContext | None = None
+) -> AIOutput:
+    """A summary describes the lead record; it works without a seller
+    profile and records the active one when there is one. `seller`
+    overrides the active revision (the standalone demo only)."""
+    resolved = seller if seller is not None else resolve_active_seller(session)
+    return _generate(session, lead, "company_summary", "ai_summary_generated", resolved)
 
-    latest = _latest_summary_content(session, lead.id)
-    if latest is not None:
-        ctx["latest_summary"] = latest
 
-    content = client.generate_outreach(ctx)
+def generate_outreach_for_lead(
+    session: Session, lead: Lead, *, seller: SellerContext | None = None
+) -> AIOutput:
+    """Outreach needs a seller: an explicitly activated revision, or the
+    demo's explicit override. Without one nothing is generated."""
+    resolved = seller if seller is not None else resolve_active_seller(session)
+    if resolved is None:
+        raise SellerProfileRequired(
+            "No seller profile revision is active. Save and explicitly "
+            "activate a reviewed revision on the Seller page before "
+            "generating outreach."
+        )
+    return _generate(session, lead, "outreach_email", "outreach_generated", resolved)
 
-    output = AIOutput(
-        lead_id=lead.id,
-        output_type="outreach_email",
-        content=content,
-        model_used=_model_label(),
-        prompt_version=PROMPT_VERSION,
-        origin=ORIGIN_GENERATED,
-        input_snapshot=ctx,
-        input_hash=_hash_input(ctx),
-        output_schema_version=OUTPUT_SCHEMA_VERSION,
-        model_revision=client.model_revision,
-    )
-    session.add(output)
+
+def record_generation_rejected(
+    session: Session,
+    lead_id: UUID,
+    output_type: str,
+    reason_codes: list[str],
+) -> None:
+    """Audit a rejected generation without saving any of its content."""
     session.add(
         WorkflowEvent(
-            lead_id=lead.id,
-            event_type="outreach_generated",
+            lead_id=lead_id,
+            event_type="ai_generation_rejected",
             event_data={
-                "output_type": "outreach_email",
-                "model_used": _model_label(),
-                "confidence": content.get("confidence"),
+                "output_type": output_type,
+                "reason_codes": reason_codes,
+                "prompt_version": PROMPT_VERSION,
+                "output_schema_version": OUTPUT_SCHEMA_VERSION,
             },
         )
     )
-    return output
