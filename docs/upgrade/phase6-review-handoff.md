@@ -426,3 +426,16 @@ Counts: **usable examples** = accepted + corrected (exported); **skipped** examp
 - 0 reviews, 0 operational reviews, 0 pushes.
 
 **Next:** activate version 1 on `/seller-profile`, then generate #2–#5. Review #1 at any time.
+
+### Session 2026-09-23 (continuation request for #2–#5)
+
+**Not generated.** You reported the demonstration profile as active, but the server still reports `draft_only` with activation sequence 0 and no activation row. Since the last backend restart, the backend log has received no activation request and no status request from a browser; the only status requests were the operator's own checks. Candidates #2–#5 were therefore not attempted: #2 would have been refused exactly as before. **No paid call was made in this session.**
+
+**Diagnosis so far:**
+- One frontend (Next dev, port 3000) and one backend (port 8000). The proxied API answers 200.
+- The browser bundle inlines `NEXT_PUBLIC_API_BASE_URL=""`, so it calls relative `/api/...`.
+- The Activate controls only render once the page has loaded the seller status. A tab opened while the backend was down (it was restarted several times this session) shows "Could not check which seller profile is active" with **Retry status**, and no Activate button.
+
+**Candidate #1 unchanged:** output `2dbcde43-…`, pending review, content hash `4b13f4aa2b5f…`.
+
+**Progress:** 1 generated, 1 pending review, 99 awaiting generation; 0 usable, 0 skipped; 1 paid call in total so far.
