@@ -439,3 +439,27 @@ Counts: **usable examples** = accepted + corrected (exported); **skipped** examp
 **Candidate #1 unchanged:** output `2dbcde43-…`, pending review, content hash `4b13f4aa2b5f…`.
 
 **Progress:** 1 generated, 1 pending review, 99 awaiting generation; 0 usable, 0 skipped; 1 paid call in total so far.
+
+### Session 2026-09-23 (first five generated)
+
+**Activation verified on the server:** version 1 (demo) is active at sequence 1, with `reviewed_confirmation` and `demo_acknowledged` both true, activated 2026-09-23T23:29:57Z by `local-demo-unauthenticated`. The earlier "activated" reports had not reached the server (see the previous entry).
+
+**Generation run** (only missing outputs, `gpt-4o-mini`, stop at first error). **No failures.**
+
+| # | Company | Task | Result | Output id | Content hash |
+|---|---|---|---|---|---|
+| 1 | david m bacha do | Summary | Skipped (preserved; generated earlier, before activation, so no seller is recorded) | `2dbcde43-…` | `4b13f4aa2b5f…` |
+| 2 | david m bacha do | Outreach | Generated (demo seller v1) | `4ea94e9c-…` | `3589f2f8f50c…` |
+| 3 | one west associates inc | Summary | Generated (active demo seller v1 recorded) | `e644874a-…` | `eb738faa28b7…` |
+| 4 | one west associates inc | Outreach | Generated (demo seller v1) | `fe3aa061-…` | `a70bdc59573d…` |
+| 5 | accuhealth inc | Summary | Generated (active demo seller v1 recorded) | `717531ff-…` | `6060b9bf183e…` |
+
+**Paid calls:** 4 this run, 5 in total (well under $0.01 at the verified prices). There were 0 validation rejections, and the backend log has no key-like strings.
+
+**Review notes, not decisions:**
+- Draft #2 (61 words) opens "Hello," and mentions the demonstration. It cites company name, industry, size and location, and capabilities cap-1 to cap-3, with no claims.
+- Draft #4 (90 words) opens "Hi there," and does **not** mention the demonstration in the body. It cites company name, industry and website (the `onewest.com` caveat applies), and capability cap-3, with no claims.
+
+Both carry demo provenance in the UI and the export.
+
+**Progress:** 5 generated, 5 pending your review, 95 awaiting generation; 0 usable (0 accepted, 0 corrected), 0 skipped, 0 mock. Candidates #6–#100 were not generated.
