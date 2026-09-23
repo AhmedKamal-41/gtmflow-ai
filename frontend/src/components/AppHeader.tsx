@@ -10,6 +10,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/upload", label: "Upload", icon: "upload" },
   { href: "/batches", label: "Batches", icon: "layers" },
   { href: "/metrics", label: "Metrics", icon: "chart" },
+  { href: "/seller-profile", label: "Seller", icon: "users" },
   { href: "/demo", label: "Demo", icon: "play" },
 ];
 
@@ -42,6 +43,7 @@ export function AppHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
+                aria-label={item.label}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium transition-colors ${
                   active
                     ? "bg-brand-50 text-brand-700"

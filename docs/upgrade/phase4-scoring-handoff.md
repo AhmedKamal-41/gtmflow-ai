@@ -1,12 +1,12 @@
 # Phase 4 handoff: company fit, evidence coverage, outreach readiness, routing eligibility
 
-Last updated: 2026-09-22 (independent verification fixes). **Stopped before Phase 5.**
+Last updated: 2026-09-23 (user accepted completion and directed Phase 5).
 
-**Current status:** verification fixes are implemented; the final local gates
-are recorded in §13. Re-verification against the real Codespace Postgres
-cohort is pending because that database is not accessible in this workspace.
-The 5,000-company results in §6 are retained from commit `4915e63`'s handoff;
-they are not presented as a new database run in this pass.
+**Current status: complete, accepted by the user.** On 2026-09-23 the user
+explicitly accepted Claude Code's recorded Phase 4 completion and directed
+Phase 5 to begin. The 5,000-company results in §6 remain attributed to the
+recorded run at commit `4915e63`; §13 records the subsequent local fixes
+and tests. No additional real-database run is claimed in this workspace.
 
 Phase 4 added a new, independent, versioned scoring engine (v2) alongside
 the unchanged legacy scorer (v1, `app/scoring/lead_scoring.py`), wired it
@@ -483,15 +483,18 @@ workspace.** The 101 focused tests are included in the 276 total, not added
 to it. The new regression checks failed against the starting implementation
 before their fixes. No full corpus scan was run.
 
-**Remaining real-data gate:** this workspace has neither the Codespace
+**Verification boundary:** this workspace has neither the Codespace
 checkout/manifest nor its Postgres container; the documented local port is
 unavailable. No real cohort was downloaded, reconstructed, rescanned or
 mutated here. The earlier reported cohort remains 2,500 healthcare + 2,500
 real estate, uniformly 100 fit / 100% coverage, with no variation invented.
-Those prior results do not substitute for executing the final code against
-the real database.
+The user subsequently accepted the recorded Claude Code completion and
+instructed us to proceed to Phase 5. The extra rerun is no longer a gate
+for phase sequencing; the distinction between recorded and locally run
+checks remains explicit.
 
-In the Codespace, with its existing `DATABASE_URL` and venv, take the usual
+For any future rerun in the Codespace, with its existing `DATABASE_URL` and
+venv, take the usual
 backup and verify restoration before writing. Against the restored copy
 first, then the real database, capture each command's actual exit code:
 
@@ -508,4 +511,5 @@ Compare source table counts/digests and statuses before/after, confirm
 fit/coverage distributions and readiness/exclusion reasons from the dry
 run. An unchanged cohort should skip all 5,000 in the write run and add no
 scores or audit events. Confirm drafts/reviews/push counts remain zero.
-Keep Phase 4 open until this evidence is recorded. Phase 5 has not started.
+These commands remain as reproduction instructions, not a request to reopen
+Phase 4. Phase 5 began on the user's explicit instruction on 2026-09-23.

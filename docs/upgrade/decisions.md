@@ -142,8 +142,9 @@ tested page by page on Postgres as well as SQLite.
 ## Phase 4 independent verification fixes
 
 Starting branch: `worktree-phase4-finish`, commit `4915e63`. The rubric and
-migrations are preserved. Current evidence and the remaining real-database
-gate are in `phase4-scoring-handoff.md` §13.
+migrations are preserved. Evidence and its database-access boundary are recorded in
+`phase4-scoring-handoff.md` §13. The user accepted Phase 4 on 2026-09-23
+and instructed Phase 5 to begin; no additional real run is asserted.
 
 | Decision | Reason |
 |---|---|
@@ -152,7 +153,20 @@ gate are in `phase4-scoring-handoff.md` §13.
 | Establish SQLite's outer transaction before score savepoints; count batch commit failures only after rollback | Reproduced a CLI chunk reported failed while its score rows survived rollback, and an API chunk failure that aborted the whole run. Tests now check stored rows and successful retry. |
 | Navigation invalidates old batch actions and resets lead action state; each history request also has an identity | Reproduced stale batch repaint, a stuck approval button, and a late history page overwriting refreshed history. Retry retains the failed request's exact offset. |
 | Frontend CI runs the existing interaction suite | Component behavior is an acceptance gate; typecheck/build alone cannot verify clicks or response ordering. No new dependency. |
-| Real-data re-verification is pending in the Codespace | This workspace can access the GitHub branch but not the persistent database. Previous recorded results remain attributed to their original run; Phase 4 is not declared complete on these new changes. |
+| Phase 4 accepted on the recorded Claude Code verification | On 2026-09-23 the user directed us to accept the completed phase and begin Phase 5. Database results retain their original attribution; this is acceptance of existing evidence, not a claim that another real run occurred here. |
+
+## Decisions made in Phase 5 (seller-profile foundation)
+
+| Decision | Reason / status |
+|---|---|
+| Keep the agreed single global, versioned seller profile | No per-campaign or multi-workspace redesign. Each changed save creates a new immutable draft revision. |
+| Collect actual seller content before activating grounded generation | The offer, target customers and supportable claims are business inputs, not facts to invent from PDL. The draft editor is usable now; activation and prompt integration remain Phase 5 work after content review. |
+| Add only `seller_profiles` in migration `0007_seller_profiles` | Existing score/output tables and migrations 0001–0006 stay intact. Migration testing uses a backed-up/restored synthetic SQLite fixture; no real database migration or PostgreSQL verification is claimed here. |
+| Require `expected_version` when saving, backed by a unique version constraint | Stale changes return 409 and preserve the editor's text. An identical retry of the latest save reuses its revision and does not duplicate audit events. |
+| Save a profile draft and its `seller_profile_draft_saved` event in one transaction | No partly saved profile without its audit record. `local-demo-unauthenticated` accurately labels the existing app's lack of authentication. |
+| Proof points include a claim and source/reference; absence is allowed | Unsupported evidence is not manufactured. Saved source text is user-supplied provenance, not independent verification of its truth. |
+| Draft content does not activate readiness, alter fit criteria, or replace the existing generator | A draft is not an approved seller profile. The Phase 4 rubric remains `demo-us-sectors-v1`; future scoring changes need an explicit versioned rubric decision. |
+| Reuse existing SQLAlchemy, Alembic, React, Vitest and shared pagination | No new dependency. The editor distinguishes empty state from failed loading, preserves failed-save input, and exposes read-only paginated history. |
 
 ## Dependencies later phases will need
 
@@ -167,7 +181,7 @@ Resolved since Phase 2 (moved out of this list): PDL curation criteria (fixed ru
 
 Still open, listed in the order they'll come up:
 
-1. **The seller/service profile itself (Phase 5's core input).** Phase 4 confirmed this is now the single hardest blocker: v2's `outbound_email` outreach-readiness gap `no_seller_profile_configured` fires on all 5,000 real leads and will fire on every future one until this exists, and the company-size scoring criterion has nothing to compare against without it. Needs: seller company name, one-paragraph value proposition, target-ICP description, bounded proof-point list, and the already-agreed single global, versioned profile scope.
+1. **The seller/service profile itself (Phase 5's core input).** Phase 4 confirmed this is now the single hardest blocker: v2's `outbound_email` outreach-readiness gap `no_seller_profile_configured` fires on all 5,000 real leads and will fire on every future one until this exists, and the company-size scoring criterion has nothing to compare against without it. The Phase 5 draft editor/storage now exists. Still needed: seller company name, product/service, value proposition, target customers and supportable claims for review. The single global profile scope is already agreed; saving a draft does not yet activate it.
 2. **Training data source for Phases 6–9**, beyond "100-example pilot, human-annotated, possibly corrected from company facts" (confirmed in Phase 2). Still open: who performs the pilot annotation, and over what time frame, since it gates how much data exists by Phase 7/8. 5,000 real PDL leads (now with v2 fit scores) exist to draw candidates from, but the actual annotation workflow (Phase 6) still doesn't exist.
 3. **Concurrent-push idempotency mechanism for Phase 11** (D.3) — a DB-level unique constraint / row lock vs. an application-level idempotency key vs. a queue-based dedup once Phase 10's background jobs exist. Not decided; explicitly deferred per the user's instruction to keep delivery reliability in Phase 11.
 4. **Company-identity resolution/merge strategy for a future second PDL snapshot.** Phase 3 imported exactly one snapshot, so no two `Lead` rows have ever needed to be resolved to the same `CompanyIdentity`. The matching strategy (fuzzy name match? domain + locality heuristic? manual review queue?) is still undesigned — flagging now since it wasn't yet a live question with only one snapshot in the database, but will be the moment a second PDL pull happens.

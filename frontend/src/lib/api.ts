@@ -18,10 +18,30 @@ import type {
   MetricsDashboard,
   OutreachReviewResponse,
   Page,
+  SellerProfile,
+  SellerProfileContent,
   UploadResponse,
 } from "@/types/api";
 
 export type PageParams = { limit?: number; offset?: number };
+
+export function getSellerProfile(): Promise<SellerProfile> {
+  return request<SellerProfile>("/api/seller-profile");
+}
+
+export function saveSellerProfile(
+  profile: SellerProfileContent,
+  expectedVersion: number,
+): Promise<SellerProfile> {
+  return request<SellerProfile>("/api/seller-profile", {
+    method: "POST",
+    body: JSON.stringify({ profile, expected_version: expectedVersion }),
+  });
+}
+
+export function getSellerProfileVersions(params?: PageParams): Promise<Page<SellerProfile>> {
+  return request<Page<SellerProfile>>(`/api/seller-profile/versions${buildQuery({ ...params })}`);
+}
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
   const q = new URLSearchParams();

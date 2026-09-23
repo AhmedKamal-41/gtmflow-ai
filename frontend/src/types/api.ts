@@ -334,3 +334,23 @@ export type MetricsDashboard = {
   fit_weak_match: number;
   fit_insufficient_evidence: number;
 };
+export type SellerProfileContent = {
+  profile_kind: "seller" | "demo";
+  company_name: string;
+  product_name: string;
+  value_proposition: string;
+  target_customer: string;
+  capabilities: string[];
+  proof_points: { claim: string; source: string }[];
+  exclusions: string[];
+};
+
+export type SellerProfile = {
+  id: string;
+  version: number;
+  status: "draft";
+  profile: SellerProfileContent;
+  content_hash: string;
+  editor_label: string;
+  created_at: string;
+};
