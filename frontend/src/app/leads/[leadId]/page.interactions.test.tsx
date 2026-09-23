@@ -268,7 +268,7 @@ beforeEach(async () => {
     else Object.keys(v).forEach((kk) => delete (v as Record<string, unknown>)[kk]);
   }
   const api = await import("@/lib/api");
-  for (const fn of [api.approveOutreach, api.pushLead, api.getLead]) {
+  for (const fn of [api.approveOutreach, api.rejectOutreach, api.pushLead, api.getLead]) {
     (fn as unknown as { mockClear: () => void }).mockClear();
   }
   seed("lead-a", "Alpha Co", { summaries: 230, pushes: 230 });
@@ -292,25 +292,27 @@ describe("history panels", () => {
     ).toBeInTheDocument();
   });
 
-  it("a failed later page keeps loaded records and Retry loads the missing page", async () => {
-    server.state.failNext["getPushes:lead-a@50"] = 1;
+  it.each([
+    { heading: "Push history", method: "getPushes", total: 230, label: "push" },
+    { heading: "All AI outputs (history)", method: "getAIOutputs", total: 231, label: "summary" },
+  ])("$heading preserves records and retries the failed later page", async ({ heading, method, total, label }) => {
+    const request = `${method}:lead-a@50`;
+    server.state.failNext[request] = 1;
     render(<LeadDetailPage />);
     await screen.findByText("Alpha Co current draft");
-    const sec = () => section("Push history");
-    await waitFor(() => expect(within(sec()).getByText(/Showing 50 of 230/)).toBeInTheDocument());
+    const sec = () => section(heading);
+    await waitFor(() => expect(within(sec()).getByText(`Showing 50 of ${total}`)).toBeInTheDocument());
 
     await act(async () => fireEvent.click(within(sec()).getByRole("button", { name: /^load more$/i })));
-    await within(sec()).findByText(/getPushes failed \(simulated\)/);
-    // Already-loaded records stay on screen alongside the error.
-    expect(within(sec()).getByText("lead-a push 0")).toBeInTheDocument();
-    expect(within(sec()).getByText(/Showing 50 of 230/)).toBeInTheDocument();
+    await within(sec()).findByText(`${method} failed (simulated)`);
+    expect(within(sec()).getByText(`lead-a ${label} 0`)).toBeInTheDocument();
+    expect(within(sec()).getByText(`Showing 50 of ${total}`)).toBeInTheDocument();
 
     await act(async () => fireEvent.click(within(sec()).getByRole("button", { name: /retry/i })));
-    await waitFor(() => expect(within(sec()).getByText(/Showing 100 of 230/)).toBeInTheDocument());
-    expect(within(sec()).getByText("lead-a push 99")).toBeInTheDocument();
+    await waitFor(() => expect(within(sec()).getByText(`Showing 100 of ${total}`)).toBeInTheDocument());
+    expect(within(sec()).getByText(`lead-a ${label} 99`)).toBeInTheDocument();
     expect(within(sec()).queryByText(/simulated/)).not.toBeInTheDocument();
-    // Retry re-requested exactly the failed page, not page 0.
-    expect(server.state.calls.filter((c) => c === "getPushes:lead-a@50")).toHaveLength(2);
+    expect(server.state.calls.filter((call) => call === request)).toHaveLength(2);
   });
 });
 
@@ -373,12 +375,14 @@ describe("out-of-order responses after navigation", () => {
     useParamsMock.mockReturnValue({ leadId: "lead-b" });
     rerender(<LeadDetailPage />);
     await within(await currentDraftSection()).findByText("Beta Co current draft");
+    expect(screen.getByRole("button", { name: /approve outreach/i })).toBeEnabled();
     const getLeadCallsBefore = server.state.calls.filter((c) => c === "getLead:lead-a").length;
 
     await release("approveOutreach", "lead-a");
     await act(async () => undefined);
 
     expect(screen.getByRole("heading", { name: "Beta Co" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /approve outreach/i })).toBeEnabled();
     expect(screen.queryByText("Alpha Co current draft")).not.toBeInTheDocument();
     expect(screen.queryByText("lead-a summary 0")).not.toBeInTheDocument();
     // No post-action refresh of the old lead was even requested.
@@ -388,24 +392,28 @@ describe("out-of-order responses after navigation", () => {
 });
 
 describe("approval target", () => {
-  it("approve sends exactly the draft rendered on screen, before and after loading older history", async () => {
+  it.each(["approve", "reject"])("%s sends exactly the draft rendered on screen, before and after loading older history", async (decision) => {
     const api = await import("@/lib/api");
+    const action = decision === "approve" ? api.approveOutreach : api.rejectOutreach;
+    const args = decision === "approve"
+      ? ["lead-a", "lead-a-draft"]
+      : ["lead-a", "lead-a-draft", undefined];
     render(<LeadDetailPage />);
     const current = await currentDraftSection();
     await within(current).findByText("Alpha Co current draft");
 
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /approve outreach/i })),
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`${decision} outreach`, "i") })),
     );
-    expect(api.approveOutreach).toHaveBeenLastCalledWith("lead-a", "lead-a-draft");
+    expect(action).toHaveBeenLastCalledWith(...args);
 
     await loadAll("All AI outputs (history)", 231);
     // The draft is also now visible deep in history; the target is unchanged.
     expect(within(current).getByText("Alpha Co current draft")).toBeInTheDocument();
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /approve outreach/i })),
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`${decision} outreach`, "i") })),
     );
-    expect(api.approveOutreach).toHaveBeenLastCalledWith("lead-a", "lead-a-draft");
+    expect(action).toHaveBeenLastCalledWith(...args);
   });
 
   it("approve/reject are unavailable while the draft lookup is unresolved", async () => {
@@ -463,4 +471,3 @@ describe("current restrictions before push", () => {
     await waitFor(() => expect(api.pushLead).toHaveBeenCalledWith("lead-a", true));
   });
 });
-

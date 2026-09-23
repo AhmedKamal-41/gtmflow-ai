@@ -47,6 +47,8 @@ export function usePaginatedHistory<T>(
   // Bumped every time `key` changes; a fetch started under an older
   // generation is ignored when it resolves, however late.
   const generationRef = useRef(0);
+  const requestRef = useRef(0);
+  const retryRef = useRef({ offset: 0, isInitial: true });
   // The key currently on screen. A caller holding a `reload`/`loadMore`
   // from an earlier render (e.g. an action that finished after the user
   // navigated to another lead) must not fetch the OLD key's history into
@@ -58,8 +60,13 @@ export function usePaginatedHistory<T>(
       const generation = generationRef.current;
       const requestKey = key;
       if (requestKey !== keyRef.current) return; // stale caller
+      const request = ++requestRef.current;
+      retryRef.current = { offset, isInitial };
+      const isCurrent = () =>
+        generationRef.current === generation && requestRef.current === request;
       if (isInitial) {
         setLoading(true);
+        setLoadingMore(false);
         setError(null);
       } else {
         setLoadingMore(true);
@@ -67,13 +74,13 @@ export function usePaginatedHistory<T>(
       }
       fetcher(requestKey, PAGE_SIZE, offset)
         .then((page) => {
-          if (generationRef.current !== generation) return; // stale (key changed since)
+          if (!isCurrent()) return;
           setItems((prev) => (isInitial ? page.items : [...prev, ...page.items]));
           setTotal(page.total);
           setHasMore(page.has_more);
         })
         .catch((e: unknown) => {
-          if (generationRef.current !== generation) return; // stale
+          if (!isCurrent()) return;
           const message =
             e instanceof Error ? e.message : "Failed to load history.";
           setError(message);
@@ -81,7 +88,7 @@ export function usePaginatedHistory<T>(
           // must preserve everything already shown (Part D.2).
         })
         .finally(() => {
-          if (generationRef.current !== generation) return;
+          if (!isCurrent()) return;
           setLoading(false);
           setLoadingMore(false);
         });
@@ -96,6 +103,8 @@ export function usePaginatedHistory<T>(
     setTotal(0);
     setHasMore(false);
     setError(null);
+    setLoadingMore(false);
+    retryRef.current = { offset: 0, isInitial: true };
     if (!key) {
       setLoading(false);
       return;
@@ -105,11 +114,11 @@ export function usePaginatedHistory<T>(
   }, [key]);
 
   const reload = useCallback(() => {
-    // Retries whichever page was in flight -- if items already exist, this
-    // is a "load more" retry; otherwise it's the initial load retry. Either
-    // way it re-requests at the current offset (items.length).
-    runFetch(items.length, items.length === 0);
-  }, [runFetch, items.length]);
+    // A refresh can fail with history still visible. Retry that request's
+    // offset and replacement mode, not the length of the visible history.
+    const { offset, isInitial } = retryRef.current;
+    runFetch(offset, isInitial);
+  }, [runFetch]);
 
   const loadMore = useCallback(() => {
     runFetch(items.length, false);

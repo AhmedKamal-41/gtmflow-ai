@@ -184,6 +184,8 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     generationRef.current += 1;
+    setBusy(null);
+    setInfo(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);

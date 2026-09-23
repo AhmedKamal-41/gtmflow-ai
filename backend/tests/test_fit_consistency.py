@@ -21,6 +21,7 @@ from app.models import (
     Lead,
     LeadBatch,
     LeadFitScore,
+    WorkflowEvent,
 )
 from app.scoring import fit
 
@@ -314,6 +315,61 @@ def test_current_readiness_endpoint_works_for_unscored_lead(
 
 
 # -------------------------------------------------------------- side effects
+
+def test_scoring_audit_records_do_not_inflate_operational_metrics(
+    client: TestClient, db_session: Session
+) -> None:
+    batch = _batch(db_session)
+    lead = _lead(db_session, batch, "Audited Co")
+    first = client.post(f"/api/leads/{lead.id}/fit-score").json()
+    second = client.post(f"/api/leads/{lead.id}/fit-score").json()
+    events = list(db_session.scalars(
+        select(WorkflowEvent).where(WorkflowEvent.event_type == "lead_fit_scored")
+    ))
+    assert {event.event_data["lead_fit_score_id"] for event in events} == {
+        first["id"], second["id"],
+    }
+    assert all(event.lead_id == lead.id and event.batch_id == batch.id for event in events)
+    assert all(event.event_data["profile_id"] == fit.PROFILE_ID for event in events)
+    skipped = client.post(f"/api/batches/{batch.id}/fit-score").json()
+    assert skipped["skipped_unchanged"] == 1
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 2
+    metrics = client.get("/api/metrics/dashboard").json()
+    assert metrics["fit_scored_leads"] == 1
+    assert metrics["total_leads_processed"] == 0
+    assert metrics["outreach_generated"] == metrics["outreach_approved"] == 0
+
+
+def test_batch_commit_failure_counts_failed_rows_and_continues(
+    client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    from app.api import fit_scoring
+
+    batch = _batch(db_session)
+    for i in range(3):
+        _lead(db_session, batch, f"Chunk Co {i}")
+    monkeypatch.setattr(fit_scoring, "SCORE_CHUNK_SIZE", 2)
+    real_commit = Session.commit
+    calls = 0
+
+    def fail_first_commit(session):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("chunk commit failed")
+        return real_commit(session)
+
+    monkeypatch.setattr(Session, "commit", fail_first_commit)
+    response = client.post(f"/api/batches/{batch.id}/fit-score")
+    assert response.status_code == 200, response.text
+    run = response.json()
+    assert (run["attempted"], run["newly_scored"], run["failed"]) == (3, 1, 2)
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(LeadFitScore)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 1
+    retry = client.post(f"/api/batches/{batch.id}/fit-score").json()
+    assert (retry["newly_scored"], retry["skipped_unchanged"], retry["failed"]) == (2, 1, 0)
+
 
 def test_batch_scoring_has_no_side_effects_beyond_score_rows(
     client: TestClient, db_session: Session

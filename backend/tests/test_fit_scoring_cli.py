@@ -57,6 +57,9 @@ def test_dry_run_computes_but_writes_nothing(
         __import__("sqlalchemy").select(LeadFitScore)
     ).scalars().all()
     assert rows == []  # dry run must not persist anything
+    from sqlalchemy import func, select
+    from app.models import WorkflowEvent
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 0
 
 
 def test_real_run_persists_one_row_per_lead(
@@ -170,3 +173,56 @@ def test_limit_bounds_how_many_leads_are_considered(
     summary = score_cohort(db_session_factory, dry_run=True, chunk_size=2, limit=1)
     assert summary["total_leads_considered"] == 1
     assert summary["total_attempted"] == 1
+
+
+def test_commit_failure_rolls_back_the_whole_chunk_and_retry_completes(
+    db_session: Session, db_session_factory: sessionmaker[Session]
+) -> None:
+    from sqlalchemy import func, select
+    from app.models import WorkflowEvent
+
+    _seed_leads(db_session)
+    calls = 0
+
+    def flaky_factory():
+        nonlocal calls
+        calls += 1
+        session = db_session_factory()
+        if calls == 2:  # after the read-only cohort lookup
+            def fail():
+                raise RuntimeError("chunk commit failed")
+            session.commit = fail
+        return session
+
+    run = score_cohort(flaky_factory, dry_run=False, chunk_size=2)
+    assert (run["total_attempted"], run["total_succeeded"], run["total_failed"]) == (3, 1, 2)
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(LeadFitScore)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 1
+    retry = score_cohort(db_session_factory, dry_run=False, chunk_size=2)
+    assert (retry["total_succeeded"], retry["total_skipped_unchanged"], retry["total_failed"]) == (2, 1, 0)
+
+
+def test_a_failed_audit_write_rolls_back_its_score_without_losing_other_leads(
+    db_session: Session, db_session_factory: sessionmaker[Session], monkeypatch
+) -> None:
+    from sqlalchemy import func, select
+    from app.models import WorkflowEvent
+
+    _seed_leads(db_session)
+    failing_id = db_session.scalar(select(Lead.id).where(Lead.company_name == "Strong Realty Co"))
+    real_flush = Session.flush
+
+    def fail_audit(session, *args, **kwargs):
+        for row in session.new:
+            if isinstance(row, WorkflowEvent) and row.lead_id == failing_id:
+                raise RuntimeError("audit write failed")
+        return real_flush(session, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "flush", fail_audit)
+    run = score_cohort(db_session_factory, dry_run=False, chunk_size=3)
+    assert (run["total_succeeded"], run["total_failed"]) == (2, 1)
+    assert run["failed_by_segment"] == {"real_estate": 1}
+    assert db_session.scalar(select(func.count()).select_from(LeadFitScore)) == 2
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 2
+    assert db_session.scalar(select(LeadFitScore.id).where(LeadFitScore.lead_id == failing_id)) is None

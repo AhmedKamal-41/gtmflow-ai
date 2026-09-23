@@ -144,37 +144,47 @@ export default function BatchDetailPage() {
     generationRef.current += 1;
     setBatch(null);
     setLeads(null);
+    setScoring(false);
+    setScoringFit(false);
+    setPushing(false);
+    setLoadingMoreLeads(false);
+    setActionResult(null);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId]);
 
   async function handleScoreBatch() {
+    const generation = generationRef.current;
     setScoring(true);
     setActionResult(null);
     setError(null);
     try {
       const res = await scoreBatch(batchId);
+      if (generationRef.current !== generation) return;
       setActionResult(
         `Legacy v1 scoring: scored ${res.scored_leads} leads. Hot ${res.hot} · Warm ${res.warm} · Cold ${res.cold} · avg ${res.average_score}.`,
       );
       await load();
     } catch (e) {
+      if (generationRef.current !== generation) return;
       setError(
         e instanceof APIError
           ? (e.detail ?? e.message)
           : "Failed to score batch",
       );
     } finally {
-      setScoring(false);
+      if (generationRef.current === generation) setScoring(false);
     }
   }
 
   async function handleScoreBatchFit() {
+    const generation = generationRef.current;
     setScoringFit(true);
     setActionResult(null);
     setError(null);
     try {
       const res = await scoreBatchFit(batchId);
+      if (generationRef.current !== generation) return;
       setActionResult(
         `Company fit (v2 demo): ${res.newly_scored} of ${res.attempted} leads newly scored` +
           ` · ${res.skipped_unchanged} unchanged since their last score (skipped)` +
@@ -182,17 +192,19 @@ export default function BatchDetailPage() {
       );
       await load();
     } catch (e) {
+      if (generationRef.current !== generation) return;
       setError(
         e instanceof APIError
           ? (e.detail ?? e.message)
           : "Failed to score batch fit",
       );
     } finally {
-      setScoringFit(false);
+      if (generationRef.current === generation) setScoringFit(false);
     }
   }
 
   async function handlePushHot() {
+    const generation = generationRef.current;
     setPushing(true);
     setActionResult(null);
     setError(null);
@@ -200,6 +212,7 @@ export default function BatchDetailPage() {
       // Re-check the batch's current state right before acting -- the
       // backend enforces this too, but never act on a stale page load.
       const fresh = await getBatch(batchId);
+      if (generationRef.current !== generation) return;
       if (INCOMPLETE_BATCH_STATUSES.has(fresh.status)) {
         setBatch(fresh);
         setError(
@@ -209,18 +222,20 @@ export default function BatchDetailPage() {
         return;
       }
       const res = await pushHotLeads(batchId);
+      if (generationRef.current !== generation) return;
       setActionResult(
         `Pushed ${res.pushed} of ${res.hot_leads_found} legacy-Hot leads (${res.skipped} skipped, ${res.failed} failed).`,
       );
       await load();
     } catch (e) {
+      if (generationRef.current !== generation) return;
       setError(
         e instanceof APIError
           ? (e.detail ?? e.message)
           : "Failed to push Hot leads",
       );
     } finally {
-      setPushing(false);
+      if (generationRef.current === generation) setPushing(false);
     }
   }
 

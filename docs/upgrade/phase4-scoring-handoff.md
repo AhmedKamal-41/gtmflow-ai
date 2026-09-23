@@ -1,6 +1,12 @@
 # Phase 4 handoff: company fit, evidence coverage, outreach readiness, routing eligibility
 
-Last updated: 2026-09-22 (Phase 4 finish pass). **Stopped before Phase 5.**
+Last updated: 2026-09-22 (independent verification fixes). **Stopped before Phase 5.**
+
+**Current status:** verification fixes are implemented; the final local gates
+are recorded in §13. Re-verification against the real Codespace Postgres
+cohort is pending because that database is not accessible in this workspace.
+The 5,000-company results in §6 are retained from commit `4915e63`'s handoff;
+they are not presented as a new database run in this pass.
 
 Phase 4 added a new, independent, versioned scoring engine (v2) alongside
 the unchanged legacy scorer (v1, `app/scoring/lead_scoring.py`), wired it
@@ -14,9 +20,9 @@ items carried into this phase.
 > handoff. A second session (branch `worktree-phase4-finish`) started from
 > the same checkpoint code, re-inspected it against the brief, found and
 > fixed the gaps listed in §7, re-verified the real run with the final
-> code, and rewrote this file. Claims below are the final, re-verified
-> state; where the first version said something that is no longer true,
-> §7 says so explicitly.
+> code, and rewrote this file. Sections 6–9 retain that pass's recorded
+> evidence. The independent verification pass
+> starts from commit `4915e63`; its additional findings and evidence are in §13.
 
 ## 1. The demonstration rubric: `demo-us-sectors-v1`
 
@@ -136,8 +142,10 @@ definition:
   and every v2 surface says it is a broad demonstration profile, not a
   purchase-probability or approval signal.
 
-**No side effects.** Scoring (API, batch endpoint, CLI) inserts
-`lead_fit_scores` rows only. It never clears a blocked disposition,
+**Workflow restrictions remain unchanged.** Scoring (API, batch endpoint,
+CLI) inserts `lead_fit_scores` and matching `lead_fit_scored` audit events
+through `app/services/fit_scoring.py`. Dry runs and unchanged skips write
+neither scores nor events. It never clears a blocked disposition,
 changes a batch's status, approves or generates a draft, or sends. This is
 tested (`test_batch_scoring_has_no_side_effects_beyond_score_rows`, plus
 the earlier blocked-lead and partial-batch tests) and verified on the real
@@ -181,7 +189,7 @@ database (§6).
   The crash test was run against the checkpoint's upload code and failed
   there, as intended.
 
-## 6. Real scoring run (existing cohort, no download, no corpus rescan)
+## 6. Previously recorded real scoring run (commit `4915e63`)
 
 Database: persistent local Postgres `gtmflow-dev-postgres`
 (`localhost:55433/gtmflow`), alembic head `0006_fit_scores`.
@@ -311,7 +319,7 @@ Why they differ:
 Neither is a purchase-probability model. `strong_match` means "matches
 this demo profile's two criteria", not "Hot".
 
-## 9. Verification evidence (final code; exit codes captured before shortening output)
+## 9. Earlier finish-pass verification evidence (commit `4915e63`)
 
 | Check | Result |
 |---|---|
@@ -402,11 +410,102 @@ Phase 5 must not start by improvising these. Needed:
    asserted.
 4. **Exclusions and do-not-target rules** beyond the existing
    dispositions, if any.
-5. **Scope:** a single global profile (the natural default for this
-   single-tenant app) or per campaign/batch.
+5. **Scope:** one versioned global seller profile for this single-workspace
+   app, as agreed in Phase 2. Per-campaign scope is not an open decision.
 6. **Who contacts whom:** the target persona(s) or title(s). PDL has no
    contact fields, so outbound email needs a contact source too.
 
 Each answer becomes a new, versioned profile (`profile_version` bump).
 Scores under `demo-us-sectors-v1` stay as history and stop counting as
 current.
+
+## 13. Independent verification fixes (2026-09-22)
+
+Started from the actual `worktree-phase4-finish` branch at `4915e63`,
+which contained work beyond the supplied checkpoint. The checkout was
+clean. The requested filtering file passed all 9 tests before any edits;
+the unmodified full backend suite passed 272 tests, and the unmodified
+frontend suite passed 24. The existing exact rubric, shared latest-row
+selection, live readiness queries, CSV operation identity and crash
+recovery were retained.
+
+Additional failures reproduced before their fixes:
+
+- Navigation during approval left the next lead's Approve button disabled.
+  Navigation now resets action state; an old completion cannot clear or
+  replace the new lead's state.
+- All three batch actions could refresh the previous batch after
+  navigation. Action results, refreshes, errors and loading flags now
+  respect the navigation generation. A pending pre-push check also stops
+  if the user has navigated away.
+- A late history page could append after a fresh page-zero response and
+  omit a shifted record. Requests now have an identity within each lead,
+  so superseded requests cannot change the refreshed history.
+- Retry after a failed refresh used the visible item count as its offset.
+  It now retries the failed request's actual offset and replacement mode,
+  preserving loaded records while the error is displayed.
+- The batch scoring endpoint aborted on a chunk commit failure. It now
+  rolls back that chunk, counts its rows as failed and continues. The CLI's
+  rollback did not undo released savepoints under legacy SQLite transaction
+  handling; the shared service now establishes an outer transaction first.
+- Fit scoring wrote no workflow audit event and placed persistence in an
+  API router. Persistence now lives in `app/services/fit_scoring.py`, used
+  by the API and CLI, and each new score emits `lead_fit_scored` in the
+  same savepoint. The event links the score id, versions and fingerprint.
+  These events do not feed legacy operational counters or inflate distinct
+  fit-scored lead totals. Historical rows are not rewritten or backfilled.
+
+Rendered-page coverage also explicitly checks Reject's exact visible draft
+id before and after loading old history, and failed-page recovery in each
+history panel. The existing frontend CI workflow now runs `npm test`.
+No dependencies were added; migrations 0001–0006 and both scoring rubrics
+are byte-for-byte unchanged from the starting commit.
+
+**Actual local verification (all exit 0):**
+
+| Command / check | Result |
+|---|---|
+| `DATABASE_URL=sqlite:// .venv/bin/python -m pytest -q tests/test_leads_fit_sort_filter.py` (first requested check) | 9 passed |
+| Focused fit/scoring/CSV recovery/metrics files, `pytest -q` | 101 passed, a subset of the full suite |
+| `DATABASE_URL=sqlite:// .venv/bin/python -m pytest -q` | **276 passed**, one dependency deprecation warning; includes mock demo tests |
+| `npm test` | **31 passed** across four files; jsdom and React Testing Library |
+| `npm run typecheck` | passed |
+| `npm run build` | passed, 8/8 routes |
+| `git diff --check` | passed |
+| Diff of `backend/alembic/versions`, `app/scoring/fit.py`, and `app/scoring/lead_scoring.py` against `4915e63` | empty |
+
+Environment: isolated venv installed from the existing backend requirements;
+frontend installed with `npm ci` from the existing lockfile. Exit codes
+were returned by the commands directly, without a `tail` pipeline. The
+SQLite/Postgres and real-cohort results in §9/§6 belong to the earlier
+finish pass. **No Postgres test or real-data run was performed in this
+workspace.** The 101 focused tests are included in the 276 total, not added
+to it. The new regression checks failed against the starting implementation
+before their fixes. No full corpus scan was run.
+
+**Remaining real-data gate:** this workspace has neither the Codespace
+checkout/manifest nor its Postgres container; the documented local port is
+unavailable. No real cohort was downloaded, reconstructed, rescanned or
+mutated here. The earlier reported cohort remains 2,500 healthcare + 2,500
+real estate, uniformly 100 fit / 100% coverage, with no variation invented.
+Those prior results do not substitute for executing the final code against
+the real database.
+
+In the Codespace, with its existing `DATABASE_URL` and venv, take the usual
+backup and verify restoration before writing. Against the restored copy
+first, then the real database, capture each command's actual exit code:
+
+```bash
+PYTHONPATH=. python scripts/phase4_db_snapshot.py
+PYTHONPATH=. python -m app.scoring.cli --dry-run --rescore-unchanged --chunk-size 500
+PYTHONPATH=. python -m app.scoring.cli --chunk-size 500
+PYTHONPATH=. python scripts/phase4_verify_stored_fit.py
+PYTHONPATH=. python scripts/phase4_db_snapshot.py
+```
+
+Compare source table counts/digests and statuses before/after, confirm
+5,000 current scores and zero mismatches, and record segment counts,
+fit/coverage distributions and readiness/exclusion reasons from the dry
+run. An unchanged cohort should skip all 5,000 in the write run and add no
+scores or audit events. Confirm drafts/reviews/push counts remain zero.
+Keep Phase 4 open until this evidence is recorded. Phase 5 has not started.

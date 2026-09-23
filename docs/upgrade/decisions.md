@@ -108,13 +108,12 @@ decisions table above and `phase4-scoring-handoff.md`'s Part A.4); the
 content hash is still stored and still checked, now only to reject a
 resume attempt whose file content doesn't match the batch being resumed. All
 affected tests were rewritten, not just patched, since the underlying
-contract changed. The same checkpoint also asked for: a consistent tie-
-breaker on the "latest fit score" queries (added: `created_at DESC, id
-DESC`, matching this codebase's existing pagination convention), consistent
-`NULLS LAST` behavior in both sort directions on the leads list (fixed — the
-ascending sort previously put unscored leads first), and an explicit
-`readiness_is_current` flag distinguishing the batch bulk endpoint's stored
-readiness from the single-lead endpoints' always-fresh readiness (added).
+contract changed. The same checkpoint required consistent latest-score tie-breaks,
+unscored-last sorting, and a distinction between historical assessment and
+current readiness. The final implementation uses all four version fields
+and `created_at DESC, id DESC`, keeps unscored leads last in both sort
+directions, recomputes readiness on every endpoint, and returns the stored
+assessment separately as `at_scoring`.
 
 
 ## Phase 4 finish pass: re-checking the first completion claim
@@ -140,6 +139,21 @@ sort-direction item was already fixed in the checkpoint code; it is now
 also enforced dialect-independently (an explicit `IS NULL` sort key) and
 tested page by page on Postgres as well as SQLite.
 
+## Phase 4 independent verification fixes
+
+Starting branch: `worktree-phase4-finish`, commit `4915e63`. The rubric and
+migrations are preserved. Current evidence and the remaining real-database
+gate are in `phase4-scoring-handoff.md` §13.
+
+| Decision | Reason |
+|---|---|
+| Fit persistence is shared through `app/services/fit_scoring.py`; the CLI no longer imports an API router | Restores the implementation contract's service ownership of database writes. |
+| Each new fit row emits `lead_fit_scored` in the same savepoint | Restores the required audit trail. Dry runs and unchanged skips emit nothing; metrics count distinct leads, independently of audit history. Existing scores receive no invented retrospective events. |
+| Establish SQLite's outer transaction before score savepoints; count batch commit failures only after rollback | Reproduced a CLI chunk reported failed while its score rows survived rollback, and an API chunk failure that aborted the whole run. Tests now check stored rows and successful retry. |
+| Navigation invalidates old batch actions and resets lead action state; each history request also has an identity | Reproduced stale batch repaint, a stuck approval button, and a late history page overwriting refreshed history. Retry retains the failed request's exact offset. |
+| Frontend CI runs the existing interaction suite | Component behavior is an acceptance gate; typecheck/build alone cannot verify clicks or response ordering. No new dependency. |
+| Real-data re-verification is pending in the Codespace | This workspace can access the GitHub branch but not the persistent database. Previous recorded results remain attributed to their original run; Phase 4 is not declared complete on these new changes. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
@@ -153,7 +167,7 @@ Resolved since Phase 2 (moved out of this list): PDL curation criteria (fixed ru
 
 Still open, listed in the order they'll come up:
 
-1. **The seller/service profile itself (Phase 5's core input).** Phase 4 confirmed this is now the single hardest blocker: v2's `outbound_email` outreach-readiness gap `no_seller_profile_configured` fires on all 5,000 real leads and will fire on every future one until this exists, and the company-size scoring criterion has nothing to compare against without it. Needs: seller company name, one-paragraph value proposition, target-ICP description, bounded proof-point list, and a decision on single-global vs. per-campaign scope (single-global is the natural default given this app's single-tenant design — flag if the user wants otherwise).
+1. **The seller/service profile itself (Phase 5's core input).** Phase 4 confirmed this is now the single hardest blocker: v2's `outbound_email` outreach-readiness gap `no_seller_profile_configured` fires on all 5,000 real leads and will fire on every future one until this exists, and the company-size scoring criterion has nothing to compare against without it. Needs: seller company name, one-paragraph value proposition, target-ICP description, bounded proof-point list, and the already-agreed single global, versioned profile scope.
 2. **Training data source for Phases 6–9**, beyond "100-example pilot, human-annotated, possibly corrected from company facts" (confirmed in Phase 2). Still open: who performs the pilot annotation, and over what time frame, since it gates how much data exists by Phase 7/8. 5,000 real PDL leads (now with v2 fit scores) exist to draw candidates from, but the actual annotation workflow (Phase 6) still doesn't exist.
 3. **Concurrent-push idempotency mechanism for Phase 11** (D.3) — a DB-level unique constraint / row lock vs. an application-level idempotency key vs. a queue-based dedup once Phase 10's background jobs exist. Not decided; explicitly deferred per the user's instruction to keep delivery reliability in Phase 11.
 4. **Company-identity resolution/merge strategy for a future second PDL snapshot.** Phase 3 imported exactly one snapshot, so no two `Lead` rows have ever needed to be resolved to the same `CompanyIdentity`. The matching strategy (fuzzy name match? domain + locality heuristic? manual review queue?) is still undesigned — flagging now since it wasn't yet a live question with only one snapshot in the database, but will be the moment a second PDL pull happens.
@@ -197,7 +211,7 @@ Lead     (1) ──── (N) AIOutputReview
 
 - A `SellerProfile` (or similarly named) concept: company name, one-paragraph value proposition, target ICP description, and a short list of concrete proof points / capabilities the outreach is allowed to reference (mirroring the "evidence vs. inference" discipline already used for lead facts in `mock_client.py` and `prompts.py`'s `SYSTEM_RULES`).
 - This profile needs to be injected into `_build_lead_context` (`app/services/ai_generation.py:22-46`) alongside the existing lead facts, and the prompt rules in `app/ai/prompts.py` need updating so the model is told explicitly "here is what you're selling" rather than being asked to write outreach with nothing to pitch.
-- A decision on scope: is there one global seller profile (single-tenant, matches the rest of the app's current single-tenant design), or does this need to be per-batch/per-campaign? The current app has no multi-tenant concept anywhere (confirmed in the audit), so a single global profile is the natural default — flag if the user wants otherwise.
+- Scope is already agreed: one versioned seller profile for the single-workspace app. Phase 5 needs its actual content; per-batch/per-campaign configuration is not required.
 
 **Demonstration assumption (label, don't treat as a requirement):** for continuing to demo GTMFlow-as-the-product-being-sold, the existing hardcoded pitch is fine and doesn't need to change. The requirement above only applies once this tool is meant to generate outreach for an actual different seller's product — which is implied by pairing it with a real external company dataset (PDL) rather than only the synthetic demo CSV.
 
