@@ -1,10 +1,10 @@
 """Phase 4: read-only integrity snapshot of a database, printed as JSON.
 
 Used before and after the real-cohort scoring run to prove that scoring
-only ever adds `lead_fit_scores` rows: every other table's row count, the
-leads' status distribution, a fingerprint over the source-derived columns
-of leads / company identities / snapshots / batches, and the counts of
-drafts, reviews, pushes and workflow events (which must not move).
+adds only score rows and their matching audit events: capture source table
+counts and digests, lead/batch statuses, and draft/review/push counts, which
+must remain unchanged. Workflow events may grow by one `lead_fit_scored`
+event per newly written score. An unchanged-input rerun adds neither.
 
 Usage:
     DATABASE_URL=... python scripts/phase4_db_snapshot.py

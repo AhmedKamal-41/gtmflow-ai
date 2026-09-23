@@ -10,7 +10,8 @@ import BatchDetailPage from "./page";
  * never one request per lead.
  */
 
-vi.mock("next/navigation", () => ({ useParams: () => ({ batchId: "batch-1" }) }));
+const { useParamsMock } = vi.hoisted(() => ({ useParamsMock: vi.fn() }));
+vi.mock("next/navigation", () => ({ useParams: useParamsMock }));
 
 const fixtures = vi.hoisted(() => {
   const leads = ["a", "b", "c"].map((k) => ({
@@ -49,9 +50,9 @@ vi.mock("@/lib/api", async () => {
   const { leads, ready } = fixtures;
   return {
     ...actual,
-    getBatch: vi.fn(() =>
+    getBatch: vi.fn((id: string) =>
       Promise.resolve({
-        id: "batch-1", name: "Real cohort", source: "pdl", total_leads: 3,
+        id, name: id === "batch-1" ? "Real cohort" : "Other cohort", source: "pdl", total_leads: 3,
         processed_leads: 3, status: fixtures.batch.status, created_at: "2026-01-01T00:00:00Z",
       }),
     ),
@@ -106,6 +107,8 @@ vi.mock("@/lib/api", async () => {
     ),
     getLeadScore: vi.fn(() => Promise.reject(new Error("per-lead request not expected"))),
     getLeadFitScore: vi.fn(() => Promise.reject(new Error("per-lead request not expected"))),
+    scoreBatch: vi.fn(),
+    scoreBatchFit: vi.fn(),
     pushHotLeads: vi.fn(() => Promise.resolve({ pushed: 0, hot_leads_found: 0, skipped: 0, failed: 0 })),
   };
 });
@@ -113,9 +116,44 @@ vi.mock("@/lib/api", async () => {
 beforeEach(async () => {
   fixtures.batch.status = "uploaded";
   vi.clearAllMocks();
+  useParamsMock.mockReturnValue({ batchId: "batch-1" });
 });
 
 describe("BatchDetailPage", () => {
+  it.each([
+    ["scoreBatch", /score batch/i],
+    ["scoreBatchFit", /score company fit/i],
+    ["pushHotLeads", /push legacy-hot leads/i],
+  ] as const)("a late %s action cannot replace the newly selected batch", async (method, button) => {
+    const api = await import("@/lib/api");
+    let finish: () => void = () => {};
+    const response = {
+      batch_id: "batch-1", scored_leads: 3, hot: 0, warm: 0, cold: 3, average_score: 30,
+      attempted: 3, newly_scored: 3, skipped_unchanged: 0, failed: 0,
+      pushed: 0, hot_leads_found: 0, skipped: 0, blocked: 0, results: [],
+      summary: {
+        batch_id: "batch-1", total_leads: 3, scored_leads: 3, unscored_leads: 0,
+        score_rows: 3, strong_match: 3, partial_match: 0, weak_match: 0,
+        insufficient_evidence: 0, average_fit_score: 100,
+      },
+    };
+    // Only the action is held; the real page can finish loading batch 2.
+    vi.mocked(api[method]).mockImplementationOnce(() => new Promise<typeof response>((resolve) => {
+      finish = () => resolve(response);
+    }));
+    const { rerender } = render(<BatchDetailPage />);
+    await screen.findByRole("heading", { name: "Real cohort" });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: button })));
+    useParamsMock.mockReturnValue({ batchId: "batch-2" });
+    rerender(<BatchDetailPage />);
+    await screen.findByRole("heading", { name: "Other cohort" });
+    await act(async () => finish());
+    await waitFor(() => expect(screen.getByRole("button", { name: button })).toBeEnabled());
+    expect(screen.getByRole("heading", { name: "Other cohort" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Real cohort" })).not.toBeInTheDocument();
+    expect(api.getBatch).toHaveBeenLastCalledWith("batch-2");
+  });
+
   it("loads each kind of per-lead data with one bounded request, never one per lead", async () => {
     const api = await import("@/lib/api");
     render(<BatchDetailPage />);

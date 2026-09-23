@@ -29,6 +29,48 @@ function pageOf(all: Item[], limit: number, offset: number): Page<Item> {
 }
 
 describe("usePaginatedHistory", () => {
+  it("ignores an older page that arrives after a refresh", async () => {
+    const all = makeItems(120);
+    let finishPage: (page: Page<Item>) => void = () => {};
+    const fetcher = vi.fn((_key: string, limit: number, offset: number) => {
+      if (offset === 50) {
+        return new Promise<Page<Item>>((resolve) => { finishPage = resolve; });
+      }
+      return Promise.resolve(pageOf(all, limit, offset));
+    });
+    const { result } = renderHook(() => usePaginatedHistory("lead-1", fetcher));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => result.current.loadMore());
+    const oldPage = pageOf(all, 50, 50);
+    all.unshift({ id: "new-output" });
+    await act(async () => result.current.refresh());
+    await waitFor(() => expect(result.current.items[0].id).toBe("new-output"));
+    await act(async () => finishPage(oldPage));
+    expect(result.current.items).toEqual(all.slice(0, 50));
+    expect(result.current.total).toBe(121);
+    expect(result.current.loadingMore).toBe(false);
+  });
+
+  it("retries a failed refresh at page zero while preserving visible history", async () => {
+    const all = makeItems(120);
+    const fetcher = vi.fn((_key: string, limit: number, offset: number) =>
+      Promise.resolve(pageOf(all, limit, offset)),
+    );
+    const { result } = renderHook(() => usePaginatedHistory("lead-1", fetcher));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => result.current.loadMore());
+    expect(result.current.items).toHaveLength(100);
+    fetcher.mockRejectedValueOnce(new Error("refresh failed"));
+    await act(async () => result.current.refresh());
+    expect(result.current.items).toHaveLength(100);
+    expect(result.current.error).toBe("refresh failed");
+    all.unshift({ id: "new-output" });
+    await act(async () => result.current.reload());
+    expect(fetcher).toHaveBeenLastCalledWith("lead-1", 50, 0);
+    expect(result.current.items).toEqual(all.slice(0, 50));
+    expect(result.current.error).toBeNull();
+  });
+
   it("walks past 200 entries across multiple load-more calls", async () => {
     const all = makeItems(250);
     const fetcher = vi.fn((_key: string, limit: number, offset: number) =>

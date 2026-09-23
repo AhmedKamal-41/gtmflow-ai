@@ -2,13 +2,13 @@
 deterministic company-fit scorer (app/scoring/fit.py), in bounded batches.
 
 Reuses the EXACT same compute+persist path as the fit-score API
-(app.api.fit_scoring.score_leads) -- a lead scored via this CLI and one
+(app.services.fit_scoring.score_leads) -- a lead scored via this CLI and one
 scored via the API are indistinguishable, same versions, same storage. No
 new download, no re-scan of the original source corpus (only
 already-imported `Lead` rows are read), no LLM calls, no Slack sends. A
 lead's `Lead.status` / its batch's `LeadBatch.status` are never touched (see
 fit.py / fit_scoring.py's Part D.3 invariant) -- this command inserts
-`LeadFitScore` rows only.
+`LeadFitScore` rows and their audit events only.
 
 Usage:
     python -m app.scoring.cli [--dry-run] [--chunk-size N] [--limit N]
@@ -37,7 +37,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.api.fit_scoring import score_leads
+from app.services.fit_scoring import score_leads
 from app.core.database import get_sessionmaker
 from app.models import Lead
 from app.schemas.lead_fit_score import LeadFitScoreResponse
