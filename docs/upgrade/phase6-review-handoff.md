@@ -570,3 +570,41 @@ No ratings, acceptances, operational approvals, Slack messages or training were 
 - **usable: 4** (3 accepted + 1 corrected) from **3 unique companies**; **skipped: 1**.
 
 Split assignments are unchanged (5,000; manifest verifies with 0 mismatches). No annotations, approvals, messages or training were done by the operator.
+
+### Session 2026-09-24 (authorization 3: #19 investigation, all remaining candidates generated)
+
+**Investigation of #19** (`schema_invalid at seller_relevance`, `string_type`):
+- The prompt contract (`SUMMARY_SCHEMA`: `"seller_relevance": "string or null (null when seller is null)"`) and the validator (`seller_relevance: str | None`, max 800) **agree**. An over-long string would have produced `string_too_long`, not `string_type`.
+- Stored summaries generated with an active seller contain only `null` (4) or strings (4, 170–266 characters).
+- The request uses `response_format={"type": "json_object"}`, which guarantees JSON syntax but not field types.
+- **Conclusion: an invalid model response, not a code defect.** Validation strictness, `PROMPT_VERSION` (`grounded-v2`) and the output schema (`v2`) are unchanged.
+- **Diagnostic improvement (commit `ed41047`):** schema-error details now include `received_type` (null / boolean / number / string / array / object, or `absent` for a missing field). The value is never included. 6 new tests; **401 backend tests pass (exit 0)**.
+
+**Authorization 3:** at most 100 paid attempts, retries included. One retry per candidate after an isolated validation failure; #19 gets exactly one more attempt. Stop on authentication/billing errors, three consecutive unresolved candidates, or cap exhaustion. The script also stops, conservatively, on any other non-validation error.
+
+**Results:** all remaining **82 candidates generated** (#19–#100) in 9 batches of up to 10 candidates. **No stop condition was hit; 0 unresolved candidates.**
+
+| Candidate | Attempt 1 (confirmed detail) | Attempt 2 |
+|---|---|---|
+| #19 iron wolf ventures · Summary (its one additional attempt) | Generated | — |
+| #49 garza wellness care center, llc · Summary | `schema_invalid at seller_relevance (string_type)`, **received object** | Generated |
+| #55 white knight realty llc · Summary | `unknown_fact_reference at evidence[5].fact_id = 'fact-linkedin_url'` (the allowed id is `fact-extra-linkedin_url`) | Generated |
+| #83 better agent · Summary | `unknown_fact_reference at evidence[7].fact_id = 'fact-locality'` (the allowed id is `fact-extra-locality`) | Generated |
+
+**Confirmed pattern:** both reference failures in this run were the model dropping the `extra-` prefix from free-text fact ids. #13's first failure (before details were recorded) may have been the same, but that remains **unconfirmed**. A clearer fact-id convention in the context or prompt would likely reduce these failures. That would be a versioned prompt/context change (a new `PROMPT_VERSION` / context version). It was deliberately **not** made mid-pilot, so all 100 pilot outputs share one prompt version.
+
+**Attempts:** 85 of 100 used (82 first-attempt successes + 3 validation failures, each followed by a successful retry). **15 unused.** Nothing is left to generate.
+
+**Usage and cost:**
+- **Recorded, authorization 3 (85 calls, API-reported):** 148,229 prompt + 27,621 completion tokens, **about $0.039 calculated from recorded counts** at $0.15 / $0.60 per million.
+- **Recorded, all 100 calls with usage:** 174,249 prompt + 32,330 completion tokens, about $0.046.
+- **Estimate for the 5 earliest calls** (no usage recorded): about $0.002.
+- **Pilot generation total: 105 paid calls, about $0.048** ($0.046 calculated from recorded counts + about $0.002 estimated). This is not an invoice figure.
+
+**Final counts:**
+- **100 of 100 generated** (all real `gpt-4o-mini`, 0 mock); 5 validation rejections in total across the pilot, none saved.
+- **Usable: 4** (3 accepted + 1 corrected) from 3 unique companies; **skipped: 1**; **pending your review: 95** (#6–#100).
+
+Split assignments are unchanged (5,000; the manifest verifies with 0 mismatches and 0 groups spanning splits). There were 0 operational reviews, 0 pushes, no annotations by the operator, no messages and no training.
+
+**Remaining work in Phase 6:** your review of the 95 pending candidates (#6–#100) in `/annotation`, and then the export.
