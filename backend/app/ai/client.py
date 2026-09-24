@@ -29,6 +29,10 @@ class AIClient(ABC):
     # this is the specific revision within that provider, e.g. a real model
     # string or a versioned mock-generator tag.
     model_revision: str = "unknown"
+    # Token usage the provider reported for the most recent call, or None
+    # (the mock makes no call). Recorded on the generation's audit event so
+    # paid usage is known exactly rather than estimated.
+    last_usage: dict[str, Any] | None = None
 
     @abstractmethod
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:
@@ -70,6 +74,7 @@ class OpenAIClient(AIClient):
                 "Real OpenAI mode requires the `openai` package. "
                 "Install it (`pip install openai`) or set USE_MOCK_AI=true."
             ) from e
+        self.last_usage = None
         try:
             client = OpenAI(api_key=self._api_key)
             response = client.chat.completions.create(
@@ -90,6 +95,14 @@ class OpenAIClient(AIClient):
             raise AIProviderError(
                 f"AI provider request failed ({type(e).__name__})."
             ) from None
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            self.last_usage = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None),
+                "response_model": getattr(response, "model", None),
+            }
         return response.choices[0].message.content or ""
 
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:

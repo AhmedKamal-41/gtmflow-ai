@@ -449,7 +449,11 @@ def test_real_client_output_passes_through_the_same_validation(client, db_sessio
                 "confidence": "low",
             }
             message = types.SimpleNamespace(content=json.dumps(reply))
-            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+            return types.SimpleNamespace(
+                choices=[types.SimpleNamespace(message=message)],
+                model="gpt-test-2026",
+                usage=types.SimpleNamespace(prompt_tokens=1500, completion_tokens=300, total_tokens=1800),
+            )
 
     class FakeOpenAI:
         def __init__(self, api_key):
@@ -463,6 +467,50 @@ def test_real_client_output_passes_through_the_same_validation(client, db_sessio
     assert response.json()["model_revision"] == "gpt-test"
     assert "<untrusted_data>" in captured["prompt"]
     assert "Synthetic Seller Co" in captured["prompt"]
+    # Provider-reported usage is recorded on the audit event (exact, not estimated).
+    event = db_session.scalars(
+        select(WorkflowEvent).where(WorkflowEvent.event_type == "outreach_generated")
+    ).one()
+    assert event.event_data["usage"] == {
+        "prompt_tokens": 1500, "completion_tokens": 300, "total_tokens": 1800,
+        "response_model": "gpt-test-2026",
+    }
+
+
+def test_rejected_real_reply_still_records_its_billed_usage(client, db_session, monkeypatch):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    lead = upload(client)
+
+    class Completions:
+        def create(self, **kwargs):
+            message = types.SimpleNamespace(content=json.dumps({"subject": "missing fields"}))
+            return types.SimpleNamespace(
+                choices=[types.SimpleNamespace(message=message)], model="gpt-test-2026",
+                usage=types.SimpleNamespace(prompt_tokens=1400, completion_tokens=20, total_tokens=1420),
+            )
+
+    class FakeOpenAI:
+        def __init__(self, api_key):
+            self.chat = types.SimpleNamespace(completions=Completions())
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr(ai_generation, "get_ai_client", lambda: OpenAIClient(api_key="k", model="gpt-test"))
+    response = client.post(f"/api/leads/{lead['id']}/generate-outreach")
+    assert response.status_code == 502
+    assert count(db_session, AIOutput) == 0
+    rejected = db_session.scalars(
+        select(WorkflowEvent).where(WorkflowEvent.event_type == "ai_generation_rejected")
+    ).one()
+    assert rejected.event_data["usage"]["total_tokens"] == 1420
+
+
+def test_mock_generation_records_no_usage(client, db_session):
+    lead = upload(client)
+    client.post(f"/api/leads/{lead['id']}/generate-summary")
+    event = db_session.scalars(
+        select(WorkflowEvent).where(WorkflowEvent.event_type == "ai_summary_generated")
+    ).one()
+    assert event.event_data["usage"] is None
 
 
 # ------------------------------------------------ side-effect boundaries

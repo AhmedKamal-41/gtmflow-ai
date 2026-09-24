@@ -58,8 +58,10 @@ class SellerProfileRequired(RuntimeError):
 
 
 class GenerationOutputInvalid(RuntimeError):
-    def __init__(self, reason_codes: list[str]) -> None:
+    def __init__(self, reason_codes: list[str], usage: dict[str, Any] | None = None) -> None:
         self.reason_codes = reason_codes
+        # Provider-reported usage of the rejected (but still billed) call.
+        self.usage = usage
         super().__init__(
             "The AI output failed validation ("
             + ", ".join(reason_codes)
@@ -224,7 +226,11 @@ def _generate(
 ) -> AIOutput:
     client = client if client is not None else get_ai_client()
     ctx = _build_context(session, lead, output_type, seller)
-    content = _run(client, output_type, ctx)
+    try:
+        content = _run(client, output_type, ctx)
+    except GenerationOutputInvalid as error:
+        error.usage = client.last_usage
+        raise
     input_hash = _hash_input(ctx)
 
     output = AIOutput(
@@ -264,6 +270,7 @@ def _generate(
                 "seller_profile_version": seller.version if seller else None,
                 "seller_profile_content_hash": seller.content_hash if seller else None,
                 "confidence": content.get("confidence"),
+                "usage": client.last_usage,
             },
         )
     )
@@ -300,6 +307,7 @@ def record_generation_rejected(
     lead_id: UUID,
     output_type: str,
     reason_codes: list[str],
+    usage: dict[str, Any] | None = None,
 ) -> None:
     """Audit a rejected generation without saving any of its content."""
     session.add(
@@ -309,6 +317,7 @@ def record_generation_rejected(
             event_data={
                 "output_type": output_type,
                 "reason_codes": reason_codes,
+                "usage": usage,
                 "prompt_version": PROMPT_VERSION,
                 "output_schema_version": OUTPUT_SCHEMA_VERSION,
             },
