@@ -7,6 +7,7 @@ import {
   getAnnotationCandidate,
   getAnnotationCandidates,
   getAnnotationProvider,
+  getAnnotationQueues,
   getAnnotationSummary,
   submitAnnotation,
 } from "@/lib/api";
@@ -23,6 +24,7 @@ import AnnotationPage from "./page";
 vi.mock("@/lib/api", async () => ({
   ...await vi.importActual<typeof import("@/lib/api")>("@/lib/api"),
   getAnnotationSummary: vi.fn(),
+  getAnnotationQueues: vi.fn(),
   getAnnotationProvider: vi.fn(),
   getAnnotationCandidates: vi.fn(),
   getAnnotationCandidate: vi.fn(),
@@ -95,6 +97,7 @@ beforeEach(() => {
   vi.mocked(getAnnotationCandidate).mockImplementation((id: string) =>
     Promise.resolve(detail(id, id === "c2" ? { task: "outreach_email" } : {})));
   vi.mocked(submitAnnotation).mockResolvedValue({} as never);
+  vi.mocked(getAnnotationQueues).mockResolvedValue([{ queue: "pilot-v1", split: "train", candidates: 100, generated: 2 }]);
 });
 
 async function open(name: RegExp) {
@@ -293,5 +296,63 @@ describe("pending state after a submission (regression: stuck loading after save
     expect(screen.getByLabelText("Factual support")).toBeEnabled();
     expect(screen.getByLabelText("Factual support")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Write a correction" })).toBeEnabled();
+  });
+});
+
+describe("Phase 7 queue selector", () => {
+  const queues = [
+    { queue: "pilot-v1", split: "train", candidates: 100, generated: 100 },
+    { queue: "validation-v1", split: "validation", candidates: 100, generated: 0 },
+    { queue: "test-v1", split: "test", candidates: 100, generated: 0 },
+  ];
+
+  function summaryFor(queue: string, split: string) {
+    return {
+      queue, manifest_version: "company-groups-v1", candidates: 100, unique_companies: 50,
+      generated: 0, awaiting_generation: 100, pending_review: 0, reviewed_examples: 0,
+      reviewed_unique_companies: 0, accepted: 0, corrected: 0, skipped: 0, mock_candidates: 0,
+      by_task: {}, by_split: { [split]: 100 }, experiment_targets: { train: 400, validation: 100, test: 100 },
+    };
+  }
+
+  it("hides the selector when only the pilot queue exists", async () => {
+    vi.mocked(getAnnotationQueues).mockResolvedValue([queues[0]]);
+    render(<AnnotationPage />);
+    await screen.findByRole("button", { name: /#1 Company c1/ });
+    expect(screen.queryByLabelText("Annotation queue")).toBeNull();
+    expect(getAnnotationCandidates).toHaveBeenCalledWith("pilot-v1", expect.anything());
+  });
+
+  it("switches queue, clears the selected candidate and labels held-out splits", async () => {
+    vi.mocked(getAnnotationQueues).mockResolvedValue(queues);
+    vi.mocked(getAnnotationCandidates).mockImplementation((queue: string) => Promise.resolve({
+      items: (queue === "pilot-v1" ? [summaryRow("c1", 1)] : [{ ...summaryRow("v1", 1), queue, split: "validation" }]) as never,
+      total: 1, limit: 50, offset: 0, has_more: false,
+    }));
+    vi.mocked(getAnnotationSummary).mockImplementation((queue: string) =>
+      Promise.resolve(queue === "pilot-v1" ? summaryFor(queue, "train") : summaryFor(queue, "validation")));
+    await open(/#1 Company c1/);
+    expect(await screen.findByText("The imported record lists Acme Dental.", { exact: false })).toBeTruthy();
+
+    fireEvent.change(await screen.findByLabelText("Annotation queue"), { target: { value: "validation-v1" } });
+    expect(await screen.findByRole("button", { name: /#1 Company v1/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /#1 Company c1/ })).toBeNull();
+    expect(screen.getByText("Select a candidate to review it.")).toBeTruthy();
+    expect(screen.getByText(/held out, never used for training/)).toBeTruthy();
+    expect(await screen.findByLabelText("Pilot progress")).toHaveTextContent("0 of 100 validation-v1 examples human-reviewed");
+    expect(getAnnotationSummary).toHaveBeenLastCalledWith("validation-v1");
+  });
+
+  it("discards a slow summary for a queue the reviewer already left", async () => {
+    vi.mocked(getAnnotationQueues).mockResolvedValue(queues);
+    const slowPilot = deferred<ReturnType<typeof summaryFor>>();
+    vi.mocked(getAnnotationSummary).mockImplementation((queue: string) =>
+      queue === "pilot-v1" ? slowPilot.promise : Promise.resolve(summaryFor(queue, "test")));
+    render(<AnnotationPage />);
+    fireEvent.change(await screen.findByLabelText("Annotation queue"), { target: { value: "test-v1" } });
+    expect(await screen.findByLabelText("Pilot progress")).toHaveTextContent("test-v1 examples");
+    await act(async () => { slowPilot.resolve(summaryFor("pilot-v1", "train")); });
+    expect(screen.getByLabelText("Pilot progress")).toHaveTextContent("test-v1 examples");
+    expect(screen.getByLabelText("Pilot progress")).not.toHaveTextContent("pilot examples");
   });
 });

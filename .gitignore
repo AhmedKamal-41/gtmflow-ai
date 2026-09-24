@@ -35,3 +35,4 @@ Thumbs.db
 
 frontend/tsconfig.tsbuildinfo
 backend/.backups/
+backend/data/datasets/

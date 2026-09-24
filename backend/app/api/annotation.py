@@ -22,6 +22,7 @@ from app.schemas.annotation import (
     CandidateSummary,
     GenerateCandidateRequest,
     ProviderInfo,
+    QueueInfo,
     TrainingAnnotationRead,
 )
 from app.schemas.pagination import Page
@@ -63,6 +64,19 @@ def _summary(candidate: AnnotationCandidate, latest, output: AIOutput | None) ->
 @router.get("/provider", response_model=ProviderInfo)
 def get_provider() -> ProviderInfo:
     return ProviderInfo(**configured_provider())
+
+
+@router.get("/queues", response_model=list[QueueInfo])
+def list_queues(session: Session = Depends(get_session)) -> list[QueueInfo]:
+    """Every annotation queue with its (single) frozen split, pilot first."""
+    rows = session.execute(
+        select(AnnotationCandidate.queue, AnnotationCandidate.split, func.count(),
+               func.count(AnnotationCandidate.source_output_id))
+        .group_by(AnnotationCandidate.queue, AnnotationCandidate.split)
+    ).all()
+    order = {"train": 0, "validation": 1, "test": 2}
+    return [QueueInfo(queue=q, split=s, candidates=n, generated=g)
+            for q, s, n, g in sorted(rows, key=lambda r: (order.get(r[1], 9), r[0]))]
 
 
 @router.get("/queues/{queue}/summary", response_model=AnnotationSummary)

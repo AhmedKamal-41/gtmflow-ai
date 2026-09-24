@@ -264,10 +264,35 @@ def create_pilot_queue(
     queue: str = PILOT_QUEUE,
     max_examples: int = PILOT_MAX_EXAMPLES,
 ) -> list[AnnotationCandidate]:
-    """Reserve up to `max_examples` (company, task) candidates from
-    TRAINING groups only: one company per group, both tasks per company,
-    segments alternated, groups ordered by a seeded hash. Leads currently
-    excluded from routing are skipped. Refuses to rebuild an existing queue."""
+    """The Phase 6 pilot: TRAINING groups only, with the pilot seed."""
+    return create_queue(session, version=version, queue=queue, split=SPLIT_TRAIN,
+                        seed=PILOT_SEED, max_examples=max_examples)
+
+
+# Phase 7 held-out queues: each drawn only from its own frozen split, with
+# its own seed, so reviewed held-out companies never overlap training.
+EVAL_QUEUES = {
+    SPLIT_VALIDATION: ("validation-v1", "gtmflow-phase7-validation-2026-09-24"),
+    SPLIT_TEST: ("test-v1", "gtmflow-phase7-test-2026-09-24"),
+}
+
+
+def create_queue(
+    session: Session,
+    *,
+    version: str = MANIFEST_VERSION,
+    queue: str,
+    split: str,
+    seed: str,
+    max_examples: int = PILOT_MAX_EXAMPLES,
+) -> list[AnnotationCandidate]:
+    """Reserve up to `max_examples` (company, task) candidates from one
+    frozen split: one company per group, both tasks per company, segments
+    alternated, groups ordered by a seeded hash. Leads currently excluded
+    from routing are skipped. Never reassigns a split; refuses to rebuild an
+    existing queue."""
+    if split not in (SPLIT_TRAIN, SPLIT_VALIDATION, SPLIT_TEST):
+        raise ManifestError(f"Unknown split '{split}'.")
     if session.get(SplitManifest, version) is None:
         raise ManifestError(f"Split manifest '{version}' does not exist. Freeze it first.")
     if session.scalar(select(AnnotationCandidate.id).where(AnnotationCandidate.queue == queue).limit(1)):
@@ -277,14 +302,14 @@ def create_pilot_queue(
     assignments = session.execute(
         select(CompanySplitAssignment, Lead)
         .join(Lead, Lead.id == CompanySplitAssignment.lead_id)
-        .where(CompanySplitAssignment.manifest_version == version, CompanySplitAssignment.split == SPLIT_TRAIN)
+        .where(CompanySplitAssignment.manifest_version == version, CompanySplitAssignment.split == split)
     ).all()
     by_group: dict[str, list[Lead]] = defaultdict(list)
     for assignment, lead in assignments:
         by_group[assignment.group_key].append(lead)
 
     def order(key: str) -> str:
-        return hashlib.sha256(f"{PILOT_SEED}:{key}".encode()).hexdigest()
+        return hashlib.sha256(f"{seed}:{key}".encode()).hexdigest()
 
     by_segment: dict[str, list[tuple[str, Lead]]] = defaultdict(list)
     for group_key in sorted(by_group, key=order):
@@ -311,13 +336,13 @@ def create_pilot_queue(
             position += 1
             rows.append(AnnotationCandidate(
                 queue=queue, position=position, manifest_version=version, lead_id=lead.id,
-                group_key=group_key, split=SPLIT_TRAIN, task=task,
+                group_key=group_key, split=split, task=task,
             ))
     session.add_all(rows)
     session.flush()
     session.add(WorkflowEvent(event_type="annotation_queue_created", event_data={
-        "queue": queue, "manifest_version": version, "examples": len(rows),
-        "unique_companies": len(picked), "pilot_seed": PILOT_SEED,
+        "queue": queue, "manifest_version": version, "split": split, "examples": len(rows),
+        "unique_companies": len(picked), "pilot_seed" if split == SPLIT_TRAIN else "seed": seed,
     }))
     return rows
 

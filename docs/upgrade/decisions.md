@@ -219,6 +219,21 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Human and AI totals are reported separately everywhere | Human: 6 reviewed (3 accepted, 2 corrected, 1 skipped). AI: 94 reviewed (30 accepted, 64 corrected, 0 skipped). They are never summed as "reviewed" without the source. |
 | Phase 7 must merge both exports with `review_source` preserved and decide on weighting or deduplication of the templated outreach targets | The 47 corrected outreach targets share one structure; treating them as 47 independent writing examples would overstate diversity. |
 
+## Decisions made in Phase 7 (dataset and baseline evaluation, 2026-09-24)
+
+| Decision | Reason / status |
+|---|---|
+| The user accepted the mixed human/AI pilot (6 human + 94 AI reviews) in place of 100 human reviews | A recorded scope change. The original requirement stays recorded as not met, and most training targets are AI-reviewed (5 of 73 eligible are human-verified). |
+| One export format, `gtmflow-sft-v1`, with `review_source`, `human_verified` and the full provenance on every row | Human and AI targets can be filtered or weighted separately later. Originals, corrections, ids, input hashes, seller revisions and prompt/schema/model versions are preserved. |
+| The latest human decision takes precedence; skipped and stale human decisions are excluded; AI rows must match the stored output and input hashes | Human judgment is never overridden by an AI row, and a stale or mismatched AI row can't reach the dataset. |
+| The 26 uncertain AI-reviewed examples go to a separate `flagged-uncertain.jsonl`, excluded from `eligible.jsonl` until a human resolves them | They question the source record, not the output. No company fact is repaired. A confirmed-plausible record moves in; a wrong record is dropped, not rewritten (training on facts absent from the input would teach invention). |
+| Dedup policy `structure-cap-v1`: drop exact duplicates (same target hash, or same task and input hash); weight repeated structures by `min(1, 5 / group size)` | Measured on the pilot: 0 exact duplicates; one outreach template covers 32 examples. Weighting avoids inflating diversity without deleting, copying or inventing examples. Counts and effective counts are reported side by side. |
+| Pilot examples stay in train; held-out queues `validation-v1` and `test-v1` are drawn only from their own frozen splits with their own seeds | `company-groups-v1` is not reassigned. The leakage check verifies every example against the manifest, groups spanning splits, and train groups appearing in held-out queues. |
+| Seller provenance is all-or-none and must match the stored output | Pilot #1 was generated before a seller profile was active. It legitimately has no seller fields and no seller block in its input, so it is not a provenance error. |
+| Evaluation metrics `baseline-metrics-v1`: validator pass, rubric lints, exact match, token F1, ROUGE-L; results are labeled in-sample or held-out by split | Deterministic and free to rerun. In-sample numbers are descriptive only. Reference metrics are anchored on the reviewed outputs, a known bias. |
+| The test suite forces the mock provider, no key and no webhook, and refuses to run otherwise | After 2 unintended real calls (about $0.0008) when pytest loaded the developer `.env` (commit `9fda368`). |
+| Derived datasets are git-ignored under `backend/data/datasets/`; the manifest records file hashes | They embed PDL input snapshots. The build is reproducible: a second build gave a byte-identical manifest. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).

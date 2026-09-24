@@ -16,17 +16,24 @@ import {
   getAnnotationCandidate,
   getAnnotationCandidates,
   getAnnotationProvider,
+  getAnnotationQueues,
   getAnnotationSummary,
   submitAnnotation,
 } from "@/lib/api";
 import type {
   AnnotationCandidateDetail,
   AnnotationProvider,
+  AnnotationQueue,
   AnnotationSubmit,
   AnnotationSummary,
 } from "@/types/api";
 
 const PILOT_QUEUE = "pilot-v1";
+const SPLIT_NOTE: Record<string, string> = {
+  train: "training split",
+  validation: "validation split · held out, never used for training",
+  test: "test split · held out, never used for training or tuning",
+};
 const inputClass = "mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -68,24 +75,46 @@ export default function AnnotationPage() {
   const [provider, setProvider] = useState<AnnotationProvider | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const queue = usePaginatedHistory(PILOT_QUEUE, (key, limit, offset) =>
+  const [queues, setQueues] = useState<AnnotationQueue[]>([]);
+  const [queueName, setQueueName] = useState(PILOT_QUEUE);
+  // The queue whose summary may be applied; a slower response for a queue
+  // the reviewer already switched away from is discarded.
+  const currentQueue = useRef(queueName);
+  currentQueue.current = queueName;
+  const queue = usePaginatedHistory(queueName, (key, limit, offset) =>
     getAnnotationCandidates(key, { limit, offset }),
   );
+  const split = queues.find((q) => q.queue === queueName)?.split ?? (queueName === PILOT_QUEUE ? "train" : "");
 
   const loadSummary = useCallback(async () => {
+    const requested = queueName;
     try {
-      const [s, p] = await Promise.all([getAnnotationSummary(PILOT_QUEUE), getAnnotationProvider()]);
+      const [s, p] = await Promise.all([getAnnotationSummary(requested), getAnnotationProvider()]);
+      if (currentQueue.current !== requested) return;
       setSummary(s);
       setProvider(p);
       setPageError(null);
     } catch (e) {
+      if (currentQueue.current !== requested) return;
       setPageError(errorText(e, "Could not load the annotation queue."));
     }
-  }, []);
+  }, [queueName]);
 
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  useEffect(() => {
+    getAnnotationQueues().then(setQueues).catch(() => setQueues([]));
+  }, []);
+
+  const switchQueue = (next: string) => {
+    if (next === queueName) return;
+    setSelectedId(null);
+    setSummary(null);
+    setPageError(null);
+    setQueueName(next);
+  };
 
   const afterChange = useCallback(() => {
     void loadSummary();
@@ -107,10 +136,26 @@ export default function AnnotationPage() {
       )}
       {summary && <SummaryBar summary={summary} provider={provider} />}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-        <Card title="Queue" subtitle={`${PILOT_QUEUE} · training split only`}>
+        <Card title="Queue" subtitle={`${queueName}${split ? ` · ${SPLIT_NOTE[split] ?? `${split} split`}` : ""}`}>
+          {queues.length > 1 && (
+            <label className="mb-3 block text-sm text-slate-700">
+              Annotation queue
+              <select
+                className={inputClass}
+                value={queueName}
+                onChange={(e) => switchQueue(e.target.value)}
+              >
+                {queues.map((q) => (
+                  <option key={q.queue} value={q.queue}>
+                    {q.queue} ({q.split}, {q.generated}/{q.candidates} generated)
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {queue.loading && <LoadingState text="Loading candidates…" />}
           {!queue.loading && queue.items.length === 0 && !queue.error && (
-            <p className="text-sm text-slate-500">No candidates. Create the pilot queue with the CLI (see the Phase 6 handoff).</p>
+            <p className="text-sm text-slate-500">No candidates. Create the queue with the CLI (see the Phase 6/7 handoffs).</p>
           )}
           <ul className="space-y-1" aria-label="Annotation candidates">
             {queue.items.map((c) => (
@@ -154,12 +199,14 @@ function SummaryBar({ summary, provider }: { summary: AnnotationSummary; provide
     <Card>
       <div aria-label="Pilot progress" className="space-y-1 text-sm text-slate-700">
         <p>
-          <strong>{summary.reviewed_examples}</strong> of {summary.candidates} pilot examples human-reviewed
+          <strong>{summary.reviewed_examples}</strong> of {summary.candidates}{" "}
+          {summary.queue === PILOT_QUEUE ? "pilot" : summary.queue} examples human-reviewed
           ({summary.reviewed_unique_companies} unique companies) · {summary.skipped} skipped ·{" "}
           {summary.pending_review} pending review · {summary.awaiting_generation} awaiting generation.
         </p>
         <p className="text-xs text-slate-500">
-          {summary.candidates} candidates from {summary.unique_companies} training companies
+          {summary.candidates} candidates from {summary.unique_companies}{" "}
+          {Object.keys(summary.by_split).join("/") || "training"} companies
           {summary.manifest_version ? ` (manifest ${summary.manifest_version})` : ""}. Experiment target:{" "}
           {summary.experiment_targets.train} train / {summary.experiment_targets.validation} validation /{" "}
           {summary.experiment_targets.test} test examples. {summary.mock_candidates} candidates were generated by the mock provider.

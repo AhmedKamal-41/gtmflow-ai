@@ -517,6 +517,13 @@ export type AnnotationSubmit = {
   timing?: ReviewTiming;
 };
 
+export type AnnotationQueue = {
+  queue: string;
+  split: string;
+  candidates: number;
+  generated: number;
+};
+
 export type AnnotationProvider = {
   configured_provider: string;
   model_revision: string | null;

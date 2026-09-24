@@ -134,6 +134,13 @@ class CandidateDetail(CandidateSummary):
     annotation_count: int
 
 
+class QueueInfo(BaseModel):
+    queue: str
+    split: str
+    candidates: int
+    generated: int
+
+
 class ProviderInfo(BaseModel):
     configured_provider: str
     model_revision: str | None

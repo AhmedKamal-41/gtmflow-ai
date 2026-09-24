@@ -27,6 +27,7 @@ import type {
   AnnotationCandidateDetail,
   AnnotationCandidateSummary,
   AnnotationProvider,
+  AnnotationQueue,
   AnnotationSubmit,
   AnnotationSummary,
   TrainingAnnotation,
@@ -331,6 +332,10 @@ export function reviseOutput(
 
 export function getAnnotationProvider(): Promise<AnnotationProvider> {
   return request<AnnotationProvider>("/api/annotation/provider");
+}
+
+export function getAnnotationQueues(): Promise<AnnotationQueue[]> {
+  return request<AnnotationQueue[]>("/api/annotation/queues");
 }
 
 export function getAnnotationSummary(queue: string): Promise<AnnotationSummary> {
