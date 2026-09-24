@@ -145,7 +145,7 @@ def post_generate_candidate(
         raise HTTPException(status_code=502, detail=f"{error} No output was saved.") from None
     except GenerationOutputInvalid as error:
         session.rollback()
-        record_generation_rejected(session, candidate.lead_id, candidate.task, error.reason_codes, error.usage)
+        record_generation_rejected(session, candidate.lead_id, candidate.task, error.reason_codes, error.usage, error.details)
         session.commit()
         raise HTTPException(status_code=502, detail=str(error)) from None
     session.commit()

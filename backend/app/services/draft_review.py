@@ -29,7 +29,12 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.hashing import content_hash  # noqa: F401 -- re-exported
-from app.ai.grounding import AIOutputValidationError, validate_outreach, validate_summary
+from app.ai.grounding import (
+    AIOutputValidationError,
+    describe_details,
+    validate_outreach,
+    validate_summary,
+)
 from app.models import AIOutput, AIOutputReview, Lead, WorkflowEvent
 from app.models.ai_output import ORIGIN_HUMAN_EDITED, PURPOSE_OPERATIONAL
 from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
@@ -326,7 +331,12 @@ def create_revision(
         validated = validate(content, output.input_snapshot)
     except AIOutputValidationError as error:
         raise ReviewError(
-            422, "The edited content failed validation (" + ", ".join(error.reason_codes) + "). Nothing was saved."
+            422,
+            "The edited content failed validation ("
+            + ", ".join(error.reason_codes)
+            + "): "
+            + describe_details(error.details)
+            + ". Nothing was saved.",
         ) from None
     new_hash = content_hash(validated)
     if new_hash == content_hash(output.content):

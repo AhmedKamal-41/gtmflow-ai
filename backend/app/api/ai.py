@@ -45,7 +45,7 @@ def _generate_or_raise(session: Session, lead: Lead, output_type: str, generate)
         ) from None
     except GenerationOutputInvalid as error:
         session.rollback()
-        record_generation_rejected(session, lead_id, output_type, error.reason_codes, error.usage)
+        record_generation_rejected(session, lead_id, output_type, error.reason_codes, error.usage, error.details)
         session.commit()
         raise HTTPException(status_code=502, detail=str(error)) from None
 

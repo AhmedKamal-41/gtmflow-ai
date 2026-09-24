@@ -662,3 +662,83 @@ def test_mock_client_rejects_nothing_it_produces_for_the_demo_profile():
     assert seller.content["proof_points"] == []
     with pytest.raises(AIConfigError):
         OpenAIClient(api_key="")
+
+
+# ------------------------------------------------ exact validation diagnostics
+
+def _rejected_event(db_session):
+    return db_session.scalars(
+        select(WorkflowEvent).where(WorkflowEvent.event_type == "ai_generation_rejected")
+    ).one()
+
+
+def test_rejection_names_the_exact_unknown_fact_reference(client, db_session, monkeypatch):
+    lead = upload(client, b"company_name,industry\nDiag Co,medical practice\n")
+
+    def cite_missing(ctx):
+        out = MockAIClient().generate_company_summary(ctx)
+        out["evidence"].append({"fact_id": "fact-website", "statement": "Website: diag.example"})
+        return out
+
+    use_client(monkeypatch, ScriptedClient(summary=cite_missing))
+    response = client.post(f"/api/leads/{lead['id']}/generate-summary")
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    index = 2  # the mock cites both facts (name, industry); the bad one is appended third
+    assert f"unknown_fact_reference at evidence[{index}].fact_id = 'fact-website'" in detail
+    assert "allowed: fact-company_name, fact-industry" in detail
+    [d] = _rejected_event(db_session).event_data["details"]
+    assert d == {"code": "unknown_fact_reference", "field": f"evidence[{index}].fact_id",
+                 "value": "fact-website", "allowed": ["fact-company_name", "fact-industry"]}
+    assert count(db_session, AIOutput) == 0
+
+
+def test_rejection_names_unknown_capability_and_masks_emails(client, db_session, monkeypatch):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    lead = upload(client)
+
+    def bad(ctx):
+        out = MockAIClient().generate_outreach(ctx)
+        out["capabilities_used"] = ["cap-1", "cap-7"]
+        out["email_body"] += " Write to jane.doe@private.example."
+        return out
+
+    use_client(monkeypatch, ScriptedClient(outreach=bad))
+    assert client.post(f"/api/leads/{lead['id']}/generate-outreach").status_code == 502
+    details = _rejected_event(db_session).event_data["details"]
+    assert {"code": "unknown_capability_reference", "field": "capabilities_used[1]",
+            "value": "cap-7", "allowed": ["cap-1", "cap-2"]} in details
+    email = next(d for d in details if d["code"] == "unsupplied_email_address")
+    assert email == {"code": "unsupplied_email_address", "field": "email_body", "value": "j***@private.example"}
+    assert "jane.doe" not in str(details)
+
+
+def test_schema_rejection_reports_field_and_error_without_echoing_input(client, db_session, monkeypatch):
+    lead = upload(client)
+    secret_like = "sk-" + "x" * 2000
+
+    def bad(ctx):
+        out = MockAIClient().generate_company_summary(ctx)
+        out["company_summary"] = secret_like
+        out["confidence"] = "certain"
+        return out
+
+    use_client(monkeypatch, ScriptedClient(summary=bad))
+    response = client.post(f"/api/leads/{lead['id']}/generate-summary")
+    assert response.status_code == 502
+    details = _rejected_event(db_session).event_data["details"]
+    fields = {d["field"]: d["error"] for d in details}
+    assert fields == {"company_summary": "string_too_long", "confidence": "literal_error"}
+    assert "sk-xxx" not in str(details) and "sk-xxx" not in response.text
+
+
+def test_human_edit_rejection_names_the_exact_problem(client, monkeypatch):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    lead = upload(client)
+    draft = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
+    content = deepcopy(draft["content"])
+    content["claims_used"] = ["claim-9"]
+    response = client.post(f"/api/leads/{lead['id']}/ai-outputs/{draft['id']}/revisions",
+                           json={"expected_content_hash": draft["content_hash"], "content": content})
+    assert response.status_code == 422
+    assert "unapproved_claim_reference at claims_used[0] = 'claim-9'; allowed: claim-1" in response.json()["detail"]

@@ -30,6 +30,7 @@ from app.ai.client import AIClient, get_ai_client
 from app.ai.grounding import (
     AIOutputValidationError,
     build_grounded_context,
+    describe_details,
     validate_outreach,
     validate_summary,
 )
@@ -58,14 +59,24 @@ class SellerProfileRequired(RuntimeError):
 
 
 class GenerationOutputInvalid(RuntimeError):
-    def __init__(self, reason_codes: list[str], usage: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        reason_codes: list[str],
+        usage: dict[str, Any] | None = None,
+        details: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.reason_codes = reason_codes
         # Provider-reported usage of the rejected (but still billed) call.
         self.usage = usage
+        # Exactly what failed (field, offending value, allowed ids); see
+        # AIOutputValidationError. The rejected reply itself is not kept.
+        self.details = details or [{"code": code} for code in reason_codes]
         super().__init__(
             "The AI output failed validation ("
             + ", ".join(reason_codes)
-            + "). No output was saved."
+            + "): "
+            + describe_details(self.details)
+            + ". No output was saved."
         )
 
 
@@ -209,10 +220,13 @@ def _run(
         if output_type == "company_summary":
             return validate_summary(client.generate_company_summary(ctx), ctx)
         return validate_outreach(client.generate_outreach(ctx), ctx)
-    except AIJSONParseError:
-        raise GenerationOutputInvalid(["invalid_json"]) from None
+    except AIJSONParseError as e:
+        # The parser's message is a JSON position/type error, not reply text.
+        raise GenerationOutputInvalid(
+            ["invalid_json"], details=[{"code": "invalid_json", "message": str(e)[:200]}]
+        ) from None
     except AIOutputValidationError as e:
-        raise GenerationOutputInvalid(e.reason_codes) from None
+        raise GenerationOutputInvalid(e.reason_codes, details=e.details) from None
 
 
 def _generate(
@@ -308,6 +322,7 @@ def record_generation_rejected(
     output_type: str,
     reason_codes: list[str],
     usage: dict[str, Any] | None = None,
+    details: list[dict[str, Any]] | None = None,
 ) -> None:
     """Audit a rejected generation without saving any of its content."""
     session.add(
@@ -317,6 +332,7 @@ def record_generation_rejected(
             event_data={
                 "output_type": output_type,
                 "reason_codes": reason_codes,
+                "details": details,
                 "usage": usage,
                 "prompt_version": PROMPT_VERSION,
                 "output_schema_version": OUTPUT_SCHEMA_VERSION,

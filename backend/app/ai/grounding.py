@@ -59,13 +59,48 @@ FIT_SCORE_MEANING = (
 class AIOutputValidationError(ValueError):
     """Model output failed the versioned schema or grounding checks.
 
-    `reason_codes` are fixed identifiers safe to store and show; they never
-    contain model text, lead data or secrets.
+    `reason_codes` are fixed identifiers. `details` say exactly what failed:
+    the field path, the offending value (sanitized, truncated; email
+    addresses masked), and for references the allowed ids. Schema details
+    carry the error type/message only, never the model's input. Nothing here
+    can contain a secret: offending values come from the model's reply.
     """
 
-    def __init__(self, reason_codes: list[str]) -> None:
+    def __init__(self, reason_codes: list[str], details: list[dict[str, Any]] | None = None) -> None:
         self.reason_codes = sorted(set(reason_codes))
+        self.details = details or [{"code": code} for code in self.reason_codes]
         super().__init__("AI output failed validation: " + ", ".join(self.reason_codes))
+
+
+MAX_DETAILS = 20
+MAX_VALUE_CHARS = 80
+
+
+def _clean(value: Any) -> str:
+    text = re.sub(r"[\x00-\x1f\x7f]", " ", str(value))
+    return text if len(text) <= MAX_VALUE_CHARS else text[:MAX_VALUE_CHARS] + "..."
+
+
+def _mask_email(email: str) -> str:
+    local, _, domain = email.partition("@")
+    return f"{local[:1]}***@{domain}"
+
+
+def describe_details(details: list[dict[str, Any]]) -> str:
+    """One readable line per detail, for API error messages."""
+    lines = []
+    for d in details[:MAX_DETAILS]:
+        part = d["code"]
+        if d.get("field"):
+            part += f" at {d['field']}"
+        if "value" in d:
+            part += f" = {d['value']!r}"
+        if d.get("error"):
+            part += f" ({d['error']}: {d.get('message', '')})"
+        if d.get("allowed") is not None:
+            part += f"; allowed: {', '.join(d['allowed']) or 'none'}"
+        lines.append(part)
+    return "; ".join(lines)
 
 
 # ---------------------------------------------------------------- context
@@ -208,8 +243,26 @@ def _norm(text: str) -> str:
 def _schema_errors(model: type[BaseModel], raw: Any) -> BaseModel:
     try:
         return model.model_validate(raw)
-    except ValidationError:
-        raise AIOutputValidationError(["schema_invalid"]) from None
+    except ValidationError as error:
+        details = [
+            {
+                "code": "schema_invalid",
+                "field": ".".join(str(part) for part in e["loc"]) or "(root)",
+                "error": e["type"],
+                "message": _clean(e["msg"]),
+            }
+            for e in error.errors(include_input=False, include_url=False)[:MAX_DETAILS]
+        ]
+        raise AIOutputValidationError(["schema_invalid"], details) from None
+
+
+def _unknown_refs(code: str, path: str, refs: list[str], allowed: set[str]) -> list[dict[str, Any]]:
+    """`path` is a field template such as "evidence[{i}].fact_id"."""
+    return [
+        {"code": code, "field": path.format(i=i), "value": _clean(ref), "allowed": sorted(allowed)}
+        for i, ref in enumerate(refs)
+        if ref not in allowed
+    ]
 
 
 def _fact_ids(ctx: dict[str, Any]) -> set[str]:
@@ -218,15 +271,15 @@ def _fact_ids(ctx: dict[str, Any]) -> set[str]:
 
 def validate_summary(raw: Any, ctx: dict[str, Any]) -> dict[str, Any]:
     parsed = _schema_errors(SummaryOutputV2, raw)
-    codes: list[str] = []
     known = _fact_ids(ctx)
-    if any(item.fact_id not in known for item in parsed.evidence):
-        codes.append("unknown_fact_reference")
+    details = _unknown_refs("unknown_fact_reference", "evidence[{i}].fact_id",
+                            [item.fact_id for item in parsed.evidence], known)
     if ctx.get("seller") is None and parsed.seller_relevance:
-        codes.append("seller_relevance_without_seller")
-    codes.extend(_text_checks(ctx, [parsed.company_summary, *parsed.hypotheses]))
-    if codes:
-        raise AIOutputValidationError(codes)
+        details.append({"code": "seller_relevance_without_seller", "field": "seller_relevance"})
+    details.extend(_text_checks(ctx, [("company_summary", parsed.company_summary)]
+                                + [(f"hypotheses[{i}]", h) for i, h in enumerate(parsed.hypotheses)]))
+    if details:
+        raise AIOutputValidationError([d["code"] for d in details], details[:MAX_DETAILS])
     return parsed.model_dump(mode="json")
 
 
@@ -235,25 +288,23 @@ def validate_outreach(raw: Any, ctx: dict[str, Any]) -> dict[str, Any]:
     seller = ctx.get("seller")
     if seller is None:
         raise AIOutputValidationError(["seller_profile_missing"])
-    codes: list[str] = []
-    if any(ref not in _fact_ids(ctx) for ref in parsed.lead_facts_used):
-        codes.append("unknown_fact_reference")
-    capability_ids = {c["id"] for c in seller["capabilities"]}
-    if any(ref not in capability_ids for ref in parsed.capabilities_used):
-        codes.append("unknown_capability_reference")
-    claim_ids = {c["id"] for c in seller["approved_claims"]}
-    if any(ref not in claim_ids for ref in parsed.claims_used):
-        codes.append("unapproved_claim_reference")
-    codes.extend(_text_checks(ctx, [parsed.subject, parsed.email_body, parsed.call_note]))
-    if codes:
-        raise AIOutputValidationError(codes)
+    details = _unknown_refs("unknown_fact_reference", "lead_facts_used[{i}]", parsed.lead_facts_used, _fact_ids(ctx))
+    details += _unknown_refs("unknown_capability_reference", "capabilities_used[{i}]", parsed.capabilities_used,
+                             {c["id"] for c in seller["capabilities"]})
+    details += _unknown_refs("unapproved_claim_reference", "claims_used[{i}]", parsed.claims_used,
+                             {c["id"] for c in seller["approved_claims"]})
+    details += _text_checks(ctx, [("subject", parsed.subject), ("email_body", parsed.email_body),
+                                  ("call_note", parsed.call_note)])
+    if details:
+        raise AIOutputValidationError([d["code"] for d in details], details[:MAX_DETAILS])
     return parsed.model_dump(mode="json")
 
 
-def _text_checks(ctx: dict[str, Any], texts: list[str]) -> list[str]:
+def _text_checks(ctx: dict[str, Any], texts: list[tuple[str, str]]) -> list[dict[str, Any]]:
     """Deterministic guards against two common fabrications. Not a semantic
-    verifier: a human still reviews every draft before any use."""
-    codes: list[str] = []
+    verifier: a human still reviews every draft before any use. Returns one
+    detail per offending email or figure, with the field it appeared in."""
+    details: list[dict[str, Any]] = []
     structured = [
         fact["value"] for fact in ctx["lead_facts"] if fact["kind"] == "structured_field"
     ]
@@ -267,11 +318,12 @@ def _text_checks(ctx: dict[str, Any], texts: list[str]) -> list[str]:
     allowed_figure_text = _norm(" ".join(
         [c["claim"] for c in seller.get("approved_claims", [])] + structured
     ))
-    for text in texts:
+    for field, text in texts:
         for email in _EMAIL.findall(text or ""):
             if email.lower() not in supplied_emails:
-                codes.append("unsupplied_email_address")
+                details.append({"code": "unsupplied_email_address", "field": field,
+                                "value": _clean(_mask_email(email))})
         for figure in _FIGURE.findall(text or ""):
             if _norm(figure) not in allowed_figure_text:
-                codes.append("unsupported_figure")
-    return codes
+                details.append({"code": "unsupported_figure", "field": field, "value": _clean(figure)})
+    return details
