@@ -525,3 +525,48 @@ The recorded prompt size is about 10% above the earlier characters ÷ 4 estimate
 No ratings, acceptances, operational approvals, Slack messages or training were done by the operator.
 
 **Decision for you:** whether to retry #13 (one more paid call, which may fail the same way) or skip it. Then generation can resume from #14.
+
+### Session 2026-09-24 (authorization 2: #13 retry and continuation; stopped at #19)
+
+**Authorization:** up to **88** paid `gpt-4o-mini` calls from this point, including exactly one retry of #13. Batches of 10, no further automatic retries, stop at the first new failure.
+
+**Change before retrying (commit `2a84c2f`): exact validation diagnostics.**
+- Validation failures now carry structured details:
+  - the field path (for example `evidence[2].fact_id`);
+  - the sanitized, truncated offending value;
+  - for reference errors, the allowed ids;
+  - for schema errors, the Pydantic error type and message, **never the model's input**.
+- Unsupplied email addresses are masked (`j***@domain`).
+- Details are stored on `ai_generation_rejected` events and appear in API error messages for generations and human edits.
+- Pass/fail behavior is unchanged: the 391 existing tests passed unmodified, 4 new tests cover the diagnostics, and all **395 backend tests pass (exit 0)**.
+- The rejected reply text is still not stored.
+- The backend was restarted from `.env`. A post-stop `pgrep` check falsely reported "still running" because its pattern matched the checking shell itself; `ps` and a closed port confirmed it had stopped.
+
+**Confirmed vs. speculative, for #13's first failure (2026-09-24 00:20:33):**
+- **Confirmed:** reason code `unknown_fact_reference` on a company summary; 2,020 tokens billed.
+- **Not confirmed:** that attempt predates the diagnostics change, so its event has no details. Which id was cited (website or founded) was a **hypothesis only** and remains unverified.
+
+**Run results:**
+
+| Attempt | Candidate | Result |
+|---|---|---|
+| 1 (the authorized retry) | #13 josephine c. samson, m.d · Summary | **Generated** (output `b4606928…`), pending review |
+| 2–6 | #14 josephine c. samson (outreach), #15/#16 redblock realty inc., #17/#18 webb sanders funeral home | **Generated**, all pending review |
+| 7 | #19 iron wolf ventures · Summary | **Failed:** HTTP 502, **confirmed detail:** `schema_invalid at seller_relevance (string_type: Input should be a valid string)`. The model returned a non-string, non-null `seller_relevance`; its type and value are not echoed by design. No output was saved. **The run stopped here.** |
+
+**Calls:**
+- 7 used under authorization 2 (6 generated + 1 rejected); **81 remain**.
+- #19 will not be retried without your explicit authorization. The script refuses any candidate that has failed before.
+
+**Usage and cost:**
+- **Recorded, authorization 2 (7 calls, API-reported):** 12,185 prompt + 2,322 completion tokens, **about $0.0032 calculated from the recorded counts** at $0.15 / $0.60 per million.
+- **Recorded, all 15 calls with usage:** 26,020 prompt + 4,709 completion tokens, about $0.0067.
+- **Estimate for the 5 earliest calls** (no usage recorded): about $0.002.
+- **Estimated total so far:** about $0.009 across 20 paid calls.
+
+**Counts:**
+- **18 generated** (0 mock); **82 awaiting generation** (#19–#100);
+- **13 pending your review** (#6–#18);
+- **usable: 4** (3 accepted + 1 corrected) from **3 unique companies**; **skipped: 1**.
+
+Split assignments are unchanged (5,000; manifest verifies with 0 mismatches). No annotations, approvals, messages or training were done by the operator.
