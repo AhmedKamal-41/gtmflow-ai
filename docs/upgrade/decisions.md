@@ -206,6 +206,19 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Split manifest file git-ignored under `backend/data/manifests/` | Same rule as other derived cohort outputs. The database copy is authoritative; the digest is in the handoff. |
 | Migration `0009_review_annotation`, additive; explicit short FK name | The first restored-copy upgrade failed on Postgres's 63-character identifier limit (rolled back cleanly). Fixed before touching the real database. |
 
+## Decisions made in Phase 6 (mixed human/AI review pilot, 2026-09-24)
+
+| Decision | Reason / status |
+|---|---|
+| Phase 6 changes, at the user's instruction, from "100 human-reviewed pilot examples" to a mixed human/AI review pilot | Human reviews of #1–#6 are kept exactly. The assistant reviewed the other 94. **The original 100-human-review requirement is recorded as not met.** |
+| AI reviews are stored in a separate export (`ai-review-export-v1`), never through the human annotation path | The annotation API records the unauthenticated operator label and UI timing as a human review, so writing AI reviews there would falsify provenance. No schema change was needed, and the frozen splits and human data are untouched. |
+| Every AI review is pinned to the output id and content hash read; corrected targets must pass the v2 validator against the recorded input snapshot | Traceable to the exact source and consistent with the same grounding rules as generation and human edits. The build refuses mismatched pins and any human-reviewed candidate. |
+| AI review rubric `ai-review-rubric-v1` is derived from the user's own decisions | Corrections #4 and #6 set the outreach standard: an explicit portfolio-demonstration / not-a-commercial-offer label, record facts only, no invented needs, research, praise, specialization, results, placeholders or contacts. Acceptances #1, #3 and #5 allow "N-M employees" and "small". Invented-need hypotheses are removed even when labeled unconfirmed. `seller_relevance` must not assert the lead's need or relevance as fact. |
+| Doubtful source records are flagged `uncertain` (26) rather than skipped | The output was judged against the record. Whether the record itself is wrong needs outside knowledge and a human. The flags list is the optional human spot-check set. |
+| Decision files and the review tool are committed; the export JSONL is git-ignored and rebuildable | Consistent with the rule that derived cohort data embedding PDL input snapshots is not committed. The judgments and corrected text remain in version control. |
+| Human and AI totals are reported separately everywhere | Human: 6 reviewed (3 accepted, 2 corrected, 1 skipped). AI: 94 reviewed (30 accepted, 64 corrected, 0 skipped). They are never summed as "reviewed" without the source. |
+| Phase 7 must merge both exports with `review_source` preserved and decide on weighting or deduplication of the templated outreach targets | The 47 corrected outreach targets share one structure; treating them as 47 independent writing examples would overstate diversity. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).

@@ -1,0 +1,259 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 37,
+   "source_output_id": "e4308256-e7f8-4cd0-bb9f-ce71d80aedfe",
+   "source_content_hash": "023cb961082c249bf99fc97139785087a9babed2fc705f08d7090c187815ea3e",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care, New York US, 1-10 and the healthcare segment label all match; accurate, list-like wording.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 38,
+   "source_output_id": "82316d74-806d-48f3-ae3c-b962cfb437c1",
+   "source_content_hash": "38a1e119064cf157786e964f662e477e363bfaca29f69085c0c2033c8d581687",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invents a need ('streamlining their outreach processes', 'support your operations'); no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Eddy Heritage House Nursing and Rehabilitation Center",
+    "email_body": "Hi there,\n\nThe supplied company record lists Eddy Heritage House Nursing and Rehabilitation Center as a hospital and health care organization in New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 39,
+   "source_output_id": "7e67da4e-39a7-4b8c-b8b4-9c6645b6fef7",
+   "source_content_hash": "9c1d47ef85210d72d5e551f12607b66afd7cea3ce08a1fd3dceae71196e9833b",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents interest ('may be interested in outreach solutions').",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "issues": [
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 40,
+   "source_output_id": "859ca277-87fb-42f7-8527-c8b7738c4c15",
+   "source_content_hash": "65408f97a5e1c8ab5d5c30b6b16d042c2c82e1ae67e057597dbf50f58eaf2c09",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Record facts are right, but it invents 'outreach and growth strategies' to support; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for The Putkela Group",
+    "email_body": "Hi there,\n\nThe supplied company record lists The Putkela Group as a real estate company in Brighton, Michigan.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 41,
+   "source_output_id": "4b859f3c-a932-46e4-a672-5f6d8470de6b",
+   "source_content_hash": "543fcaf7fa9ddd50e6c0f926c44abece8bdc09d9cf434278aed2ae30d827ab03",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "All statements match the record; seller_relevance is hedged ('may be relevant') and lists only profile capabilities.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 42,
+   "source_output_id": "a93d9bd7-f899-4d8b-ba50-ea20f19ab007",
+   "source_content_hash": "8403413874d946bccc057cb36c5d4bbb7b5b963efb3b751fd65a32e47f8165f4",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature, 'Dear Team at Jeremy Ryan Butler' although the record may describe an individual, invented alignment with 'your needs', '[Your Name]/[Your Position]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Jeremy Ryan Butler",
+    "email_body": "Hi there,\n\nThe supplied company record lists Jeremy Ryan Butler as a medical practice in New York, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "broken_signature",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 43,
+   "source_output_id": "9bab4673-3540-4136-b02f-f5822f304189",
+   "source_content_hash": "ccc4dc94f0784f3d1d903903957647bdbbe8b829f562e6f94b0f4867cbf1d560",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Orlando FL, founded 2016 and 51-200 match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 44,
+   "source_output_id": "081ebf15-e3fe-452b-a4ca-73944e2382be",
+   "source_content_hash": "c8093c7513eac635309b145e20ac03ac8d67ef96763b61a41de17ed6d2d65e6d",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Founding year, location and size are supported, but 'making an impact', 'strong foundation' and 'synergies' are invented; broken signature and placeholders; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Hanover Family Builders",
+    "email_body": "Hi there,\n\nThe supplied company record lists Hanover Family Builders as a real estate company in Orlando, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_praise",
+    "invented_fit",
+    "broken_signature",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 45,
+   "source_output_id": "58500838-9163-40c3-bb8e-b53ede0f5d78",
+   "source_content_hash": "e41529e16f87fb8a90eb035614c005e9e71f02c19dcc14e0e157d01897b20758",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis states interest as fact ('The lead is interested in B2B solutions'), and seller_relevance asserts that GTMFlow 'is relevant'.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "invented_interest_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  },
+  {
+   "position": 46,
+   "source_output_id": "d89cf7eb-5d26-4dc4-939c-df4b04fbc073",
+   "source_content_hash": "5c75bf656124de327c14444af6a2e55b4c69f2dfba5d380d614819f70f0135ff",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Mentions a 'demonstration portfolio' but invents needs ('manage leads more efficiently', 'your organization's needs') and a specialization; does not say it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for David S. Lehman, D.D.S.",
+    "email_body": "Hi there,\n\nThe supplied company record lists David S. Lehman, D.D.S. as a medical practice in Sacramento, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_need",
+    "invented_specialization",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:30:17.679213+00:00"
+  }
+ ]
+}

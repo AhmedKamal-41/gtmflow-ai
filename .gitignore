@@ -18,6 +18,9 @@ backend/.pytest_cache/
 backend/.cache/
 backend/data/pdl_curated/
 backend/data/manifests/
+# AI-review exports embed cohort input snapshots; rebuild with
+# backend/scripts/phase6_ai_review.py build (decision files are committed).
+backend/data/ai_reviews/**/*.jsonl
 
 # Node / Next.js
 frontend/node_modules/

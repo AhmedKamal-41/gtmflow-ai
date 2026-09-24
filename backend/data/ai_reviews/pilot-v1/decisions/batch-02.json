@@ -1,0 +1,263 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 17,
+   "source_output_id": "035ed48c-46f3-4e57-8e74-33acdbc21fea",
+   "source_content_hash": "07c8f459c3e39f145fb13595a4750422b432e0bc5a8d219ba6b507d30bbde632",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents a need ('may require services related to outreach'); labeling it unconfirmed does not make an invented need acceptable. seller_relevance says the capabilities 'could be relevant to the lead' without basis.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A funeral home is recorded under 'hospital & health care'; the draft follows the record, but the classification itself may be wrong.",
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 18,
+   "source_output_id": "dab4099a-216e-4564-a96f-ab237cfa3da3",
+   "source_content_hash": "5dca0720d201847e723fcd3efaa558733a962208940ce716025dc8a5f5dadcdc",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented needs ('streamlining operations', 'initiatives and challenges'), '[Your Name]' placeholder; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Webb Sanders Funeral Home",
+    "email_body": "Hi there,\n\nThe supplied company record lists Webb Sanders Funeral Home as a company in the hospital & health care category in Lindsay, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "broken_signature",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A funeral home is recorded under 'hospital & health care'; the draft follows the record, but the classification itself may be wrong.",
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 19,
+   "source_output_id": "a2501ea7-b5a8-408b-9c48-c135f627a4ea",
+   "source_content_hash": "f9713d3c0ba30b3cd765dd02fb55ad3d53239ea033d95ec61319e0a962fdfadc",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Jordan WV, founded 2019 and 1-10 match; seller_relevance is hedged and says the demonstration has no real customer segment.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 20,
+   "source_output_id": "30a6f33a-e83a-4c88-81ed-68a6dcc4cf92",
+   "source_content_hash": "30cb4d27fdfffc66bcc830931d9a5b5caa0c44cf2adde070a4879d995c29cc53",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invents activity ('actively engaged'), goals and fit ('given your company's size and focus'); broken signature and '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Iron Wolf Ventures",
+    "email_body": "Hi there,\n\nThe supplied company record lists Iron Wolf Ventures as a real estate company in Jordan, West Virginia.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_activity",
+    "invented_need",
+    "broken_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 21,
+   "source_output_id": "ccb14279-9055-4272-8b80-19c26e227772",
+   "source_content_hash": "9b3ad52a7204d64a4108002a8c4e5fbf865cc03b90bba86ecbecdbfd824f2a23",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Every statement quotes the record (name, medical practice, 1-10, New York NY, healthcare segment); accurate but stiff, quoting raw values.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "A social-work PLLC is recorded as a 'medical practice'; the summary follows the record.",
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 22,
+   "source_output_id": "a5523e47-cf64-40fc-89ca-6a5f3196317a",
+   "source_content_hash": "9bb13ca88179180716269a0529519abce6aa5c37d296d4bc8bfa9eae02372a32",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Confuses sender and recipient ('As a small medical practice ... we understand'), offers the prospect's own LinkedIn page as 'our profile', invents a need (administrative workflows), '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Playdate LMSW Social Work PLLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Playdate LMSW Social Work PLLC as a medical practice in New York, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "perspective_confusion",
+    "misattributed_profile",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 23,
+   "source_output_id": "a414157c-84de-48e3-984d-27d939e2fa25",
+   "source_content_hash": "5d6a5225d4c8844f4afea8e3dc4f014d135c6c65a9b22899dfcbf5724ac2d1da",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents interest ('may be interested in B2B services').",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "issues": [
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The website is a .co.uk domain while the location is Harrisburg, Pennsylvania; the record may mix two companies.",
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 24,
+   "source_output_id": "445ca986-8218-4c2d-8c2b-2617c45dfabf",
+   "source_content_hash": "e0124709935c57ef0e344494e4405143a0ba4d02d8a3bd0187897723b909eed4",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Misattributes the sector ('As a company in the real estate sector, we believe'), invents 'potential synergies', '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Ultimate Capital",
+    "email_body": "Hi there,\n\nThe supplied company record lists Ultimate Capital as a real estate company in Harrisburg, Pennsylvania.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "perspective_confusion",
+    "invented_fit",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The website is a .co.uk domain while the location is Harrisburg, Pennsylvania; the record may mix two companies.",
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 25,
+   "source_output_id": "a30ce3ba-7400-4c0c-b17e-72da3416c0f6",
+   "source_content_hash": "c7aa8e1f78586d36c2eb3688cc47ef4fd505a2977507a8fcf9c6342cf24b5646",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care ('provider' is a fair reading), Holland OH, 11-50 and website all match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  },
+  {
+   "position": 26,
+   "source_output_id": "4184bb2c-ffb0-4e4c-8d59-e0bf250c5df2",
+   "source_content_hash": "88b51f8fb21d5b9e3095decbad17886469821e1e7a33d914328999f515632ae3",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Mentions a 'demonstration workflow' but invents praise ('impressed by your commitment'), a need ('streamline their outreach'), and '[Your Name]/[Your Position]'; does not say it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Halim Clinic",
+    "email_body": "Hi there,\n\nThe supplied company record lists Halim Clinic as a hospital and health care organization in Holland, Ohio.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_praise",
+    "invented_need",
+    "placeholder_signature",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:51.639586+00:00"
+  }
+ ]
+}

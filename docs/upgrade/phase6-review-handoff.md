@@ -2,6 +2,14 @@
 
 Date: 2026-09-23. **Stopped before Phase 7.**
 
+> **Current status (2026-09-24): scope revised to a mixed human/AI review pilot.**
+> - All 100 pilot candidates are generated.
+> - **6 are human-reviewed** (#1–#6: 3 accepted, 2 corrected, 1 skipped). **94 are AI-reviewed** (#7–#100: 30 accepted, 64 corrected, 0 skipped), stored separately as AI reviews and not human-verified.
+> - **The original 100-human-review requirement is not met.**
+> - See §12, "Session 2026-09-24 (mixed human/AI review pilot)", and `phase6-ai-review-report.md`.
+>
+> The status paragraph below records the original plan as of 2026-09-23.
+
 **Status:** the review tools are **implemented and verified**. The **100 human reviews have not been done**: zero candidates have generated outputs, and zero examples are human-reviewed. **The workbench is running and ready for your reviews; see §11 for the URLs and exact steps.** Two actions of yours come next (§8):
 
 1. activate a seller revision, for outreach candidates;
@@ -608,3 +616,64 @@ Split assignments are unchanged (5,000; manifest verifies with 0 mismatches). No
 Split assignments are unchanged (5,000; the manifest verifies with 0 mismatches and 0 groups spanning splits). There were 0 operational reviews, 0 pushes, no annotations by the operator, no messages and no training.
 
 **Remaining work in Phase 6:** your review of the 95 pending candidates (#6–#100) in `/annotation`, and then the export.
+
+### Session 2026-09-24 (mixed human/AI review pilot)
+
+**Scope change (your instruction):** Phase 6 becomes a **mixed human/AI review pilot**. The assistant reviewed every candidate that had no human review, and the AI reviews are kept strictly separate from human annotations.
+
+**State found first:**
+- **A new human decision:** you **corrected #6** at 2026-09-24 01:10:46, which this log had not yet recorded.
+- **Human-reviewed candidates:** #1–#6 (7 annotation rows, because #4 has an accept followed by a correction).
+- **Other state:** all 100 candidates generated; split assignments intact.
+- **Placeholder-looking human fields**, left unchanged: #2's skip reason `j` and #3's note `kuisauewoieoiweoiwoi`.
+
+**How the AI reviews were produced and stored (honest provenance):**
+- **Separate storage:** they were **not** submitted through the annotation API, which records the unauthenticated operator label and UI timing as a human review, and nothing was written to `training_annotations` or any other table.
+- **Workbench view:** the human workbench still shows #7–#100 as pending *human* review, which is accurate.
+- **Tool:** `backend/scripts/phase6_ai_review.py`. `dump` prints each candidate's stored input snapshot and output (read-only). `build` merges the reviewer's per-candidate decisions (`backend/data/ai_reviews/pilot-v1/decisions/batch-01..10.json`, committed) and writes `ai-review-export.jsonl` (git-ignored; sha256 `788038718cab4eff…`).
+- **Build checks:**
+  - every decision is pinned to the output id and content hash that was read;
+  - human-reviewed candidates are refused;
+  - every corrected target passes the v2 validator against the recorded input snapshot.
+- **Provenance on every row:** `review_source=ai`, `reviewer_model=claude-opus-5-5`, `human_verified=false`, `human_review_time_ms=null`, rubric `ai-review-rubric-v1`.
+- **Rubric origin:** derived from your own decisions: the #4 and #6 corrections, and the #1, #3 and #5 acceptances.
+- **Nothing new generated:** no model calls, regenerations, approvals, messages or training.
+
+**Review run:** 10 batches (9 × 10, then 1 × 4), covering #7–#100. Every batch was built and validated before the next one started.
+
+**Results:**
+
+| | Human-reviewed | AI-reviewed |
+|---|---|---|
+| Candidates | 6 | 94 |
+| Accepted | 3 | 30 (all summaries) |
+| Corrected | 2 | 64 (47 outreach + 17 summaries) |
+| Skipped | 1 | 0 |
+| Usable examples | 5 (3 unique companies) | 94 (47 unique companies) |
+| Flagged uncertain | — | 26 |
+
+**Main findings (details in `phase6-ai-review-report.md`):**
+- **Outreach: none of the 47 was usable as generated.** Common faults were invented needs (39 issue tags), missing or incomplete demonstration labels (46), placeholder or broken signatures (43), and invented specialization or praise.
+- **Serious outreach cases:**
+  - the prospect's own website or LinkedIn presented as GTMFlow's (#8, #22, #28, #60, #96);
+  - a misspelled domain not in the record (#60);
+  - sender/recipient confusion (#22, #24, #50);
+  - literal `\n` text (#28, #30, #76).
+- **Summaries: 30 accepted, 17 corrected.** The corrections addressed invented-need hypotheses, asserted seller relevance, inferences from company names, and one silently respelled recorded name (#77).
+- **26 uncertain cases** reflect doubtful source records, not reviewer doubt about the output: misclassified industries (funeral home, securities firm, housing authority), website or LinkedIn values that don't match the name, and person-name companies.
+
+**Verification (this session):**
+- The export audit found 0 problems across 94 rows: positions #7–#100 with no duplicates; ids, input hashes and content hashes all match the database; no human-reviewed candidate included; every corrected outreach carries "demonstration" and "not a commercial offer" with none of the invented patterns; AI provenance on every row.
+- **Database unchanged by this pass:** 7 human annotation rows, 102 outputs (100 generated + 2 human edits), 0 operational reviews, 0 pushes, 5,000 split assignments (the manifest verifies with 0 mismatches and 0 groups spanning splits).
+- No backend or frontend code changed, so the test suites were not rerun. The new script is a standalone, read-only tool.
+
+**Limitations:**
+- AI reviews are not human-verified, and the reviewer judged against the record only, with no outside lookup.
+- The 47 corrected outreach targets share one structure (low writing diversity).
+- There is no AI review timing by design.
+
+**What remains before Phase 7:**
+1. **Your decision** on accepting the revised mixed-review scope. The original "100 human-reviewed examples" pilot is **not met** (6 human-reviewed).
+2. **Optional:** a human spot-check of the 26 uncertain cases (the list is in the report), and of a sample of AI-accepted summaries.
+3. **Optional:** revisit the #2 skip reason and #3 note, which look like placeholders.
+4. **Phase 7 must merge the human export (`annotation-export-v1`) and the AI export (`ai-review-export-v1`) with `review_source` preserved.** It must also decide how to weight or deduplicate the templated outreach targets, and it must not reassign split groups.
