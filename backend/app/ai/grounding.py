@@ -97,6 +97,8 @@ def describe_details(details: list[dict[str, Any]]) -> str:
             part += f" = {d['value']!r}"
         if d.get("error"):
             part += f" ({d['error']}: {d.get('message', '')})"
+        if d.get("received_type"):
+            part += f"; received {d['received_type']}"
         if d.get("allowed") is not None:
             part += f"; allowed: {', '.join(d['allowed']) or 'none'}"
         lines.append(part)
@@ -240,18 +242,39 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", "", text).lower()
 
 
+def _json_type(value: Any) -> str:
+    """The JSON type name of a value -- recorded instead of the value."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, (list, tuple)):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return "other"
+
+
 def _schema_errors(model: type[BaseModel], raw: Any) -> BaseModel:
     try:
         return model.model_validate(raw)
     except ValidationError as error:
+        # `received_type` names the JSON type the model sent (e.g. "boolean"
+        # where a string was required); the value itself is never kept.
         details = [
             {
                 "code": "schema_invalid",
                 "field": ".".join(str(part) for part in e["loc"]) or "(root)",
                 "error": e["type"],
                 "message": _clean(e["msg"]),
+                # For a missing field Pydantic's input is the parent object.
+                "received_type": "absent" if e["type"] == "missing" else _json_type(e.get("input")),
             }
-            for e in error.errors(include_input=False, include_url=False)[:MAX_DETAILS]
+            for e in error.errors(include_url=False)[:MAX_DETAILS]
         ]
         raise AIOutputValidationError(["schema_invalid"], details) from None
 

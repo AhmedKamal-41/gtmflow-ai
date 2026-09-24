@@ -742,3 +742,56 @@ def test_human_edit_rejection_names_the_exact_problem(client, monkeypatch):
                            json={"expected_content_hash": draft["content_hash"], "content": content})
     assert response.status_code == 422
     assert "unapproved_claim_reference at claims_used[0] = 'claim-9'; allowed: claim-1" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("bad_value, received", [
+    (True, "boolean"),
+    ({"relevant": True, "note": "sk-should-not-be-stored"}, "object"),
+    (["a", "b"], "array"),
+    (3, "number"),
+])
+def test_seller_relevance_type_errors_record_only_the_received_type(client, db_session, monkeypatch, bad_value, received):
+    """#19's failure shape: a non-string, non-null seller_relevance. The
+    reply stays rejected; only the JSON type is recorded, never the value."""
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    lead = upload(client)
+
+    def bad(ctx):
+        out = MockAIClient().generate_company_summary(ctx)
+        out["seller_relevance"] = bad_value
+        return out
+
+    use_client(monkeypatch, ScriptedClient(summary=bad))
+    response = client.post(f"/api/leads/{lead['id']}/generate-summary")
+    assert response.status_code == 502
+    assert f"received {received}" in response.json()["detail"]
+    [d] = _rejected_event(db_session).event_data["details"]
+    assert d["field"] == "seller_relevance" and d["error"] == "string_type" and d["received_type"] == received
+    assert "sk-should-not-be-stored" not in response.text + str(d)
+    assert count(db_session, AIOutput) == 0
+
+
+def test_missing_required_field_reports_absent(client, db_session, monkeypatch):
+    lead = upload(client)
+
+    def bad(ctx):
+        out = MockAIClient().generate_company_summary(ctx)
+        del out["confidence"]
+        return out
+
+    use_client(monkeypatch, ScriptedClient(summary=bad))
+    assert client.post(f"/api/leads/{lead['id']}/generate-summary").status_code == 502
+    [d] = _rejected_event(db_session).event_data["details"]
+    assert (d["field"], d["error"], d["received_type"]) == ("confidence", "missing", "absent")
+
+
+def test_null_and_string_seller_relevance_remain_valid(client, monkeypatch):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    lead = upload(client)
+    for value in (None, "Compared only with the stated target customers."):
+        def reply(ctx, value=value):
+            out = MockAIClient().generate_company_summary(ctx)
+            out["seller_relevance"] = value
+            return out
+        use_client(monkeypatch, ScriptedClient(summary=reply))
+        assert client.post(f"/api/leads/{lead['id']}/generate-summary").status_code == 200
