@@ -204,3 +204,15 @@ def test_prompt_guardrails_present_in_system_rules() -> None:
     sample = _context()
     assert SYSTEM_RULES in build_summary_prompt(sample)
     assert SYSTEM_RULES in build_outreach_prompt(sample)
+
+
+def test_test_suite_never_uses_real_provider_or_webhook() -> None:
+    """Regression: a developer's backend/.env (real key, USE_MOCK_AI=false)
+    once let two local test runs make real provider calls. conftest now
+    forces mock mode before settings load."""
+    from app.core.config import settings
+
+    assert settings.use_mock_ai is True
+    assert settings.openai_api_key == ""
+    assert settings.slack_webhook_url == ""
+    assert isinstance(get_ai_client(), MockAIClient)

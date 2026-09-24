@@ -1,6 +1,13 @@
 import os
 from collections.abc import Iterator
 
+# The test suite must never use a developer's backend/.env (a real AI key,
+# USE_MOCK_AI=false, a Slack webhook): set safe values BEFORE the app's
+# settings load. python-dotenv never overrides variables already set.
+os.environ["USE_MOCK_AI"] = "true"
+os.environ["OPENAI_API_KEY"] = ""
+os.environ["SLACK_WEBHOOK_URL"] = ""
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
@@ -10,6 +17,10 @@ from sqlalchemy.pool import StaticPool
 from app import models  # noqa: F401 -- register all models on Base.metadata
 from app.core.database import Base, get_session
 from app.main import app
+from app.core.config import settings as _settings
+
+if not _settings.use_mock_ai or _settings.openai_api_key or _settings.slack_webhook_url:
+    raise RuntimeError("Refusing to run tests with real AI or Slack configuration.")
 
 
 @pytest.fixture()
