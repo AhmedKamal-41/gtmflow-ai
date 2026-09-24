@@ -1,0 +1,29 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 29,
+   "source_output_id": "5e3fd0ef-4f66-41ef-8b3e-b9b1e3674991",
+   "source_content_hash": "731aa418fb05037fe2fefe593ff1e22437b359d0894c64ccfb4f4b7cd6acc47a",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but both hypotheses invent needs or interest (not even labeled unconfirmed), and seller_relevance is only 'GTMFlow (demonstration)'.",
+   "issues": [
+    "invented_need_hypothesis",
+    "invented_interest_hypothesis",
+    "vague_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:36:02.220117+00:00"
+  }
+ ]
+}

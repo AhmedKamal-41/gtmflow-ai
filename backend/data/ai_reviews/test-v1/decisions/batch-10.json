@@ -1,0 +1,93 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "test-v1",
+ "reviews": [
+  {
+   "position": 98,
+   "source_output_id": "43c41fe7-eee2-4524-af43-ba6cbd7250ba",
+   "source_content_hash": "9f7a58f3c9b5d210a7f14fb57ab32462cd2752bc7b170a53432d89d6e6f7b443",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), specialization claim, invented needs ('optimize their outreach processes', 'your company's needs'), '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Extended Nursing By Us, LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Extended Nursing By Us, LLC as a medical practice in West Chester, Ohio.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:46.647324+00:00"
+  },
+  {
+   "position": 99,
+   "source_output_id": "df97d551-09f1-41f3-ab91-b37572de5c6f",
+   "source_content_hash": "d6193b6f5ccb53ed1af83a93118a6b8c23e762f0bafd041cb1deca67698555f3",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Auburn CA and 1-10 ('small') match; seller_relevance is hedged and says it may not align.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The website (keithhawkins.com) is a person's name and does not match the company name; it may be an agent's personal site or belong to a different business.",
+   "reviewed_at": "2026-09-24T05:29:46.647324+00:00"
+  },
+  {
+   "position": 100,
+   "source_output_id": "99ff7ec0-7f44-4cb7-8be5-7c72db22be9e",
+   "source_content_hash": "247b1c3a39d309ae2b3afdaceb97cd35b772953724d606410ca38eba41415ac4",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Specialization claim, invented 'valuable exchange of insights' and needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The website (keithhawkins.com) is a person's name and does not match the company name; it may be an agent's personal site or belong to a different business.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Real Inspiration, Inc.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Real Inspiration, Inc. as a real estate company in Auburn, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:46.647324+00:00"
+  }
+ ]
+}

@@ -234,6 +234,19 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | The test suite forces the mock provider, no key and no webhook, and refuses to run otherwise | After 2 unintended real calls (about $0.0008) when pytest loaded the developer `.env` (commit `9fda368`). |
 | Derived datasets are git-ignored under `backend/data/datasets/`; the manifest records file hashes | They embed PDL input snapshots. The build is reproducible: a second build gave a byte-identical manifest. |
 
+## Decisions made in Phase 7 (held-out generation, review and baseline, 2026-09-24)
+
+| Decision | Reason / status |
+|---|---|
+| Held-out criteria `heldout-criteria-v1` frozen in code (`app/evaluation/criteria.py`) and digest-pinned in a test, committed before any held-out generation or review | Nothing can drift toward the results. `evaluate` records the id and digest in every result and refuses a held-out "source" evaluation whose predictions were not produced by the frozen system (gpt-4o-mini, `grounded-v2`, schema v2). |
+| Paid generation goes through a budgeted runner with a durable ledger and worst-case reservation | The cap holds even for a pathological call. Attempts and spend survive restarts. One retry per candidate, in a second pass. Stops on provider/config errors and after 3 consecutive failures. |
+| The test suite also blocks non-loopback DNS and connections | Defense in depth beyond forcing mock settings. Verified with a real client and a fake key, and with a full suite run under hostile environment variables. No live call was used to verify it. |
+| The held-out candidates are AI-reviewed with the unchanged `ai-review-rubric-v1`, stored as separate AI exports, and keep the original predictions | Predictions and reference targets stay separate objects. Evaluation scores the original predictions against the references, never a target against itself. |
+| Held-out results are labeled "AI-derived reference targets; not human-verified quality" | Every held-out reference is AI-reviewed. Human verification of at least the test set remains a Phase 7 requirement. |
+| Uncertain held-out examples are excluded from the headline numbers and evaluated separately | Same policy as training: doubtful records are flagged, never repaired. A value an output had altered is restored to the recorded value. |
+| Dataset manifests record `allowed_use`; only all-train datasets may be used for training, and test is also excluded from prompt or rubric tuning | Keeps validation and test out of training and tuning by construction. |
+| The training target stays at 400; expansion (about 450 train candidates, about $0.21) and a minimal-edit training rubric are proposed, not started | 73 eligible examples today. Templated outreach corrections add almost no effective examples, so diversity needs a rubric change or human-written examples, not just volume. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).

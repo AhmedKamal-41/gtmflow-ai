@@ -1,0 +1,171 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 85,
+   "source_output_id": "e5e6046b-06ba-4edd-8e37-853491d8e979",
+   "source_content_hash": "c818d8c878aafb120f2c9d9cdeacd7f7639ad96af86db2af8ea9155043896c50",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care ('healthcare organization'), Clinton NY, founded 2009 and 1-10 ('small') match; seller_relevance describes the demonstration and says it is not a commercial offer.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:34:40.305538+00:00"
+  },
+  {
+   "position": 86,
+   "source_output_id": "bf58bbce-3dbb-4d03-93ee-cd470aedf9ee",
+   "source_content_hash": "2b4bc6e5ea33ea445f357fc9cf56916c820657f2185d97c9da8275fbe1b12de3",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), specialization claim ('tailored outreach strategies for businesses in the healthcare sector'), invented needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Katherine Luther Residential Healthcare & Rehabilitation Center Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists Katherine Luther Residential Healthcare & Rehabilitation Center Inc as a company in the hospital & health care category in Clinton, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:40.305538+00:00"
+  },
+  {
+   "position": 87,
+   "source_output_id": "c0fc7cc8-eb66-473b-a80d-abd0773306d7",
+   "source_content_hash": "de867c8e0e1f68fcc048e65f94c3c7d68e9fc2b8ecc427646a08d51afeb4e75b",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance is hedged and labeled a demonstration, but the hypothesis invents a need ('may require B2B services').",
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:34:40.305538+00:00"
+  },
+  {
+   "position": 88,
+   "source_output_id": "5126b3e8-696d-4d43-9834-8730c7f95379",
+   "source_content_hash": "7887bcba8c6b01ba0d8de512b5427100ad0728874fb9f8397d767e8c1d9e9354",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), assumes the reader works there ('you are part of'), overstates the record ('specializing in real estate'), invented outreach need, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "assumed_contact",
+    "overstated_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Cheap Home Appraisals",
+    "email_body": "Hi there,\n\nThe supplied company record lists Cheap Home Appraisals as a real estate company in Atlanta, Georgia.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:40.305538+00:00"
+  },
+  {
+   "position": 89,
+   "source_output_id": "10ed4ec9-f109-403b-bd2b-3311645e3d82",
+   "source_content_hash": "a0b4f2df48d1d71165d921ac79d6f5d14c3af7fd50b5760bc0c9217854cd99b0",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct ('small' for 1-10), but seller_relevance asserts the capabilities 'are relevant'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:34:40.305538+00:00"
+  },
+  {
+   "position": 90,
+   "source_output_id": "533874b7-d91e-4212-a02e-414100b8f24d",
+   "source_content_hash": "d6f9e24618deaefafb9a1078f47a6fa8c79de35b794b314da9c1e47bfba2eaed",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Invented praise ('impressed by your focus'), confuses sender and recipient ('As a small company myself'), invented challenges, specialization claim, unsupported 'proven rubric', 'synergies', four signature placeholders; no demonstration label.",
+   "issues": [
+    "invented_praise",
+    "perspective_confusion",
+    "invented_need",
+    "invented_specialization",
+    "unsupported_quality_claim",
+    "invented_fit",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Avenue215, LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Avenue215, LLC as a company in the hospital & health care category in the United States.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:40.305538+00:00"
+  }
+ ]
+}

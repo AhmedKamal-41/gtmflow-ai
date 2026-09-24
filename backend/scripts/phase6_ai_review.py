@@ -14,7 +14,7 @@ timing as a human review). Instead:
 
 Read-only against the database. Usage (from backend/):
 
-    DATABASE_URL=... python scripts/phase6_ai_review.py dump --from 7 --count 10
+    DATABASE_URL=... python scripts/phase6_ai_review.py dump --from 7 --count 10 [--queue validation-v1]
     DATABASE_URL=... python scripts/phase6_ai_review.py build \\
         --decisions data/ai_reviews/pilot-v1/decisions --out data/ai_reviews/pilot-v1/ai-review-export.jsonl
 """
@@ -49,22 +49,25 @@ REVIEWER = {
 }
 
 
-def _candidates(session):
+def _candidates(session, queue=QUEUE):
     rows = list(session.scalars(
-        select(AnnotationCandidate).where(AnnotationCandidate.queue == QUEUE).order_by(AnnotationCandidate.position)
+        select(AnnotationCandidate).where(AnnotationCandidate.queue == queue).order_by(AnnotationCandidate.position)
     ))
     return rows, latest_annotations(session, [c.id for c in rows])
 
 
 def dump(args) -> int:
     session = get_sessionmaker()()
-    rows, human = _candidates(session)
+    rows, human = _candidates(session, args.queue)
     shown = 0
     for c in rows:
         if c.position < args.start or shown >= args.count:
             continue
         if c.id in human:
             print(f"#{c.position}: human-reviewed ({human[c.id].decision}); not dumped")
+            continue
+        if c.source_output_id is None:
+            print(f"#{c.position}: not generated; not dumped")
             continue
         o = session.get(AIOutput, c.source_output_id)
         snap = o.input_snapshot
@@ -93,7 +96,7 @@ def dump(args) -> int:
 
 def build(args) -> int:
     session = get_sessionmaker()()
-    rows, human = _candidates(session)
+    rows, human = _candidates(session, args.queue)
     by_position = {c.position: c for c in rows}
     decisions = []
     for path in sorted(glob.glob(f"{args.decisions}/batch-*.json")):
@@ -189,9 +192,11 @@ def main() -> int:
     d = sub.add_parser("dump")
     d.add_argument("--from", dest="start", type=int, required=True)
     d.add_argument("--count", type=int, default=10)
+    d.add_argument("--queue", default=QUEUE)
     b = sub.add_parser("build")
     b.add_argument("--decisions", required=True)
     b.add_argument("--out", required=True)
+    b.add_argument("--queue", default=QUEUE)
     args = parser.parse_args()
     return dump(args) if args.cmd == "dump" else build(args)
 

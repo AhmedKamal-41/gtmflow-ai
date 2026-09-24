@@ -1,0 +1,494 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 12,
+   "source_output_id": "b9f0e981-2830-4ef7-8d9c-115dabb50557",
+   "source_content_hash": "1d0f22a5b58cd78e1fa54edf18589e6a7a818bcefa6d154bd80835d6943c6e19",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invented need ('streamlining their outreach efforts'), '[Your Name]' placeholder; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The LinkedIn slug (united-realty-il-) does not match the company name or Arizona location; the record may mix sources.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Nextage Realty Professionals",
+    "email_body": "Hi there,\n\nThe supplied company record lists Nextage Realty Professionals as a real estate company in Phoenix, Arizona.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 13,
+   "source_output_id": "cee0525e-0984-4b12-8f33-198af97a8929",
+   "source_content_hash": "d6e26ae4b66508337c8cb5618aed5a6a64dba7c8dcc32077079bf5ee072285c7",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported (quoted raw, stiff), but both hypotheses invent interest or needs (labeled unconfirmed) and seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 14,
+   "source_output_id": "02261b92-f457-4696-af28-1cc298490461",
+   "source_content_hash": "d52b404932f3a9b01309b2e6fd35036aa73871cf7a6f6f2afd64909655bcdc69",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Assumes the reader is the person ('I see that you are involved'), an odd specialization claim, invented objectives; no demonstration label.",
+   "issues": [
+    "assumed_contact",
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Daniel Tagliavia",
+    "email_body": "Hi there,\n\nThe supplied company record lists Daniel Tagliavia as a medical practice in Inwood, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 15,
+   "source_output_id": "c436d66d-0c21-43f6-9fbc-f50569458050",
+   "source_content_hash": "d6725ef70acab85003eabe37448e8ae9aa389e090c49fc6aea9b84b62d50cf31",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Beverly Hills CA and 11-50 match; seller_relevance is hedged from the seller's side ('may assist').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 16,
+   "source_output_id": "dacbbb5b-2916-4f0d-bba7-76f615dc0866",
+   "source_content_hash": "81bb4caf52033fa89d13a0814a8a605b1fa69fd554c5e165a096b7bb1e36464f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Says 'a portfolio demonstration' but not that it is not a commercial offer; invented fit ('designed to help teams like yours'), invented challenges and goals.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_need"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Brokers USA",
+    "email_body": "Hi there,\n\nThe supplied company record lists Brokers USA as a real estate company in Beverly Hills, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 17,
+   "source_output_id": "9d9499ae-bf1f-4060-812c-3e2ab62dc182",
+   "source_content_hash": "92eb1ce43100fa25864f33c66a93ae3cac73c218b66ed9881ccd916b0ff7bb5f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct (quoted raw, stiff), but seller_relevance asserts capabilities 'relevant to this lead'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 18,
+   "source_output_id": "304a5e38-466c-49b9-898c-6072d1ee2c95",
+   "source_content_hash": "d21d17373aa8d7c37fd32762dceb246e7d0a7a45b2ee2a419fc637c3b9ca4eb2",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented fit and goals, specialization claim, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_fit",
+    "invented_need",
+    "invented_specialization",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Barbara D Bartlik",
+    "email_body": "Hi there,\n\nThe supplied company record lists Barbara D Bartlik as a medical practice in New York, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 19,
+   "source_output_id": "af363fa8-cbd1-4619-9f3d-a79dbc10fa72",
+   "source_content_hash": "36740bf1ff116debf0dd669145fce8363eb1125426b7329d693def97fefc0794",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance is hedged and labeled a demonstration, but both hypotheses invent interest or a need for external support.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "An association of realtors (a trade association) is recorded as a real estate company; outputs follow the record, but 'company' may mislabel it.",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 20,
+   "source_output_id": "c9b085a8-ce0d-4db7-ac4c-3e43ea8ece82",
+   "source_content_hash": "21fd467d04538857fa03e2379cf4e52ae5872cafa1584e1e0ad29b1af5fe3dcc",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Says 'a demonstration of capabilities' but not that it is not a commercial offer; invented fit ('tailored for businesses like yours'), specialization claim, '[Your Name]' placeholder.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_specialization",
+    "placeholder_signature"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "An association of realtors (a trade association) is recorded as a real estate company; outputs follow the record, but 'company' may mislabel it.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Fort Hood Area Association of Realtors Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists Fort Hood Area Association of Realtors Inc as a real estate company in Killeen, Texas.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 21,
+   "source_output_id": "6c5b6e91-a0fa-4641-8a90-d77e2f5b51b8",
+   "source_content_hash": "c877adc0085c86cf3892b5042a23ab8a8bdc49091d9360efb1086e90b0350676",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, hospital & health care ('health care company'), Sylvania OH and 1-10 ('small') match; seller_relevance is hedged ('may assist').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 22,
+   "source_output_id": "9901d253-9586-4dbf-9a44-ec2094aa169b",
+   "source_content_hash": "5e8881d94911da47eed8893adf36ed473344219b8bef41e0c504128756696d4b",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), specialization claim, invented needs and challenges, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Center for Solutions in Brief Therapy, Inc.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Center for Solutions in Brief Therapy, Inc. as a company in the hospital & health care category in Sylvania, Ohio.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 23,
+   "source_output_id": "3f0b5f67-2cf2-4480-a83e-22eef23b7491",
+   "source_content_hash": "148f5e86ada44526f7ac3d4939434ceee930c87eaa27bbbdf3a8681cbb3cf7d8",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "The summary and evidence silently respell the recorded website ('coloradoappaiser.com' becomes 'coloradoappraiser.com'); the recorded value is restored. Other facts and the hedged seller_relevance are fine.",
+   "issues": [
+    "altered_recorded_value"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The recorded website 'coloradoappaiser.com' looks like a misspelling of 'coloradoappraiser.com'; neither domain was checked, so the recorded value is kept.",
+   "corrected_fields": {
+    "company_summary": "Evenson Appraisal Inc is a small real estate company located in Grand Junction, Colorado, United States, with a company size of 1-10 employees. The record lists the website coloradoappaiser.com and a LinkedIn profile at linkedin.com/company/evenson-appraisal-inc.",
+    "evidence": [
+     {
+      "fact_id": "fact-company_name",
+      "statement": "The company name is Evenson Appraisal Inc."
+     },
+     {
+      "fact_id": "fact-website",
+      "statement": "The recorded website is coloradoappaiser.com."
+     },
+     {
+      "fact_id": "fact-industry",
+      "statement": "The industry is real estate."
+     },
+     {
+      "fact_id": "fact-company_size",
+      "statement": "The company size is 1-10 employees."
+     },
+     {
+      "fact_id": "fact-location",
+      "statement": "The company is located in Grand Junction, Colorado, United States."
+     },
+     {
+      "fact_id": "fact-extra-country",
+      "statement": "The country is the United States."
+     },
+     {
+      "fact_id": "fact-extra-locality",
+      "statement": "The locality is Grand Junction."
+     },
+     {
+      "fact_id": "fact-extra-region",
+      "statement": "The region is Colorado."
+     }
+    ]
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 24,
+   "source_output_id": "c2bdf360-190f-476b-902d-5f8cd8977478",
+   "source_content_hash": "c4c5b7c3cad0f6563a5f9f923d5aa1c50aa7d89e3377c8b074eaea3f2b669700",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Presents the prospect's own website and LinkedIn page as GTMFlow's demo and page, broken signature ('My name is from GTMFlow'), invented needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "misattributed_website",
+    "misattributed_profile",
+    "broken_signature",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The recorded website 'coloradoappaiser.com' looks like a misspelling of 'coloradoappraiser.com'; neither domain was checked, so the recorded value is kept.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Evenson Appraisal Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists Evenson Appraisal Inc as a real estate company in Grand Junction, Colorado.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 25,
+   "source_output_id": "c867974d-4089-428f-9c72-0288b9b75475",
+   "source_content_hash": "1a4d7b5231ffc39e20399b16572024cfa982bfa281cb2d59571c4454fc7c4e75",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, website, hospital & health care, Brooklyn NY, 11-50 and LinkedIn match; seller_relevance is hedged and not confirmed for this lead. Stiff.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 26,
+   "source_output_id": "a8f4d0fe-b793-4135-af9f-cbe0019c3268",
+   "source_content_hash": "93c9a0de522bba4d0f1e70d2e3e1c2d12b5590b97e051546a53246f98ec404f7",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Says 'a demonstration solution' but not that it is not a commercial offer; invented fit ('assist organizations like yours in streamlining workflows'), invented initiatives and goals; '[Your Name]' placeholder.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for CDPAP Department of Edison HHC",
+    "email_body": "Hi there,\n\nThe supplied company record lists CDPAP Department of Edison HHC as a company in the hospital & health care category in Brooklyn, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 27,
+   "source_output_id": "9940429b-0710-44a7-8fe7-b878151c8d9a",
+   "source_content_hash": "323ad805db58aff5c423db047aa9a2b6de9b602e9d4d44aa4ee4f579b28e311b",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Brooklyn NY, founded 2014, 11-50 and LinkedIn match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  },
+  {
+   "position": 28,
+   "source_output_id": "92587a37-d4a8-4dc5-9149-b68108d11bd4",
+   "source_content_hash": "99e1aa5c58cd82299ace49106867c28a64cdfcaa5f3bd6c080ab0bebaaca85a8",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Specialization claim ('streamlining lead-engagement workflows'), invented goals; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Dwell Residential, Inc.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Dwell Residential, Inc. as a real estate company in Brooklyn, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:31:54.789670+00:00"
+  }
+ ]
+}

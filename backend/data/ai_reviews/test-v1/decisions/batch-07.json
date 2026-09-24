@@ -1,0 +1,179 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "test-v1",
+ "reviews": [
+  {
+   "position": 77,
+   "source_output_id": "518f459d-e348-4fda-a402-091d194f83a2",
+   "source_content_hash": "b880bef824365dc56253212df0a2e27b9ed47d1f6ffd8f698d1d0341daa7ebc4",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care, Pasadena CA and 1-10 ('small') match; seller_relevance lists the profile's capabilities and is hedged ('may be relevant').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  },
+  {
+   "position": 78,
+   "source_output_id": "996f2295-d8d4-4e21-84dc-25a8712f03b8",
+   "source_content_hash": "ec96d850505aea52a8c67f340a23e054875d3e574d94bc6473a7d1000f6a9e50",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented fit ('suitable for healthcare organizations like yours'), mentions a demonstration but never says it is not a commercial offer; '[Your Name]' placeholder.",
+   "issues": [
+    "broken_signature",
+    "invented_fit",
+    "incomplete_demo_label",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Mission Hills Pain Management MedicalCorp",
+    "email_body": "Hi there,\n\nThe supplied company record lists Mission Hills Pain Management MedicalCorp as a company in the hospital & health care category in Pasadena, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  },
+  {
+   "position": 79,
+   "source_output_id": "850c78fc-656a-43f0-814d-5a453e05b419",
+   "source_content_hash": "855b6c85f41dd7bdb01a04d0a50ade23d425a2f9fd382a27833c43d4986f4837",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct, but seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  },
+  {
+   "position": 80,
+   "source_output_id": "9c522f29-5f1e-44c1-90c6-57dcbc0497ac",
+   "source_content_hash": "ac4ea8fe0d678818cf1c7d88966aa2f16bf9dd4bf51ba1dc036503e4c73e673f",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Presents the prospect's own website and LinkedIn page as GTMFlow's, broken signature ('My name is from GTMFlow'), invented need, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "misattributed_website",
+    "misattributed_profile",
+    "broken_signature",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Delisa Delay Properties",
+    "email_body": "Hi there,\n\nThe supplied company record lists Delisa Delay Properties as a real estate company in Branson, Missouri.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  },
+  {
+   "position": 81,
+   "source_output_id": "3bc2d08b-e1c7-4e3c-873e-3209ac1d719f",
+   "source_content_hash": "93c0a7c772984d36ddd853248985a4b6bfe8d55a8d6dd35c4862551dbe67c2ec",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Strongsville OH and 1-10 match; seller_relevance describes capabilities and says there is no specific relevance to the lead.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  },
+  {
+   "position": 82,
+   "source_output_id": "1757519a-634d-4311-96de-03ff3772cf9e",
+   "source_content_hash": "8bb9e220454c0aeb4bcdb38beafbb589b0f5fd2c52f58677b2c6c3a70d6894b7",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invented specialization ('we specialize in supporting teams in the healthcare sector'), invented needs and goals; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Metro Health Medical Center",
+    "email_body": "Hi there,\n\nThe supplied company record lists Metro Health Medical Center as a medical practice in Strongsville, Ohio.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  },
+  {
+   "position": 83,
+   "source_output_id": "4732576a-1251-4451-afef-462bd4f3cc31",
+   "source_content_hash": "c26cf42a2da498ee2a56213a970fd0f5afe0224e337247ddb21fc38a6d351874",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported ('small' for 1-10), but the hypothesis invents a need ('may be looking to improve its outreach strategies').",
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:28:46.117324+00:00"
+  }
+ ]
+}

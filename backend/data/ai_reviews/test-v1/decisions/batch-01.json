@@ -1,0 +1,354 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "test-v1",
+ "reviews": [
+  {
+   "position": 1,
+   "source_output_id": "9e63bb7d-d58c-4e4f-b13b-ed0e83ecf39c",
+   "source_content_hash": "0d87f2be7dee5fde6608c4a6550ec6cfcdedff4e605dcf7ff49d0b89f97eacb1",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "All statements match the record (name as recorded, medical practice, 1-10, Dallastown PA, candidate segment); no hypotheses; seller_relevance null. Stiff, quotes the raw lowercase name.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 2,
+   "source_output_id": "093d1fe0-372a-4c7c-a290-d6f815fa16ba",
+   "source_content_hash": "52c25a020dc719b8e31d862094223bcbecf7d7ff7d1e00abd5b07a956b0083a6",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invents a need ('streamlining lead workflows', 'learn more about your needs'), '[Your Name]' placeholder; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Richard H. Daly, Jr., M.D.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Richard H. Daly, Jr., M.D. as a medical practice in Dallastown, Pennsylvania.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 4,
+   "source_output_id": "25b81f2f-56b9-40dd-9eab-efae5273ad18",
+   "source_content_hash": "08efd9805eeb3b3807cc09238733e799ee01248571f588f2a7769eef2367125a",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), addresses the named person although no contact is on file, invented embellishment ('sunny Los Angeles'), invented specialization and 'growth strategy' need, placeholders; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "assumed_contact",
+    "invented_detail",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Salvador Ledezma",
+    "email_body": "Hi there,\n\nThe supplied company record lists Salvador Ledezma as a real estate company in Los Angeles, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 5,
+   "source_output_id": "438889e4-0c39-4f89-84b3-83227c12d495",
+   "source_content_hash": "f6bb0b7abdcccc97dc45ce54bf2cb7d7fadf901f4e0317998d4878ac1ccd8c28",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Record facts are correct, but a hypothesis speculates about operational problems ('could have operational problems') and seller_relevance is only the string 'GTMFlow (demonstration)', which says nothing.",
+   "issues": [
+    "speculative_problem_hypothesis",
+    "vague_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 6,
+   "source_output_id": "88a3bc2e-325d-4c25-91f7-9f620a06ca97",
+   "source_content_hash": "b246470295a5acf6048aa5b82f0d967ce99d7cbd023cd74f4683c8267f0aad89",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Assumes a contact ('Dear Rachael') although none is on file, invents a specialization and needs ('optimizing its outreach efforts'), '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "assumed_contact",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Rachael E Gonzalez",
+    "email_body": "Hi there,\n\nThe supplied company record lists Rachael E Gonzalez as a medical practice in Los Angeles, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 7,
+   "source_output_id": "9b092d93-fe56-4693-9067-e8e0690e1602",
+   "source_content_hash": "14eddae1a3c8c3be020ad3ac1c8f3c2a3d1d23a8c2f7fe4b12dd92020b21150a",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, founded 2000, real estate, 1-10 and Palm Beach Gardens FL all match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 8,
+   "source_output_id": "d7d15f84-8f57-4bcb-aec0-cb948ebbc82d",
+   "source_content_hash": "0c14c33230bf8d1992e80a93dd767baecb43a4541ba2b25a793eaa347ab4d1b8",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invented praise ('impressed by your presence'), invented goals and needs, specialization claim, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_praise",
+    "invented_need",
+    "invented_specialization",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Lambros Real Estate Ventures, LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Lambros Real Estate Ventures, LLC as a real estate company in Palm Beach Gardens, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 9,
+   "source_output_id": "d268b20e-0324-4be8-b82b-ed0c091efba3",
+   "source_content_hash": "1a8a1291e3e2a7c10d2ef82539bbafebe4222107f9c0c44d17a19ed158e853d0",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Facts are supported, but the last evidence statement misreads the classification flag ('The company is classified as a candidate only').",
+   "issues": [
+    "misread_fact"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Morning Joy Publishing Co' is recorded under 'hospital & health care'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "evidence": [
+     {
+      "fact_id": "fact-company_name",
+      "statement": "The company name is Morning Joy Publishing Co."
+     },
+     {
+      "fact_id": "fact-industry",
+      "statement": "The industry is hospital & health care."
+     },
+     {
+      "fact_id": "fact-company_size",
+      "statement": "The company size is 1-10."
+     },
+     {
+      "fact_id": "fact-location",
+      "statement": "The location is Willmar, Minnesota, United States."
+     },
+     {
+      "fact_id": "fact-extra-country",
+      "statement": "The country is United States."
+     },
+     {
+      "fact_id": "fact-extra-locality",
+      "statement": "The locality is Willmar."
+     },
+     {
+      "fact_id": "fact-extra-region",
+      "statement": "The region is Minnesota."
+     },
+     {
+      "fact_id": "fact-extra-candidate_segment",
+      "statement": "The candidate segment is healthcare."
+     },
+     {
+      "fact_id": "fact-extra-segment_is_candidate_classification_only",
+      "statement": "The healthcare segment is a candidate classification only."
+     }
+    ]
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 10,
+   "source_output_id": "b75bb052-1a33-4014-8b61-e7cd442401b4",
+   "source_content_hash": "bea9260f5388c44593d49fdd4cd415c0b90cfeab237cdb507feaf946f5b37540",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Mentions 'a demonstration' but not that it is not a commercial offer; invents 'unique opportunities for collaboration' and needs/challenges; '[Your Name]' placeholder.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_opportunity",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Morning Joy Publishing Co' is recorded under 'hospital & health care'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Morning Joy Publishing Co",
+    "email_body": "Hi there,\n\nThe supplied company record lists Morning Joy Publishing Co as a company in the hospital & health care category in Willmar, Minnesota.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 11,
+   "source_output_id": "73d326bd-ae85-47d2-b390-0ab227e10239",
+   "source_content_hash": "6626b514b9f3242582ed63a3b9d2fcd5bde44ec1022b63872154bbc1a71f686d",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, real estate, New York NY, 11-50, founded 2010, website and LinkedIn all match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 12,
+   "source_output_id": "40e31916-f93e-456a-8aeb-7b61fb14e88e",
+   "source_content_hash": "27d1dd547c4b04c603ce06f65586861d1b3a18728945ca1a6fdda23987838bdd",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invented specialization ('personalized outreach'), invented needs ('optimizing their outreach strategies', 'tailored to your needs'), '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for PMR NYC",
+    "email_body": "Hi there,\n\nThe supplied company record lists PMR NYC as a real estate company in New York, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  },
+  {
+   "position": 13,
+   "source_output_id": "fde0caa5-aa1d-4819-9905-e8fe6aeda401",
+   "source_content_hash": "b284d107a79a2ea219a1ecfc4878ad7706a07faa14fac447b8dd9109b4483f6f",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, medical practice, 11-50 and Sevierville TN match; the classification flag is read correctly; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:25:38.719316+00:00"
+  }
+ ]
+}

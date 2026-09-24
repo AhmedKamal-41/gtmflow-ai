@@ -1,0 +1,59 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "test-v1",
+ "reviews": [
+  {
+   "position": 15,
+   "source_output_id": "3956cf89-a682-4840-9664-fa70bbc953fb",
+   "source_content_hash": "d3b12c047a23f4830661eb9ec35e5eabcd51571a99211bb58d11d6ee92861488",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, real estate, Orem UT, founded 2010 and 1-10 match; seller_relevance is hedged ('may be applicable'). Keeps the raw lowercase name and location.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:36:02.120307+00:00"
+  },
+  {
+   "position": 43,
+   "source_output_id": "58949994-8020-4c35-aca5-241ed2a27eb4",
+   "source_content_hash": "d122dd9259587f519986732b9cf7f0fbe82f3e8e19e7b90a2b0e0f66fd0f5560",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct, but seller_relevance asserts the demonstration 'is relevant' and 'aligns with the details of the lead'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:36:02.120307+00:00"
+  },
+  {
+   "position": 53,
+   "source_output_id": "133cf410-2961-46d1-8189-0225ad3588e0",
+   "source_content_hash": "370b18c224ea3558c50db780e0c1e370b4384cb0888b4b8fa689ac86c20ad358",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct, but seller_relevance asserts the capabilities 'are relevant for engaging with' the lead.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:36:02.120307+00:00"
+  }
+ ]
+}

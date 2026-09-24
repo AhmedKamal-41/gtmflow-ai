@@ -1,0 +1,134 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 67,
+   "source_output_id": "048e9b20-94b3-40d5-9ae2-d191109914c0",
+   "source_content_hash": "e413d82c0c48d08fdb304ce299cc6062dcc3eb15270dab2b5c6344e5ece87b1d",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance is conditional ('could be relevant depending on'), but both hypotheses invent interest or scaling needs (labeled unconfirmed).",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:33:39.189555+00:00"
+  },
+  {
+   "position": 68,
+   "source_output_id": "97103be1-8c6c-4a9c-b573-789316d15f90",
+   "source_content_hash": "bf333c4bfa1f1a6786899e32cfa559399c65b29e2cd006104be596598695de10",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Claims GTMFlow was 'designed to streamline your outreach efforts', specialization claim, asks about their lead generation, '[Your Name]'/'[Your Position]' placeholders; no demonstration label.",
+   "issues": [
+    "invented_fit",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Prudential Discover Real Estate",
+    "email_body": "Hi there,\n\nThe supplied company record lists Prudential Discover Real Estate as a real estate company in the United States.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:39.189555+00:00"
+  },
+  {
+   "position": 69,
+   "source_output_id": "2302ea59-9352-4f64-adb5-15d6d315339a",
+   "source_content_hash": "ac55ec380ded243160e4b6e8cf3cdf8bea276b4e2973351759b1429e6dada22c",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, medical practice, Reading PA, 11-50 and LinkedIn match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:33:39.189555+00:00"
+  },
+  {
+   "position": 70,
+   "source_output_id": "0fa95bcf-32bb-4d2b-92da-9127388b6e3d",
+   "source_content_hash": "0b6b8841c74a45d9d8285568746b7ed17b47254690568c857cd4cace75275960",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), mentions a 'demonstration workflow' but not that it is not a commercial offer, specialization claim, invented initiatives and needs, '[Your Name]' placeholder.",
+   "issues": [
+    "broken_signature",
+    "incomplete_demo_label",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Southern Berks Family Medicine",
+    "email_body": "Hi there,\n\nThe supplied company record lists Southern Berks Family Medicine as a medical practice in Reading, Pennsylvania.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:39.189555+00:00"
+  },
+  {
+   "position": 71,
+   "source_output_id": "7c170561-e654-4fa9-a328-e19ff9487ace",
+   "source_content_hash": "6cd1ed5be6e92fbc2c2bd53e984ae9bf2b124153e6f87f5dd66764fa7da00aeb",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported ('small' for 1-10), but the hypotheses invent needs (the second is not even hedged), and seller_relevance is only 'GTMFlow (demonstration)'.",
+   "issues": [
+    "invented_need_hypothesis",
+    "vague_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:33:39.189555+00:00"
+  }
+ ]
+}

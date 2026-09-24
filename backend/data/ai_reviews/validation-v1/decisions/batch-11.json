@@ -1,0 +1,110 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 81,
+   "source_output_id": "da2da173-f231-4628-ada4-a4d21c0d3d4d",
+   "source_content_hash": "08138cae6fc9550c289603dae774ad1f1e73f7d0509873a53e76dc2760764929",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, website, medical practice, Scituate MA and 1-10 match; seller_relevance only describes the demonstration. Stiff.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:34:21.497510+00:00"
+  },
+  {
+   "position": 82,
+   "source_output_id": "b5f6fe66-bc1e-4939-9842-4e3eca27251f",
+   "source_content_hash": "c51b60c672c623363d0bb05f9b581ad1e744e6acdba1db90c7dfb77bf37738ae",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), specialization claim ('tools designed to support companies like ...'), invented engagement needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Scituate Harbor Vision Source",
+    "email_body": "Hi there,\n\nThe supplied company record lists Scituate Harbor Vision Source as a medical practice in Scituate, Massachusetts.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:21.497510+00:00"
+  },
+  {
+   "position": 83,
+   "source_output_id": "8a4753a7-eb88-4a69-9031-bf20b9251503",
+   "source_content_hash": "3db753356e96c1055c423e45c0741bdb948d60c1bdc8b26a951f070b48d805d8",
+   "decision": "corrected",
+   "factual_support": "supported",
+   "writing_quality": 2,
+   "missing_info_handling": "good",
+   "reason": "All statements are supported, but the summary is a sentence fragment with no verb; rewritten as a sentence using only record facts.",
+   "issues": [
+    "ungrammatical_summary"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a tagline ('central oregon realtor since 1994') and the website (joyhelfrich.com) is a person's name; the record may describe an individual agent rather than a company.",
+   "corrected_fields": {
+    "company_summary": "Central Oregon Realtor since 1994 is listed in the real estate industry with a company size of 1-10 employees, located in the United States. The record lists the website joyhelfrich.com."
+   },
+   "reviewed_at": "2026-09-24T05:34:21.497510+00:00"
+  },
+  {
+   "position": 84,
+   "source_output_id": "7a0e9753-162d-47b1-ace5-5d66d5620ff3",
+   "source_content_hash": "2460a788a86f9e9287363953bf681882c6bf00d8500c2c73e55d95835ab0a247",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Says 'a demonstration of our capabilities' but not that it is not a commercial offer; invented praise ('a significant player'), invented benefit ('beneficial insights').",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_praise",
+    "invented_fit"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a tagline ('central oregon realtor since 1994') and the website (joyhelfrich.com) is a person's name; the record may describe an individual agent rather than a company.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Central Oregon Realtor since 1994",
+    "email_body": "Hi there,\n\nThe supplied company record lists Central Oregon Realtor since 1994 as a real estate company in the United States.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:21.497510+00:00"
+  }
+ ]
+}

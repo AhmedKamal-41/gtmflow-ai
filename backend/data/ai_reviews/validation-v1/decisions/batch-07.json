@@ -1,0 +1,174 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 61,
+   "source_output_id": "66d1e6e3-4766-49e4-85ba-d77f4536a523",
+   "source_content_hash": "233489ea4aca103b598e6a03b22d48db424c28a8e342562b441253ac12b645d1",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents interest in partnerships or solutions, and seller_relevance asserts the demonstration 'is relevant' and 'could be beneficial'.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:33:25.119302+00:00"
+  },
+  {
+   "position": 62,
+   "source_output_id": "8b1937fe-8dba-4b84-8af2-2abd6237f8f0",
+   "source_content_hash": "c7ab1e5b8c1d1d68975ace7b1b72a2ef17f8f1576fd5ad5b0d7c0f2469d0bced",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invented praise ('impressed by your longstanding history', 'vital to the community'), specialization claim, invented operational needs and initiatives, '[Your Name]'/'[Your Position]' placeholders; no demonstration label.",
+   "issues": [
+    "invented_praise",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Gracesource Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists Gracesource Inc as a company in the hospital & health care category in Yuba City, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:25.119302+00:00"
+  },
+  {
+   "position": 63,
+   "source_output_id": "b6be8784-e8f3-4a33-861f-d15ac5873297",
+   "source_content_hash": "d01e140d5d45891a8e3e780bbbf183ff749a98a00100979d9a69c06938eaad57",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance is hedged ('might be relevant'), but both hypotheses invent needs or buying intent (labeled unconfirmed).",
+   "issues": [
+    "invented_need_hypothesis",
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Pte Ltd' is a Singapore company suffix while the location is Cathay, North Dakota; the record may mix sources.",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:33:25.119302+00:00"
+  },
+  {
+   "position": 64,
+   "source_output_id": "06d1d8cf-7805-4cc9-9421-935370263b4d",
+   "source_content_hash": "1a4bb6381f50cc96551ab2b614e6c6d56d639556f49d6742b53d2686ad6deff9",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Says 'workflow demonstration platform' but not that it is not a commercial offer; invented 'detailed insights tailored for businesses like yours', invented needs.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_need"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Pte Ltd' is a Singapore company suffix while the location is Cathay, North Dakota; the record may mix sources.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for J Amanda Global Land Pte Ltd",
+    "email_body": "Hi there,\n\nThe supplied company record lists J Amanda Global Land Pte Ltd as a real estate company in Cathay, North Dakota.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:25.119302+00:00"
+  },
+  {
+   "position": 65,
+   "source_output_id": "fa14bbef-3527-4307-8f77-d4217de10455",
+   "source_content_hash": "9023b8ec9b5af1249ec6d4504b84c811ad44e8136d6838b49b887cc2ee3b186d",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance is neutral, but both hypotheses invent needs or interest (labeled unconfirmed).",
+   "issues": [
+    "invented_need_hypothesis",
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'New Century Industries Inc' (an industrial-sounding name) is recorded under 'hospital & health care'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:33:25.119302+00:00"
+  },
+  {
+   "position": 66,
+   "source_output_id": "6c81d8ba-0b1d-4020-94c8-5afccadc81e0",
+   "source_content_hash": "539e671f3d5a60e07f399add1ac34a0ad39b7dcd8b956ec0fe7f4760295c2d04",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), specialization claim ('outreach strategies for healthcare companies like yours'), a confused 'connect with us through your LinkedIn page', '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "misattributed_profile",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'New Century Industries Inc' (an industrial-sounding name) is recorded under 'hospital & health care'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for New Century Industries Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists New Century Industries Inc as a company in the hospital & health care category in Parsippany, New Jersey.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:25.119302+00:00"
+  }
+ ]
+}
