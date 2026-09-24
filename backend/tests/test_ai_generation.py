@@ -216,3 +216,29 @@ def test_test_suite_never_uses_real_provider_or_webhook() -> None:
     assert settings.openai_api_key == ""
     assert settings.slack_webhook_url == ""
     assert isinstance(get_ai_client(), MockAIClient)
+
+
+def test_tests_cannot_reach_external_hosts() -> None:
+    """The conftest network guard refuses DNS lookups and connections to
+    non-loopback hosts, so no test can reach a live provider or webhook."""
+    import socket
+
+    from tests.conftest import ExternalNetworkBlocked
+
+    for address in (("api.openai.com", 443), ("hooks.slack.com", 443), ("203.0.113.10", 443)):
+        with pytest.raises(ExternalNetworkBlocked):
+            socket.create_connection(address, timeout=1)
+
+
+def test_real_client_with_a_key_is_still_blocked(monkeypatch) -> None:
+    """Even an explicitly constructed OpenAIClient with a key can't reach the
+    provider inside the test run. The key is fake; nothing leaves the host."""
+    from app.ai.client import AIProviderError, OpenAIClient
+    from tests import conftest
+
+    before = len(conftest.BLOCKED_NETWORK_ATTEMPTS)
+    client = OpenAIClient(api_key="sk-test-not-a-real-key", model="gpt-4o-mini")
+    with pytest.raises(AIProviderError):
+        client._call("ping")
+    assert "api.openai.com" in conftest.BLOCKED_NETWORK_ATTEMPTS[before:]
+    assert client.last_usage is None

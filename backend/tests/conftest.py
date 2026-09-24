@@ -8,6 +8,63 @@ os.environ["USE_MOCK_AI"] = "true"
 os.environ["OPENAI_API_KEY"] = ""
 os.environ["SLACK_WEBHOOK_URL"] = ""
 
+# Defense in depth: even if a test builds a real client explicitly, no
+# socket may resolve or reach a non-loopback host during the test run.
+# Local Postgres (TEST_DATABASE_URL) and the in-process TestClient still work.
+import ipaddress
+import socket
+
+
+class ExternalNetworkBlocked(RuntimeError):
+    pass
+
+
+BLOCKED_NETWORK_ATTEMPTS: list[str] = []
+_real_getaddrinfo = socket.getaddrinfo
+_real_connect = socket.socket.connect
+_real_connect_ex = socket.socket.connect_ex
+
+
+def _is_local(host) -> bool:
+    if host is None:
+        return True
+    if isinstance(host, bytes):
+        host = host.decode()
+    if host in ("localhost", "testserver", ""):
+        return True
+    try:
+        return ipaddress.ip_address(host.split("%")[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def _block(host) -> None:
+    BLOCKED_NETWORK_ATTEMPTS.append(str(host))
+    raise ExternalNetworkBlocked(f"Tests may not reach external host {host!r}.")
+
+
+def _guarded_getaddrinfo(host, *args, **kwargs):
+    if not _is_local(host):
+        _block(host)
+    return _real_getaddrinfo(host, *args, **kwargs)
+
+
+def _guarded_connect(self, address):
+    if self.family in (socket.AF_INET, socket.AF_INET6) and not _is_local(address[0]):
+        _block(address[0])
+    return _real_connect(self, address)
+
+
+def _guarded_connect_ex(self, address):
+    if self.family in (socket.AF_INET, socket.AF_INET6) and not _is_local(address[0]):
+        _block(address[0])
+    return _real_connect_ex(self, address)
+
+
+socket.getaddrinfo = _guarded_getaddrinfo
+socket.socket.connect = _guarded_connect
+socket.socket.connect_ex = _guarded_connect_ex
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine

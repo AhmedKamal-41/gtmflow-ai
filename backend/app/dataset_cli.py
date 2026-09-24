@@ -26,7 +26,7 @@ from typing import Any
 from app.ai.mock_client import MockAIClient
 from app.core.database import get_sessionmaker
 from app.datasets import checks, dedup, pilot
-from app.evaluation import metrics
+from app.evaluation import criteria, metrics
 from app.services import splits
 
 EXPORT_FILES = {
@@ -74,9 +74,16 @@ def cmd_build(args, session) -> int:
         "eligible": _write_jsonl(os.path.join(args.out_dir, EXPORT_FILES["eligible"]), eligible),
         "flagged": _write_jsonl(os.path.join(args.out_dir, EXPORT_FILES["flagged"]), flagged),
     }
+    split_set = {e["split"] for e in deduped["kept"]}
     manifest = {
         "dataset_format": pilot.DATASET_FORMAT,
         "queue": args.queue,
+        # Only an all-train dataset may ever be used for training. Held-out
+        # datasets are for evaluation only; test is also never used to tune
+        # prompts or the review rubric.
+        "allowed_use": ("training" if split_set <= {"train"} else
+                        "evaluation only -- held out; never train on it" +
+                        ("; never tune prompts or rubric on it" if "test" in split_set else "")),
         "inputs": {"ai_export": args.ai_export, "ai_export_sha256": _sha(args.ai_export) if args.ai_export else None,
                    "human_source": "training_annotations (latest per candidate)"},
         "dedup": deduped["report"],
@@ -119,6 +126,14 @@ def cmd_check(args, session) -> int:
 
 def cmd_evaluate(args, session) -> int:
     rows = pilot.load_jsonl(args.dataset)
+    held_out = bool(rows) and all(r["split"] in ("validation", "test") for r in rows)
+    if held_out and args.system == "source":
+        sut = criteria.CRITERIA["system_under_test"]
+        wrong = [r["position"] for r in rows if (r["model_revision"], r["prompt_version"], r["output_schema_version"])
+                 != (sut["model_revision"], sut["prompt_version"], sut["output_schema_version"])]
+        if wrong:
+            print(json.dumps({"error": f"predictions not from the frozen system under test: {wrong}"}), file=sys.stderr)
+            return 1
     mock = MockAIClient()
     per_example = []
     for r in rows:
@@ -131,21 +146,32 @@ def cmd_evaluate(args, session) -> int:
             output = mock.generate_outreach(ctx)
         s = metrics.score(r["task"], output, r["target"], ctx)
         per_example.append({"example_id": r["example_id"], "position": r["position"], "task": r["task"],
-                            "split": r["split"], "review_source": r["review_source"], **s})
+                            "split": r["split"], "segment": r["segment"], "review_source": r["review_source"],
+                            "uncertain": r["uncertain"], **s})
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for s in per_example:
         groups[f"task={s['task']}"].append(s)
         groups[f"task={s['task']}|review_source={s['review_source']}"].append(s)
+        groups[f"task={s['task']}|segment={s['segment']}"].append(s)
     splits_seen = sorted({r["split"] for r in rows})
-    numeric = lambda s: {k: v for k, v in s.items() if isinstance(v, (bool, int, float)) and k != "position"}
+    numeric = lambda s: {k: v for k, v in s.items()
+                         if isinstance(v, (bool, int, float)) and k not in ("position", "uncertain")}
+    sources = sorted({r["review_source"] for r in rows})
     result = {
         "system": args.system,
         "system_detail": ("stored generator outputs (gpt-4o-mini, grounded-v2) as recorded"
                           if args.system == "source" else f"MockAIClient {mock.model_revision}"),
         "metrics_version": metrics.METRICS_VERSION,
+        "criteria_id": criteria.CRITERIA_ID, "criteria_sha256": criteria.criteria_digest(),
+        "prediction": ("original stored predictions (source_output), scored against separate reference targets"
+                       if args.system == "source" else "mock outputs generated now from the recorded inputs"),
+        "reference_source": sources,
+        "reference_label": ("AI-derived reference targets (review_source=ai, human_verified=false); "
+                            "not human-verified quality" if sources == ["ai"] else
+                            "reference targets from: " + ", ".join(sources)),
         "dataset": args.dataset, "dataset_sha256": _sha(args.dataset), "splits": splits_seen,
-        "held_out": all(s in ("validation", "test") for s in splits_seen),
-        "label": ("HELD-OUT evaluation" if all(s in ("validation", "test") for s in splits_seen)
+        "held_out": held_out,
+        "label": ("HELD-OUT evaluation" if held_out
                   else "IN-SAMPLE (training split) -- descriptive only, NOT a held-out evaluation"),
         "overall": metrics.aggregate([numeric(s) for s in per_example]),
         "by_group": {k: metrics.aggregate([numeric(s) for s in v]) for k, v in sorted(groups.items())},
@@ -153,7 +179,7 @@ def cmd_evaluate(args, session) -> int:
     }
     with open(args.out, "w") as f:
         json.dump(result, f, indent=2, sort_keys=True)
-    print(json.dumps({k: result[k] for k in ("system", "label", "overall", "by_group")}, indent=2))
+    print(json.dumps({k: result[k] for k in ("system", "label", "reference_label", "overall", "by_group")}, indent=2))
     return 0
 
 

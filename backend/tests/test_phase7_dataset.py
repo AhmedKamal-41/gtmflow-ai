@@ -20,6 +20,7 @@ from tests.conftest import SYNTHETIC_SELLER_PROFILE, save_and_activate
 from tests.test_annotation import ASSESSED, seed_cohort
 
 DEMO = dict(SYNTHETIC_SELLER_PROFILE, profile_kind="demo")
+FROZEN_CRITERIA_SHA256 = "1b5d3779a94dea439135911a5219d0fe1159654142ee37d48a4250ab15ada0f6"
 
 
 def _submit(client, cid, detail, **fields):
@@ -188,6 +189,7 @@ def test_cli_build_and_check_are_reproducible(db_session, reviewed, tmp_path):
     counts = manifest["counts"]
     assert counts["eligible"]["examples"] == 5 and counts["flagged_uncertain"]["examples"] == 1
     assert counts["eligible"]["by_review_source"] == {"human": 2, "ai": 3}
+    assert manifest["allowed_use"] == "training"
     (tmp_path / "b" / "eligible.jsonl").write_text("tampered\n{}\n")
     with pytest.raises(Exception):
         dataset_cli.cmd_check(argparse.Namespace(dir=str(tmp_path / "b")), db_session)
@@ -301,3 +303,17 @@ def test_held_out_queue_builds_human_only_and_evaluates_as_held_out(client, db_s
                                                        out=str(result_path)), db_session) == 0
     result = json.loads(result_path.read_text())
     assert result["held_out"] is True and result["label"] == "HELD-OUT evaluation"
+    assert result["criteria_id"] == "heldout-criteria-v1" and len(result["criteria_sha256"]) == 64
+    assert manifest["allowed_use"].startswith("evaluation only")
+    # These predictions came from the mock, not the frozen system under test:
+    # a held-out "source" evaluation of them is refused.
+    args = argparse.Namespace(dataset=str(out / "eligible.jsonl"), system="source", out=str(tmp_path / "x.json"))
+    assert dataset_cli.cmd_evaluate(args, db_session) == 1
+
+
+def test_frozen_criteria_digest_is_pinned():
+    """The held-out criteria were frozen before generation and review; any
+    edit must come with a new CRITERIA_ID (and this pin updated knowingly)."""
+    from app.evaluation import criteria
+    assert criteria.CRITERIA_ID == "heldout-criteria-v1"
+    assert criteria.criteria_digest() == FROZEN_CRITERIA_SHA256
