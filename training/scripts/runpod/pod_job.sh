@@ -33,8 +33,8 @@ STEP=start
 
 status() { echo "$1" >"$JOB/status"; echo "$(date -u +%FT%TZ) STATUS $1"; }
 self_terminate() {
-  runpodctl remove pod "$RUNPOD_POD_ID" \
-    || curl -fsS -X DELETE -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID"
+  runpodctl pod delete "$RUNPOD_POD_ID" || runpodctl remove pod "$RUNPOD_POD_ID" \
+    || curl -fsS -A gtmflow-pod/1.0 -X DELETE -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID"
 }
 on_exit() {
   local rc=$?

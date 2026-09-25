@@ -82,7 +82,7 @@ DISK_USD_PER_GB_MONTH = 0.10
 # Runs as the container command. Arms the hard lifetime and the claim check
 # at boot, then hands over to the image's /start.sh (sshd etc.).
 WATCHDOG_CMD = r'''W=/watchdog.log
-t() { runpodctl remove pod "$RUNPOD_POD_ID" >>$W 2>&1 || curl -fsS -X DELETE -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" >>$W 2>&1; }
+t() { runpodctl pod delete "$RUNPOD_POD_ID" >>$W 2>&1 || runpodctl remove pod "$RUNPOD_POD_ID" >>$W 2>&1 || curl -fsS -A gtmflow-pod/1.0 -X DELETE -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" >>$W 2>&1; }
 [ -f /watchdog.boot ] || date +%s >/watchdog.boot
 BOOT=$(cat /watchdog.boot); NOW=$(date +%s)
 HARD=$(( BOOT + ${GTMFLOW_HARD_LIMIT_SECONDS:-11700} - NOW )); CLAIM=$(( BOOT + ${GTMFLOW_CLAIM_LIMIT_SECONDS:-1800} - NOW ))
@@ -344,12 +344,16 @@ def verify_safeguards(state: dict) -> dict:
     """Refuse to transfer data unless the pod-side self-termination is armed
     and the pod can reach the RunPod API with its own key."""
     load_env = """while IFS= read -r -d '' kv; do case "$kv" in RUNPOD_POD_ID=*|RUNPOD_API_KEY=*) export "$kv";; esac; done </proc/1/environ; """
-    out = ssh(state, load_env + "cat /watchdog.log; cat /watchdog.boot; pgrep -fc 'sleep' || true; "
+    probe = r"""
+K="${RUNPOD_API_KEY:-}"; P="$RUNPOD_POD_ID"
+try() { local name=$1; shift; local out; if out=$("$@" 2>&1); then echo "SELF_API=$name"; return 0; fi
+        out="${out//$K/<redacted>}"; echo "PROBE_FAIL $name: $(echo "$out" | grep -v '^$' | head -n 2 | tr '\n' ' ' | cut -c1-200)"; return 1; }
+try runpodctl runpodctl pod get "$P" || try runpodctl_legacy runpodctl get pod "$P" || \
+try rest curl -fsS -o /dev/null -A gtmflow-pod/1.0 -H "Authorization: Bearer $K" "https://rest.runpod.io/v1/pods/$P" || echo SELF_API=none
+"""
+    out = ssh(state, load_env + "cat /watchdog.log; cat /watchdog.boot; "
                      "[ -n \"${RUNPOD_API_KEY:-}\" ] && echo POD_KEY=present || echo POD_KEY=absent; "
-                     "echo POD=$RUNPOD_POD_ID; command -v runpodctl || echo NO_RUNPODCTL; "
-                     "(runpodctl get pod \"$RUNPOD_POD_ID\" >/dev/null 2>&1 && echo SELF_API=runpodctl) || "
-                     "(curl -fsS -o /dev/null -H \"Authorization: Bearer ${RUNPOD_API_KEY:-}\" "
-                     "\"https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID\" && echo SELF_API=rest) || echo SELF_API=none",
+                     "echo POD=$RUNPOD_POD_ID; command -v runpodctl || echo NO_RUNPODCTL; " + probe,
               timeout=120).stdout
     armed = "armed: hard limit" in out
     self_api = re.search(r"SELF_API=(\w+)", out)
@@ -357,9 +361,10 @@ def verify_safeguards(state: dict) -> dict:
     result = {"watchdog_armed": armed, "self_api": self_api.group(1) if self_api else None,
               "pod_key": "present" if "POD_KEY=present" in out else "absent",
               "runpodctl": "NO_RUNPODCTL" not in out,
+              "probe_failures": [l for l in out.splitlines() if l.startswith("PROBE_FAIL")],
               "pod_id_matches": pod_ok, "watchdog_log": [l for l in out.splitlines() if "armed" in l]}
     event("safeguards_checked", **result)
-    if not (armed and pod_ok and result["self_api"] in ("runpodctl", "rest")):
+    if not (armed and pod_ok and result["self_api"] in ("runpodctl", "runpodctl_legacy", "rest")):
         raise RuntimeError(f"pod-side safeguards not verified: {result}")
     return result
 
