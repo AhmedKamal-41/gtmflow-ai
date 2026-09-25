@@ -269,11 +269,23 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | The 397.9 total training weight is descriptive only | It describes `structure-cap-v1` down-weighting. No requirement for 400 weighted examples exists or is introduced. |
 | No further data generation for this version; all 180 doubtful records stay excluded | Accepted as is. The evaluation artifacts and `heldout-criteria-v1` stay frozen. |
 
+## Decisions made in Phase 8 preparation (2026-09-25)
+
+| Decision | Reason / status |
+|---|---|
+| Base model `Qwen/Qwen3-4B-Instruct-2507` at revision `cdbee75f…` | Apache-2.0 and ungated (verified). A non-thinking instruct model, so it gives direct JSON answers. At about 4B parameters, bf16 LoRA fits one 24 GB GPU without quantization. Considered: Qwen2.5-7B-Instruct (Apache-2.0, but needs 4-bit QLoRA on 24 GB, with an extra dependency and less reproducible numerics); Qwen2.5-3B-Instruct (non-Apache "other" license); Qwen2.5-1.5B-Instruct (Apache-2.0, weaker). |
+| New dependencies, in a separate `training/` environment rather than `backend/requirements.txt`: torch 2.14.0, transformers 5.17.0, peft 0.21.0, accelerate 1.15.0, safetensors 0.8.0 (plus pytest) | Needed for LoRA training. Kept out of the web app's dependencies. The CPU lock is exact; the GPU pins differ only in `torch==2.14.0+cu126`. Python 3.12. `uv` is used locally because the system python3.12 lacks ensurepip. |
+| bf16 LoRA r16 / alpha 32 / dropout 0.05 on all attention and MLP projections; 3 epochs; LR 1e-4 cosine with 5% warmup; effective batch 8; seed 20260925 | A conservative first run for 419 examples. Validation selects the best epoch, with early stopping (patience 0). |
+| The objective is Σ wᵢ·lᵢ / Σ wᵢ using the Phase 7 `structure-cap-v1` weights; validation is unweighted | The weights are applied in the loss, not just recorded; verified by unit tests and the smoke manifest. The total weight (397.9) is descriptive. |
+| Data roles: train for fitting, validation for tuning (checkpoint selection), test never loaded in Phase 8 | Enforced in code, config and bundle. Test is reserved for Phase 9's final evaluation. |
+| Training formatting reuses `app.ai.prompts` (loaded by file path) and a new shared `JSON_SYSTEM_MESSAGE` constant used by the real client | Production-identical inputs. The text is unchanged. Training never loads backend settings or keys. |
+| Recommended run: 1× NVIDIA L4 24 GB (RunPod Secure Cloud, $0.49/hr, verified 2026-09-25); estimated $0.30–$0.50; suggested ceiling $3.00 with a 4-hour hard stop | Awaiting your approval. No paid compute has been used. Duration and cost are estimates, not measurements. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
 - ~~**Phase 3**: column mapping / streaming reads.~~ **Resolved**: implemented entirely with the Python standard library (`gzip`, `json`, `csv`) — no `pandas`/`pyarrow`/`ijson` needed, since the source turned out to be JSON Lines, not a giant JSON array or Parquet.
-- **Phase 8**: a LoRA/PEFT training stack (e.g., `peft`, `transformers`, `bitsandbytes` or equivalent) and a base model choice. None of this exists in `requirements.txt` today. Requires GPU access and the user's explicit go-ahead before any run (per contract rule 7) — this is compute spend, not a research decision to make unilaterally.
+- **Phase 8** *(resolved in preparation, 2026-09-25; see the Phase 8 decisions above)*: a LoRA/PEFT training stack (e.g., `peft`, `transformers`, `bitsandbytes` or equivalent) and a base model choice. None of this exists in `requirements.txt` today. Requires GPU access and the user's explicit go-ahead before any run (per contract rule 7) — this is compute spend, not a research decision to make unilaterally.
 - **Phase 10**: a background job system. `docs/architecture.md`'s roadmap already names Celery or Arq as candidates; no decision has been made yet.
 
 ## Unresolved questions for the user
