@@ -206,3 +206,35 @@ def test_preflight_measures_without_changing_or_saving_weights(tmp_path):
     assert not (tmp_path / "pf" / "best_adapter").exists()
     assert T.main(["preflight", "--config", str(CONFIG)]) == 2  # needs confirmation
     assert T.main(["preflight", "--config", str(CONFIG), "--confirm-paid-compute"]) == 2  # no CUDA here
+
+
+# ------------------------------------------------------- RunPod launcher
+
+def _launcher():
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "scripts" / "runpod" / "launch.py"
+    spec = importlib.util.spec_from_file_location("gtmflow_runpod_launch", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_launcher_reads_only_the_key_from_an_ignored_env_file_and_scrubs_it(tmp_path, monkeypatch, capsys):
+    L = _launcher()
+    dummy = "rpa_" + "X" * 20  # not a real key
+    ignored_dir = Path(__file__).resolve().parents[1] / "runs" / "pytest-env"  # training/runs/ is git-ignored
+    ignored_dir.mkdir(parents=True, exist_ok=True)
+    env = ignored_dir / ".env"
+    env.write_text(f"OPENAI_API_KEY=other\nexport RUNPOD_API_KEY=\"{dummy}\"\n")
+    assert L._key_from_env_file(env) == dummy
+    monkeypatch.delenv("RUNPOD_API_KEY", raising=False)
+    monkeypatch.setattr(L, "ENV_FILE", env)
+    monkeypatch.setattr(L, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(L, "EVENTS", tmp_path / "events.jsonl")
+    assert L.api_key() == dummy
+    L.event("probe", detail=f"Bearer {dummy}")
+    assert dummy not in capsys.readouterr().out and dummy not in (tmp_path / "events.jsonl").read_text()
+    tracked = Path(__file__)  # a tracked file must be refused as a credential source
+    with pytest.raises(SystemExit, match="not git-ignored"):
+        L._key_from_env_file(tracked)
+    env.unlink()

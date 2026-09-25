@@ -6,8 +6,10 @@
     python3 training/scripts/runpod/launch.py resume          # re-attach after a local disconnect
     python3 training/scripts/runpod/launch.py terminate       # emergency: remove this run's pod now
 
-The RunPod API key is read from $RUNPOD_API_KEY or ~/.config/gtmflow/runpod_api_key
-and is never printed or logged. The SSH key is ~/.ssh/gtmflow_runpod_ed25519 (local;
+The RunPod API key is read from $RUNPOD_API_KEY, else the RUNPOD_API_KEY line of
+backend/.env (only that line is parsed; the file must be git-ignored), else
+~/.config/gtmflow/runpod_api_key. It is never printed or logged (event records are
+scrubbed), and .env is never transferred (the bundle allowlist refuses it). The SSH key is ~/.ssh/gtmflow_runpod_ed25519 (local;
 only the public half is sent, as the pod's PUBLIC_KEY).
 
 Spending safeguards (a shell timeout does not stop RunPod billing, so the pod
@@ -58,6 +60,8 @@ POD_JOB = Path(__file__).resolve().parent / "pod_job.sh"
 LOCAL_RUN = TRAINING / "runs" / RUN_NAME / "train"
 SSH_KEY = Path.home() / ".ssh" / "gtmflow_runpod_ed25519"
 KEY_FILE = Path.home() / ".config" / "gtmflow" / "runpod_api_key"
+ENV_FILE = REPO / "backend" / ".env"
+_KEY: str | None = None
 REST = "https://rest.runpod.io/v1"
 GRAPHQL = "https://api.runpod.io/graphql"
 
@@ -97,12 +101,16 @@ def iso(ts: float | None = None) -> str:
     return datetime.fromtimestamp(ts or now(), timezone.utc).isoformat(timespec="seconds")
 
 
+def scrub(text: str) -> str:
+    return text.replace(_KEY, "<redacted>") if _KEY else text
+
+
 def event(kind: str, **fields) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    record = {"at": iso(), "event": kind, **fields}
+    line = scrub(json.dumps({"at": iso(), "event": kind, **fields}, default=str))
     with open(EVENTS, "a") as f:
-        f.write(json.dumps(record) + "\n")
-    print(json.dumps(record), flush=True)
+        f.write(line + "\n")
+    print(line, flush=True)
 
 
 def load_state() -> dict:
@@ -124,11 +132,29 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _key_from_env_file(path: Path) -> str:
+    """Value of RUNPOD_API_KEY in a dotenv file; other lines are not kept."""
+    if not path.exists():
+        return ""
+    ignored = subprocess.run(["git", "check-ignore", "-q", str(path)], cwd=REPO).returncode == 0
+    if not ignored:
+        sys.exit(f"refused: {path} is not git-ignored; not reading a credential from it")
+    for line in path.read_text().splitlines():
+        m = re.match(r"\s*(?:export\s+)?RUNPOD_API_KEY\s*=\s*(.*?)\s*$", line)
+        if m:
+            return m.group(1).strip().strip('"').strip("'")
+    return ""
+
+
 def api_key() -> str:
-    key = os.environ.get("RUNPOD_API_KEY") or (KEY_FILE.read_text().strip() if KEY_FILE.exists() else "")
-    if not key:
-        sys.exit(f"no RunPod API key: set RUNPOD_API_KEY or write it to {KEY_FILE} (mode 600)")
-    return key
+    global _KEY
+    if _KEY is None:
+        key = (os.environ.get("RUNPOD_API_KEY") or _key_from_env_file(ENV_FILE)
+               or (KEY_FILE.read_text().strip() if KEY_FILE.exists() else ""))
+        if not key:
+            sys.exit(f"no RunPod API key: set RUNPOD_API_KEY in {ENV_FILE} (git-ignored) or the environment")
+        _KEY = key
+    return _KEY
 
 
 class ApiError(RuntimeError):
@@ -144,7 +170,7 @@ def rest(method: str, path: str, body: dict | None = None) -> tuple[int, object]
             raw = resp.read()
             return resp.status, (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as err:
-        text = err.read().decode(errors="replace")[:500]
+        text = scrub(err.read().decode(errors="replace")[:500])
         return err.code, {"error": text}
     except (urllib.error.URLError, TimeoutError) as err:
         raise ApiError(f"{method} {path}: {err}") from None
