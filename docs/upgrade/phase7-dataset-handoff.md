@@ -1,8 +1,15 @@
 # Phase 7 handoff: dataset splits and baseline evaluation
 
-Date: 2026-09-24/25 (three checkpoints). The work stopped before Phase 8.
+Date: 2026-09-24/25 (three checkpoints, then closure).
 
-**Phase 7 status: deliverables in place for this experimental version, with two open shortfalls.**
+**Phase 7 status: CLOSED on 2026-09-25 under a revised experimental scope that you accepted explicitly (§28).**
+
+- **Original targets:** 400 training / 100 validation / 100 test examples, with human-verified held-out references recommended. These are preserved below with their actual completion status and are **not** reported as met.
+- **Accepted scope:** 419 training, 74 validation and 71 test eligible examples, with AI-reviewed references and independent human validation deferred.
+
+The earlier status lines below are kept as history.
+
+*(Before closure: deliverables were in place for this experimental version, with two open shortfalls.)*
 
 **Third checkpoint (§20–§27, 2026-09-25):**
 
@@ -875,3 +882,55 @@ The AI-evaluated results themselves are in §16.
   - Cost: about 80 calls, about $0.04.
   - Review under the frozen v1 rubric.
   - Because `heldout-criteria-v1` names the v1 datasets and is frozen, this would need a new `heldout-criteria-v2`, with results kept separate.
+
+
+---
+
+# Closure: Phase 7 closed under a revised experimental scope (2026-09-25)
+
+## 28. Scope change, targets and closure checks
+
+**Your decision (2026-09-25).** For this experimental version you accepted:
+
+- 419 eligible training examples;
+- 74 eligible validation examples;
+- 71 eligible test examples;
+- AI-reviewed references, with independent human validation deferred.
+
+No more data generation is needed for this version.
+
+| Original requirement | Original target | Actual | Status under the original target | Status under the accepted scope |
+|---|---|---|---|---|
+| Training examples (eligible) | 400 | **419** (5 human-reviewed, 414 AI-reviewed) | Met on raw count | Accepted |
+| Validation examples (eligible) | 100 | **74** | **Not met (26 short)** | Accepted |
+| Test examples (eligible) | 100 | **71** | **Not met (29 short)**; 3 unresolved generation failures | Accepted |
+| Human-verified held-out references (recommended) | Human review, at least for test | 0 human-verified; all AI-reviewed | **Not met** | Accepted; independent human validation **deferred** |
+| Phase 6: 100 human-reviewed pilot examples | 100 | 5 usable human-reviewed + 94 AI | **Not met** | Accepted on 2026-09-24 (mixed pilot) |
+
+**What else holds under the accepted scope:**
+
+- **Training weight is descriptive only.** The 397.9 total training weight describes how `structure-cap-v1` down-weights repeated structures. It is **not** a requirement, and there is no target of 400 *weighted* examples.
+- **Doubtful records stay excluded:** 180 in total (pilot 26, train-v2 102, validation 26, test 26), with none repaired or unflagged.
+- **Preserved:** human decisions, original outputs, reviewer provenance, frozen company assignments and all evaluation artifacts.
+- **Labels:** every held-out result stays labeled AI-evaluated.
+
+**Integrity checks run before closing (2026-09-25; all passed):**
+
+| Check | Result | Exit code |
+|---|---|---|
+| `annotation_cli verify-manifest` (`company-groups-v1`) | Stored and recomputed digests match (`8fdf98be…`) | 0 |
+| `dataset_cli check`, `train-combined-v1` | Files, schema, provenance, duplicates and leakage: no problems (419 eligible / 128 flagged) | 0 |
+| `dataset_cli check`, `validation-v1` | No problems (74 / 26) | 0 |
+| `dataset_cli check`, `test-v1` | No problems (71 / 26) | 0 |
+| Combined leakage and duplicates across the training, validation and test datasets | None | — |
+| Doubtful records inside any eligible file | 0 | — |
+| Split purity | Training eligible is all `train`; validation all `validation`; test all `test` | — |
+| Human decisions in the training set | 5 rows (pilot #1 accepted, #3 accepted, #4 corrected as its latest decision, #5 accepted, #6 corrected); #2's skip is excluded | — |
+| Evaluation record hashes (dataset files and all 8 result files) | 0 mismatches | — |
+| Database fingerprints | `training_annotations` `c4345157…` (7 rows), all pre-train-v2 outputs `90ad0bfb…` and split assignments `a08739e2…` are unchanged. Total outputs: 747, fingerprint `afe44529…`. No pushes and no operational reviews. | — |
+
+**Readiness ladder (datasets and evaluation):**
+
+- Datasets are built and checked.
+- The gpt-4o-mini baseline is **evaluated (AI-evaluated)** on validation and test.
+- No model has been trained.

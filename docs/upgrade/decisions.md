@@ -261,6 +261,14 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Near-duplicate similarity (Jaccard of fact-masked token sets) is reported alongside exact structure groups, without changing weights | v2 outreach: 0 pairs ≥ 0.8. Weights stay `structure-cap-v1` (effective 397.9 of 419 raw). |
 | Correction: the second-checkpoint docs said "16" held-out evaluation runs; the correct count is 8 | Fixed in the handoff with a note. |
 
+## Phase 7 closure: revised experimental scope (2026-09-25)
+
+| Decision | Reason / status |
+|---|---|
+| **Explicit scope change (yours):** Phase 7 closes with 419 training, 74 validation and 71 test eligible examples, AI-reviewed references and independent human validation deferred | The original 400/100/100 targets and the recommended human-verified test references are preserved in the handoff (§28) with their actual status: training met, validation and test not met, human verification not met. They are not rewritten as met. |
+| The 397.9 total training weight is descriptive only | It describes `structure-cap-v1` down-weighting. No requirement for 400 weighted examples exists or is introduced. |
+| No further data generation for this version; all 180 doubtful records stay excluded | Accepted as is. The evaluation artifacts and `heldout-criteria-v1` stay frozen. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
