@@ -24,18 +24,14 @@ RUN_DIR="$ROOT/training/runs/$RUN_NAME/train"
 CONFIG=configs/$RUN_NAME.json
 mkdir -p "$JOB"
 exec >>"$JOB/job.log" 2>&1
-# SSH sessions do not inherit the container environment; take the pod id and
-# the pod-scoped API key (never printed) from the container's main process,
-# so self-termination works from this job too.
-while IFS= read -r -d '' kv; do case "$kv" in RUNPOD_POD_ID=*|RUNPOD_API_KEY=*) export "$kv";; esac; done </proc/1/environ
+# Same pod environment as the boot watchdog (written by the container start
+# command): pod id, pod-scoped key (never printed), CLI config, and `t`.
+. /gtmflow-pod-env.sh || echo "ERROR: /gtmflow-pod-env.sh missing"
 [ -n "${RUNPOD_POD_ID:-}" ] || { echo "ERROR: RUNPOD_POD_ID unavailable"; }
 STEP=start
 
 status() { echo "$1" >"$JOB/status"; echo "$(date -u +%FT%TZ) STATUS $1"; }
-self_terminate() {
-  runpodctl pod delete "$RUNPOD_POD_ID" || runpodctl remove pod "$RUNPOD_POD_ID" \
-    || curl -fsS -A gtmflow-pod/1.0 -X DELETE -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID"
-}
+self_terminate() { t; }  # from /gtmflow-pod-env.sh: runpodctl remove pod, else GraphQL podTerminate
 on_exit() {
   local rc=$?
   echo "$rc" >"$JOB/exit_code"

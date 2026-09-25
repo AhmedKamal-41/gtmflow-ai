@@ -79,16 +79,41 @@ BUDGET_USD = 3.00
 CONTAINER_DISK_GB = 50
 DISK_USD_PER_GB_MONTH = 0.10
 
-# Runs as the container command. Arms the hard lifetime and the claim check
-# at boot, then hands over to the image's /start.sh (sshd etc.).
+# Shared pod-side environment, written at boot by the container start command
+# and sourced by every pod-side context (the boot watchdog, SSH-launched checks
+# and pod_job.sh), so all of them use the same CLI configuration and the same
+# self-termination function. It holds no secret itself: it takes the pod id and
+# the RunPod-provided pod-scoped key from the container's main process.
+# runpodctl on RunPod pods is the v1 CLI (checked on a pod: no `pod` subcommand);
+# v1.14.15 source: RUNPOD_API_KEY env first, then ~/.runpod/config.toml
+# (apikey/apiurl); `remove pod` = GraphQL podTerminate. `runpodctl config` is NOT
+# used: besides saving the file it registers an SSH key on the account.
+POD_ENV_SH = r'''# gtmflow pod environment (generated at boot)
+while IFS= read -r -d '' kv; do case "$kv" in RUNPOD_POD_ID=*|RUNPOD_API_KEY=*) export "$kv";; esac; done </proc/1/environ
+export HOME=/root RUNPOD_API_URL="https://api.runpod.io/graphql"
+if [ ! -s /root/.runpod/config.toml ]; then
+  mkdir -p /root/.runpod && (umask 077; printf 'apikey = "%s"\napiurl = "%s"\n' "${RUNPOD_API_KEY:-}" "$RUNPOD_API_URL" >/root/.runpod/config.toml)
+fi
+chmod 700 /root/.runpod; chmod 600 /root/.runpod/config.toml
+gql_terminate() {  # same GraphQL mutation as `runpodctl remove pod` (v1)
+  curl -sS -m 30 -A gtmflow-pod/1.0 -H "Content-Type: application/json" -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" \
+    -d '{"query":"mutation t($p: String!) { podTerminate(input: {podId: $p}) }","variables":{"p":"'"$1"'"}}' "$RUNPOD_API_URL"
+}
+t() { runpodctl remove pod "$RUNPOD_POD_ID" || gql_terminate "$RUNPOD_POD_ID"; }
+'''
+
+# Container command: write and source the shared environment, arm the hard
+# lifetime and the claim check at boot, then hand over to /start.sh (sshd etc.).
 WATCHDOG_CMD = r'''W=/watchdog.log
-t() { runpodctl pod delete "$RUNPOD_POD_ID" >>$W 2>&1 || runpodctl remove pod "$RUNPOD_POD_ID" >>$W 2>&1 || curl -fsS -A gtmflow-pod/1.0 -X DELETE -H "Authorization: Bearer ${RUNPOD_API_KEY:-}" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" >>$W 2>&1; }
+cat >/gtmflow-pod-env.sh <<'GTMFLOW_ENV'
+''' + POD_ENV_SH + r'''GTMFLOW_ENV
+. /gtmflow-pod-env.sh
 [ -f /watchdog.boot ] || date +%s >/watchdog.boot
 BOOT=$(cat /watchdog.boot); NOW=$(date +%s)
 HARD=$(( BOOT + ${GTMFLOW_HARD_LIMIT_SECONDS:-11700} - NOW )); CLAIM=$(( BOOT + ${GTMFLOW_CLAIM_LIMIT_SECONDS:-1800} - NOW ))
 echo "$(date -u +%FT%TZ) armed: hard limit in ${HARD}s, claim check in ${CLAIM}s" >>$W
-( sleep $(( HARD > 0 ? HARD : 0 )); while :; do echo "$(date -u +%FT%TZ) hard limit reached; terminating" >>$W; t; sleep 60; done ) &
-( sleep $(( CLAIM > 0 ? CLAIM : 0 )); if [ ! -e /workspace/job/claimed ]; then while :; do echo "$(date -u +%FT%TZ) job never started; terminating" >>$W; t; sleep 60; done; fi ) &
+( sleep $(( HARD > 0 ? HARD : 0 )); while :; do echo "$(date -u +%FT%TZ) hard limit reached; terminating" >>$W; t >>$W 2>&1; sleep 60; done ) &
+( sleep $(( CLAIM > 0 ? CLAIM : 0 )); if [ ! -e /workspace/job/claimed ]; then while :; do echo "$(date -u +%FT%TZ) job never started; terminating" >>$W; t >>$W 2>&1; sleep 60; done; fi ) &
 exec /start.sh'''
 
 
@@ -340,33 +365,76 @@ def wait_for_ssh(state: dict) -> None:
     raise RuntimeError("SSH did not become available within 20 minutes")
 
 
+PROBE_POD_ID = "gtmflowprobe0nonexistent"  # never a real pod id
+
+SAFEGUARD_PROBE = r"""
+. /gtmflow-pod-env.sh || echo ENV_MISSING
+K="${RUNPOD_API_KEY:-}"; P="${RUNPOD_POD_ID:-}"
+red() { local x="$1"; [ -n "$K" ] && x="${x//$K/<redacted>}"; printf '%s' "$x" | tr '\n' ' ' | cut -c1-300; }
+cat /watchdog.log
+echo "POD=$P"; [ -n "$K" ] && echo POD_KEY=present || echo POD_KEY=absent
+echo "CLI_VERSION=$(runpodctl version 2>&1 | tail -n 1)"
+cfg=$(sed -n 's/^apikey = "\(.*\)"$/\1/p' /root/.runpod/config.toml 2>/dev/null)
+[ -n "$K" ] && [ "$cfg" = "$K" ] && echo CFG=match || echo CFG=mismatch
+echo "CFG_MODE=$(stat -c %a /root/.runpod/config.toml 2>/dev/null)"
+r=$(curl -sS -m 30 -A gtmflow-pod/1.0 -H "Content-Type: application/json" -H "Authorization: Bearer $K" -w ' HTTP=%{http_code}' \
+    -d '{"query":"query q($p: String!) { pod(input: {podId: $p}) { id desiredStatus } }","variables":{"p":"'"$P"'"}}' "$RUNPOD_API_URL" 2>&1)
+echo "READ: $(red "$r")"
+c=$(runpodctl remove pod PROBE_ID 2>&1); echo "CLI_TERMINATE_PROBE: $(red "$c")"
+g=$(gql_terminate PROBE_ID 2>&1); echo "GQL_TERMINATE_PROBE: $(red "$g")"
+""".replace("PROBE_ID", PROBE_POD_ID)
+
+
 def verify_safeguards(state: dict) -> dict:
-    """Refuse to transfer data unless the pod-side self-termination is armed
-    and the pod can reach the RunPod API with its own key."""
-    load_env = """while IFS= read -r -d '' kv; do case "$kv" in RUNPOD_POD_ID=*|RUNPOD_API_KEY=*) export "$kv";; esac; done </proc/1/environ; """
-    probe = r"""
-K="${RUNPOD_API_KEY:-}"; P="$RUNPOD_POD_ID"
-try() { local name=$1; shift; local out; if out=$("$@" 2>&1); then echo "SELF_API=$name"; return 0; fi
-        out="${out//$K/<redacted>}"; echo "PROBE_FAIL $name: $(echo "$out" | grep -v '^$' | head -n 2 | tr '\n' ' ' | cut -c1-200)"; return 1; }
-try runpodctl runpodctl pod get "$P" || try runpodctl_legacy runpodctl get pod "$P" || \
-try rest curl -fsS -o /dev/null -A gtmflow-pod/1.0 -H "Authorization: Bearer $K" "https://rest.runpod.io/v1/pods/$P" || echo SELF_API=none
-"""
-    out = ssh(state, load_env + "cat /watchdog.log; cat /watchdog.boot; "
-                     "[ -n \"${RUNPOD_API_KEY:-}\" ] && echo POD_KEY=present || echo POD_KEY=absent; "
-                     "echo POD=$RUNPOD_POD_ID; command -v runpodctl || echo NO_RUNPODCTL; " + probe,
-              timeout=120).stdout
-    armed = "armed: hard limit" in out
-    self_api = re.search(r"SELF_API=(\w+)", out)
-    pod_ok = f"POD={state['pod_id']}" in out
-    result = {"watchdog_armed": armed, "self_api": self_api.group(1) if self_api else None,
-              "pod_key": "present" if "POD_KEY=present" in out else "absent",
-              "runpodctl": "NO_RUNPODCTL" not in out,
-              "probe_failures": [l for l in out.splitlines() if l.startswith("PROBE_FAIL")],
-              "pod_id_matches": pod_ok, "watchdog_log": [l for l in out.splitlines() if "armed" in l]}
+    """Refuse to transfer data unless (1) the boot watchdog is armed, (2) the
+    pod-scoped key is present and is what the CLI is configured with, (3) the
+    key can read this pod through GraphQL, and (4) the key passes the
+    authorization of the podTerminate mutation that the watchdog uses (probed on
+    a nonexistent pod id: POD_NOT_FOUND = authorized and looked up; 401/other =
+    not). (4) is evidence, not proof, that the pod may delete itself; proof is
+    the end-of-run self-deletion (prove_self_delete)."""
+    out = ssh(state, SAFEGUARD_PROBE, timeout=180).stdout
+    line = lambda tag: next((l.split(":", 1)[1].strip() for l in out.splitlines() if l.startswith(tag + ":")), "")
+    read = line("READ")
+    cli_probe, gql_probe = line("CLI_TERMINATE_PROBE"), line("GQL_TERMINATE_PROBE")
+    result = {
+        "watchdog_armed": "armed: hard limit" in out,
+        "pod_id_matches": f"POD={state['pod_id']}" in out,
+        "pod_key": "present" if "POD_KEY=present" in out else "absent",
+        "cli_version": next((l.split("=", 1)[1] for l in out.splitlines() if l.startswith("CLI_VERSION=")), None),
+        "cli_config_matches_pod_key": "CFG=match" in out,
+        "cli_config_mode": next((l.split("=", 1)[1] for l in out.splitlines() if l.startswith("CFG_MODE=")), None),
+        "graphql_read_own_pod": bool(re.search(r'"id"\s*:\s*"' + re.escape(state["pod_id"]) + '"', read)) and "HTTP=200" in read,
+        "cli_terminate_authorized": "pod not found to terminate" in cli_probe,
+        "graphql_terminate_authorized": "POD_NOT_FOUND" in gql_probe,
+        "responses": {"read": read, "cli_terminate_probe": cli_probe, "graphql_terminate_probe": gql_probe},
+        "watchdog_log": [l for l in out.splitlines() if "armed" in l],
+        "delete_permission": "inferred, not proven (proof = end-of-run self-deletion)",
+    }
     event("safeguards_checked", **result)
-    if not (armed and pod_ok and result["self_api"] in ("runpodctl", "runpodctl_legacy", "rest")):
+    required = ("watchdog_armed", "pod_id_matches", "cli_config_matches_pod_key", "graphql_read_own_pod",
+                "cli_terminate_authorized")
+    if result["pod_key"] != "present" or result["cli_config_mode"] != "600" or not all(result[k] for k in required):
         raise RuntimeError(f"pod-side safeguards not verified: {result}")
     return result
+
+
+def prove_self_delete(state: dict) -> bool:
+    """After verified copy-back: the pod deletes itself with its own key via the
+    same path as the watchdog (`t`); confirmed through the account API."""
+    ssh(state, "setsid nohup bash -c '. /gtmflow-pod-env.sh; sleep 3; t >/tmp/self-delete.log 2>&1' "
+               ">/dev/null 2>&1 </dev/null & echo sent", timeout=60, check=False)
+    deadline = now() + 180
+    while now() < deadline:
+        time.sleep(10)
+        try:
+            if get_pod(state["pod_id"]) is None:
+                event("self_delete_proven", pod=state["pod_id"])
+                return True
+        except ApiError:
+            pass
+    event("self_delete_not_observed", pod=state["pod_id"])
+    return False
 
 
 def upload_and_start(state: dict) -> None:
@@ -543,6 +611,9 @@ def drive(state: dict, fresh: bool) -> int:
         save_state(state)
         if status not in ("pod_gone", "hard_limit_passed"):
             outcome = fetch_and_verify(state, status)
+        if outcome.get("verified"):
+            state["self_delete_proven"] = prove_self_delete(state)
+            save_state(state)
     except Exception as err:  # noqa: BLE001 -- always terminate below
         event("error", error=f"{type(err).__name__}: {err}"[:600])
         outcome = {"verified": False, "error": str(err)[:600]}
