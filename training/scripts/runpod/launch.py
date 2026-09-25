@@ -64,6 +64,7 @@ ENV_FILE = REPO / "backend" / ".env"
 _KEY: str | None = None
 REST = "https://rest.runpod.io/v1"
 GRAPHQL = "https://api.runpod.io/graphql"
+USER_AGENT = "gtmflow-phase8-launcher/1.0 (+python-urllib)"  # the default urllib agent is blocked (Cloudflare 1010)
 
 POD_NAME_PREFIX = "gtmflow-phase8-"
 IMAGE = "runpod/base:1.3.2-ubuntu2204"  # 656 MB; has /start.sh (sshd from PUBLIC_KEY) and uv
@@ -164,7 +165,7 @@ class ApiError(RuntimeError):
 def rest(method: str, path: str, body: dict | None = None) -> tuple[int, object]:
     req = urllib.request.Request(REST + path, method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"Authorization": f"Bearer {api_key()}", "Content-Type": "application/json"})
+                                 headers={"Authorization": f"Bearer {api_key()}", "Content-Type": "application/json", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read()
@@ -179,7 +180,7 @@ def rest(method: str, path: str, body: dict | None = None) -> tuple[int, object]
 def balance() -> dict | None:
     query = {"query": "query { myself { clientBalance currentSpendPerHr } }"}
     req = urllib.request.Request(GRAPHQL, data=json.dumps(query).encode(), method="POST",
-                                 headers={"Authorization": f"Bearer {api_key()}", "Content-Type": "application/json"})
+                                 headers={"Authorization": f"Bearer {api_key()}", "Content-Type": "application/json", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             return json.loads(resp.read()).get("data", {}).get("myself")
@@ -298,6 +299,12 @@ def create_pod(allow_4090: bool) -> dict:
         # Filter not accepted: create without it; pod_job.sh still refuses drivers below CUDA 12.6.
         event("create_retry_without_cuda_filter", detail=str(pod)[:300])
         body.pop("allowedCudaVersions")
+        status, pod = rest("POST", "/pods", body)
+    if status not in (200, 201) and (body["minVCPUPerGPU"], body["minRAMPerGPU"]) != (4, 23):
+        # No machine with 8 vCPU / 30 GB: RunPod's L4 offers start at 4 vCPU / 23 GB RAM,
+        # which still holds the 8 GB bf16 checkpoint during loading. Failed creates are free.
+        event("create_retry_smaller_host", http=status, detail=str(pod)[:300])
+        body.update(minVCPUPerGPU=4, minRAMPerGPU=23)
         status, pod = rest("POST", "/pods", body)
     if status not in (200, 201):
         raise ApiError(f"create pod: HTTP {status} {pod}")
