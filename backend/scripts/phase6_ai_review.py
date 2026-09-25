@@ -34,6 +34,7 @@ from sqlalchemy import select
 from app.ai.grounding import AIOutputValidationError, describe_details, validate_outreach, validate_summary
 from app.core.database import get_sessionmaker
 from app.core.hashing import content_hash
+from app.datasets import correction_policy
 from app.models import AIOutput, AnnotationCandidate, Lead
 from app.services.annotation import latest_annotations
 
@@ -103,6 +104,7 @@ def build(args) -> int:
         batch = json.load(open(path))
         for d in batch["reviews"]:
             d["_batch_file"] = path.rsplit("/", 1)[-1]
+            d["_rubric"] = batch.get("rubric", RUBRIC_VERSION)
             decisions.append(d)
     seen, errors, out = set(), [], []
     for d in decisions:
@@ -114,6 +116,12 @@ def build(args) -> int:
         c = by_position.get(pos)
         if c is None or c.source_output_id is None:
             errors.append(f"#{pos}: no candidate/output")
+            continue
+        if d["_rubric"] not in correction_policy.KNOWN:
+            errors.append(f"#{pos}: unknown rubric {d['_rubric']}")
+            continue
+        if d["_rubric"] in correction_policy.TRAIN_ONLY and c.split != "train":
+            errors.append(f"#{pos}: {d['_rubric']} is for training queues only (this is {c.split})")
             continue
         o = session.get(AIOutput, c.source_output_id)
         if str(o.id) != d["source_output_id"] or content_hash(o.content) != d["source_content_hash"]:
@@ -137,11 +145,19 @@ def build(args) -> int:
         elif d["decision"] != "skipped":
             errors.append(f"#{pos}: unknown decision {d['decision']}")
             continue
+        policy_problems, kept_ratio = [], None
+        if target is not None and d["_rubric"] == correction_policy.RUBRIC_V2_TRAIN:
+            policy_problems = correction_policy.check_target(c.task, target, o.input_snapshot)
+            kept_ratio = correction_policy.preservation(c.task, o.content, target)
+        if policy_problems:
+            errors.append(f"#{pos}: target fails {d['_rubric']}: {policy_problems}")
+            continue
         lead = session.get(Lead, c.lead_id)
         human_row = human.get(c.id)
         out.append({
             "export_format": EXPORT_FORMAT,
-            "rubric_version": RUBRIC_VERSION,
+            "rubric_version": d["_rubric"],
+            "preservation_rouge_l": kept_ratio,
             "review_source": "ai",
             **REVIEWER,
             "reviewed_at": d["reviewed_at"],
@@ -175,6 +191,7 @@ def build(args) -> int:
         "by_decision": dict(Counter(r["decision"] for r in out)),
         "by_task_decision": dict(Counter(f"{r['task']}:{r['decision']}" for r in out)),
         "uncertain": [r["position"] for r in out if r["uncertain"]],
+        "by_rubric": dict(Counter(r["rubric_version"] for r in out)),
     }, indent=2))
     if errors:
         print("NOT WRITTEN: fix the errors above.", file=sys.stderr)

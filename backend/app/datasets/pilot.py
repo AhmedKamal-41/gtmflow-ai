@@ -118,6 +118,7 @@ def build(session: Session, queue: str, ai_rows: list[dict[str, Any]]) -> dict[s
             "reviewed_at": row["reviewed_at"],
             "assessment": row["assessment"],
             "review_note": row["notes"],
+            "correction_policy": None,  # human judgment, no AI rubric
             "review_timing": row["timing"],
             "target": row["target"],
             "target_content_hash": row["target_content_hash"],
@@ -162,6 +163,7 @@ def build(session: Session, queue: str, ai_rows: list[dict[str, Any]]) -> dict[s
             "reviewed_at": row["reviewed_at"],
             "assessment": row["assessment"],
             "review_note": row["reason"],
+            "correction_policy": row.get("rubric_version"),
             "review_timing": None,
             "target": row["target"],
             "target_content_hash": row["target_content_hash"],

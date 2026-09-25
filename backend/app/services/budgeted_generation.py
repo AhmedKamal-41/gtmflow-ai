@@ -104,7 +104,9 @@ def _now() -> str:
 
 
 def run(session: Session, client: AIClient, queues: list[str], budget: Budget, ledger: Ledger,
-        provider: str = "openai") -> dict[str, Any]:
+        provider: str = "openai", max_position: int | None = None) -> dict[str, Any]:
+    """`max_position` limits this run to candidates at or before that queue
+    position (e.g. the first 450 of a queue with reserves after them)."""
     history = ledger.records()
     per_candidate: dict[str, list[dict[str, Any]]] = {}
     for r in history:
@@ -113,6 +115,8 @@ def run(session: Session, client: AIClient, queues: list[str], budget: Budget, l
         select(AnnotationCandidate).where(AnnotationCandidate.queue.in_(queues))
         .order_by(AnnotationCandidate.queue, AnnotationCandidate.position)
     ))
+    if max_position is not None:
+        candidates = [c for c in candidates if c.position <= max_position]
     state = {"attempts": len(history), "spent": sum(r["cost_usd"] for r in history), "consecutive": 0}
     stop: dict[str, Any] = {}
 

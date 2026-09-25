@@ -38,8 +38,10 @@ PERSON_NAME = ("The company name is a person's name; the record may describe an 
 
 
 class Reviewer:
-    def __init__(self, queue: str):
+    def __init__(self, queue: str, rubric: str = RUBRIC):
         self.queue = queue
+        self.rubric = rubric
+        self.contents = {}
         self.reviews: list[dict] = []
         session = get_sessionmaker()()
         try:
@@ -48,6 +50,7 @@ class Reviewer:
                 if c.source_output_id is not None:
                     o = session.get(AIOutput, c.source_output_id)
                     self._pins[c.position] = (str(o.id), content_hash(o.content), c.task)
+                    self.contents[c.position] = o.content
         finally:
             session.close()
 
@@ -83,5 +86,5 @@ class Reviewer:
         for r in self.reviews:
             r.setdefault("reviewed_at", stamp)
         with open(path, "w") as f:
-            json.dump({"reviewer": REVIEWER, "rubric": RUBRIC, "queue": self.queue, "reviews": self.reviews}, f, indent=1)
+            json.dump({"reviewer": REVIEWER, "rubric": self.rubric, "queue": self.queue, "reviews": self.reviews}, f, indent=1)
         return path

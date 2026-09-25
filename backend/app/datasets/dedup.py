@@ -54,18 +54,19 @@ def apply(examples: list[dict[str, Any]], cap: int = STRUCTURE_CAP) -> dict[str,
     Returns {"kept": [...], "dropped": [...], "report": {...}}."""
     kept, dropped = [], []
     seen_target, seen_input = {}, {}
-    for e in sorted(examples, key=lambda x: x["position"]):
+    for e in sorted(examples, key=lambda x: (x.get("queue", ""), x["position"])):
         key_input = (e["task"], e["input_hash"])
+        ref = f"{e.get('queue', '')}#{e['position']}"
         if e["target_content_hash"] in seen_target:
-            dropped.append({"position": e["position"], "reason": "exact duplicate target",
+            dropped.append({"queue": e.get("queue"), "position": e["position"], "reason": "exact duplicate target",
                             "duplicate_of": seen_target[e["target_content_hash"]]})
             continue
         if key_input in seen_input:
-            dropped.append({"position": e["position"], "reason": "duplicate (task, input)",
+            dropped.append({"queue": e.get("queue"), "position": e["position"], "reason": "duplicate (task, input)",
                             "duplicate_of": seen_input[key_input]})
             continue
-        seen_target[e["target_content_hash"]] = e["position"]
-        seen_input[key_input] = e["position"]
+        seen_target[e["target_content_hash"]] = ref
+        seen_input[key_input] = ref
         kept.append(e)
 
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)

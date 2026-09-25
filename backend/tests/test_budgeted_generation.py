@@ -159,3 +159,12 @@ def test_resume_counts_prior_attempts_spend_and_interrupted_calls(db_session, qu
     result = run(db_session, second, ["validation-v1", "test-v1"], b_, Ledger(str(path), b_))
     assert result["totals"]["attempts"] == 5 and result["stopped"]["reason"] == "attempt_limit"
     assert key(queues[1]) not in second.calls  # already generated in the first run: never regenerated
+
+
+def test_max_position_limits_the_run_to_the_first_wave(db_session, queues, tmp_path):
+    b_ = budget()
+    result = run(db_session, FakePaidClient(), ["validation-v1", "test-v1"], b_,
+                 Ledger(str(tmp_path / "l.jsonl"), b_), max_position=2)
+    assert result["generated"] == 4 and result["candidates"] == 4  # positions 1-2 of each queue
+    later = [c for c in queues if c.position > 2]
+    assert all(c.source_output_id is None for c in later)

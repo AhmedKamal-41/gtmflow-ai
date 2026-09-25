@@ -275,6 +275,9 @@ EVAL_QUEUES = {
     SPLIT_VALIDATION: ("validation-v1", "gtmflow-phase7-validation-2026-09-24"),
     SPLIT_TEST: ("test-v1", "gtmflow-phase7-test-2026-09-24"),
 }
+# Phase 7 training expansion: more companies from the frozen train split,
+# excluding every group already in a queue (the pilot).
+TRAIN_EXPANSION_QUEUE = ("train-v2", "gtmflow-phase7-train-v2-2026-09-25")
 
 
 def create_queue(
@@ -304,8 +307,13 @@ def create_queue(
         .join(Lead, Lead.id == CompanySplitAssignment.lead_id)
         .where(CompanySplitAssignment.manifest_version == version, CompanySplitAssignment.split == split)
     ).all()
+    # A company group already reserved by any queue (e.g. the training pilot)
+    # is never drawn again, so queues from the same split never overlap.
+    already_queued = set(session.scalars(select(AnnotationCandidate.group_key).distinct()))
     by_group: dict[str, list[Lead]] = defaultdict(list)
     for assignment, lead in assignments:
+        if assignment.group_key in already_queued:
+            continue
         by_group[assignment.group_key].append(lead)
 
     def order(key: str) -> str:
@@ -343,6 +351,7 @@ def create_queue(
     session.add(WorkflowEvent(event_type="annotation_queue_created", event_data={
         "queue": queue, "manifest_version": version, "split": split, "examples": len(rows),
         "unique_companies": len(picked), "pilot_seed" if split == SPLIT_TRAIN else "seed": seed,
+        "skipped_already_queued_groups": len(already_queued),
     }))
     return rows
 

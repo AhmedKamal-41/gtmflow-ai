@@ -317,3 +317,54 @@ def test_frozen_criteria_digest_is_pinned():
     from app.evaluation import criteria
     assert criteria.CRITERIA_ID == "heldout-criteria-v1"
     assert criteria.criteria_digest() == FROZEN_CRITERIA_SHA256
+
+
+def test_train_expansion_queue_never_redraws_queued_groups(db_session):
+    seed_cohort(db_session)
+    splits.freeze_manifest(db_session)
+    pilot_rows = splits.create_pilot_queue(db_session, max_examples=6)
+    more = splits.create_queue(db_session, queue="train-v2", split="train", seed="t2", max_examples=6)
+    db_session.commit()
+    assert {r.split for r in more} == {"train"}
+    assert not ({r.group_key for r in pilot_rows} & {r.group_key for r in more})
+    assert [r.task for r in more[:2]] == ["company_summary", "outreach_email"]
+
+
+def test_multi_queue_build_combines_pilot_and_expansion(client, db_session, reviewed, tmp_path):
+    details, ai = reviewed
+    more = splits.create_queue(db_session, queue="train-v2", split="train", seed="t2", max_examples=2)
+    db_session.commit()
+    ai2 = []
+    for c in more:
+        d = client.post(f"/api/annotation/candidates/{c.id}/generate", json={"provider": "mock"}).json()
+        row = _ai_row(d, c.position, "accepted")
+        row["rubric_version"] = "ai-review-rubric-v2-train"
+        ai2.append(row)
+    db_session.expire_all()  # outputs were attached through the API session
+    p1, p2 = tmp_path / "ai1.jsonl", tmp_path / "ai2.jsonl"
+    p1.write_text("".join(json.dumps(r) + "\n" for r in ai))
+    p2.write_text("".join(json.dumps(r) + "\n" for r in ai2))
+    out = tmp_path / "train"
+    args = argparse.Namespace(queue=["pilot-v1", "train-v2"], ai_export=[str(p1), str(p2)], out_dir=str(out), cap=5)
+    assert dataset_cli.cmd_build(args, db_session) == 0
+    m = json.loads((out / "dataset-manifest.json").read_text())
+    assert m["queues"] == ["pilot-v1", "train-v2"] and m["allowed_use"] == "training"
+    assert m["counts"]["eligible"]["by_queue"] == {"pilot-v1": 5, "train-v2": 2}
+    assert m["counts"]["eligible"]["by_correction_policy"]["ai-review-rubric-v2-train"] == 2
+    assert dataset_cli.cmd_check(argparse.Namespace(dir=str(out)), db_session) == 0
+    bad = argparse.Namespace(queue=["pilot-v1", "train-v2"], ai_export=[str(p1)], out_dir=str(tmp_path / "x"), cap=5)
+    assert dataset_cli.cmd_build(bad, db_session) == 2
+
+
+def test_v2_policy_gate_and_preservation():
+    from app.datasets import correction_policy as cp
+    ctx = {"lead_facts": [{"id": "fact-company_name", "field": "company_name", "value": "Acme", "kind": "structured_field"}],
+           "unknowns": [], "seller": {"capabilities": [{"id": "cap-3", "text": "x"}], "approved_claims": []}}
+    base = {"subject": "Hello Acme", "lead_facts_used": ["fact-company_name"], "capabilities_used": ["cap-3"],
+            "claims_used": [], "unknowns_acknowledged": [], "call_note": "", "confidence": "low"}
+    original = dict(base, email_body="Hi,\n\nGTMFlow drafts outreach from supplied company facts. Would you like to see a sample?\n\nBest regards,\n[Your Name]")
+    edited = dict(base, email_body="Hi,\n\nGTMFlow drafts outreach from supplied company facts. Would you like to see a sample?\n\nThis email is part of a portfolio demonstration and is not a commercial offer.\n\nBest regards,\nGTMFlow (demonstration)")
+    assert cp.check_target("outreach_email", edited, ctx) == []
+    assert "lint failed: no_placeholder" in cp.check_target("outreach_email", original, ctx)
+    assert cp.preservation("outreach_email", original, edited) > 0.6
+    assert cp.RUBRIC_V2_TRAIN in cp.TRAIN_ONLY and cp.RUBRIC_V1 not in cp.TRAIN_ONLY

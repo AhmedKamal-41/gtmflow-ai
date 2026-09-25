@@ -38,6 +38,10 @@ REQUIRED = (
 SELLER_FIELDS = ("seller_profile_id", "seller_profile_version", "seller_profile_content_hash", "seller_profile_kind")
 
 
+def _ref(e: dict[str, Any]) -> str:
+    return f"{e.get('queue', '')}#{e['position']}"
+
+
 def check_schema(examples: list[dict[str, Any]]) -> list[str]:
     problems = []
     for e in examples:
@@ -45,12 +49,12 @@ def check_schema(examples: list[dict[str, Any]]) -> list[str]:
         try:
             validated = validate(e["target"], e["input_snapshot"])
         except AIOutputValidationError as err:
-            problems.append(f"#{e['position']}: target fails validation: {describe_details(err.details)}")
+            problems.append(f"{_ref(e)}: target fails validation: {describe_details(err.details)}")
             continue
         if content_hash(validated) != e["target_content_hash"] or content_hash(e["target"]) != e["target_content_hash"]:
-            problems.append(f"#{e['position']}: target_content_hash does not match the target")
+            problems.append(f"{_ref(e)}: target_content_hash does not match the target")
         if content_hash(e["source_output"]) != e["source_content_hash"]:
-            problems.append(f"#{e['position']}: source_content_hash does not match the source output")
+            problems.append(f"{_ref(e)}: source_content_hash does not match the source output")
     return problems
 
 
@@ -59,32 +63,32 @@ def check_provenance(session: Session, examples: list[dict[str, Any]]) -> list[s
     for e in examples:
         missing = [k for k in REQUIRED if e.get(k) in (None, "")]
         if missing:
-            problems.append(f"#{e['position']}: missing provenance {missing}")
+            problems.append(f"{_ref(e)}: missing provenance {missing}")
         present = [e.get(k) not in (None, "") for k in SELLER_FIELDS]
         if any(present) and not all(present):
-            problems.append(f"#{e['position']}: partial seller provenance")
+            problems.append(f"{_ref(e)}: partial seller provenance")
         if all(present) != bool(e["input_snapshot"].get("seller")):
-            problems.append(f"#{e['position']}: seller provenance does not match the input snapshot")
+            problems.append(f"{_ref(e)}: seller provenance does not match the input snapshot")
         if e.get("review_source") not in ("human", "ai"):
-            problems.append(f"#{e['position']}: unknown review_source")
+            problems.append(f"{_ref(e)}: unknown review_source")
         if e.get("review_source") == "ai" and e.get("human_verified") is not False:
-            problems.append(f"#{e['position']}: AI review marked human-verified")
+            problems.append(f"{_ref(e)}: AI review marked human-verified")
         if e.get("review_decision") not in ("accepted", "corrected"):
-            problems.append(f"#{e['position']}: ineligible decision {e.get('review_decision')}")
+            problems.append(f"{_ref(e)}: ineligible decision {e.get('review_decision')}")
         source = session.get(AIOutput, UUID(str(e["source_output_id"])))
         if source is None:
-            problems.append(f"#{e['position']}: source output missing from DB")
+            problems.append(f"{_ref(e)}: source output missing from DB")
             continue
         if (content_hash(source.content) != e["source_content_hash"] or source.input_hash != e["input_hash"]
                 or source.seller_profile_content_hash != e["seller_profile_content_hash"]
                 or source.prompt_version != e["prompt_version"]
                 or source.output_schema_version != e["output_schema_version"]
                 or source.model_revision != e["model_revision"]):
-            problems.append(f"#{e['position']}: provenance differs from the stored source output")
+            problems.append(f"{_ref(e)}: provenance differs from the stored source output")
         if e.get("review_decision") == "accepted" and e["target_content_hash"] != e["source_content_hash"]:
-            problems.append(f"#{e['position']}: accepted target differs from the source output")
+            problems.append(f"{_ref(e)}: accepted target differs from the source output")
         if e.get("review_decision") == "corrected" and e["target_content_hash"] == e["source_content_hash"]:
-            problems.append(f"#{e['position']}: corrected target identical to the source output")
+            problems.append(f"{_ref(e)}: corrected target identical to the source output")
     return problems
 
 
@@ -117,10 +121,10 @@ def check_leakage(session: Session, example_sets: dict[str, list[dict[str, Any]]
     for e in all_examples:
         a = assignments.get((e["manifest_version"], e["lead_id"]))
         if a is None:
-            problems.append(f"#{e['position']}: lead not in frozen manifest {e['manifest_version']}")
+            problems.append(f"{_ref(e)}: lead not in frozen manifest {e['manifest_version']}")
             continue
         if a.split != e["split"] or a.group_key != e["company_group_key"]:
-            problems.append(f"#{e['position']}: split/group differs from the frozen manifest")
+            problems.append(f"{_ref(e)}: split/group differs from the frozen manifest")
         splits_by_group[a.group_key].add(a.split)
     for group, splits in splits_by_group.items():
         if len(splits) > 1:

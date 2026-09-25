@@ -57,14 +57,40 @@ def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "by_review_source": dict(Counter(r["review_source"] for r in rows)),
         "by_decision": dict(Counter(f"{r['review_source']}:{r['review_decision']}" for r in rows)),
         "by_task_and_source": dict(Counter(f"{r['task']}:{r['review_source']}" for r in rows)),
+        "by_task_and_segment": dict(Counter(f"{r['task']}:{r['segment']}" for r in rows)),
+        "by_queue": dict(Counter(r.get("queue") for r in rows)),
+        "by_correction_policy": dict(Counter(str(r.get("correction_policy")) for r in rows)),
         "effective_examples": round(sum(r.get("weight", 1.0) for r in rows), 3),
-        "without_seller_context": sorted(r["position"] for r in rows if not r.get("seller_profile_content_hash")),
+        "without_seller_context": sorted(f"{r.get('queue')}#{r['position']}" for r in rows
+                                         if not r.get("seller_profile_content_hash")),
     }
 
 
+def _as_list(value) -> list:
+    if value is None:
+        return []
+    return [value] if isinstance(value, str) else list(value)
+
+
 def cmd_build(args, session) -> int:
-    ai_rows = pilot.load_jsonl(args.ai_export) if args.ai_export else []
-    built = pilot.build(session, args.queue, ai_rows)
+    """One or more queues, each with an optional AI export (paired by order;
+    'none' means human-only). Queues are combined, then deduplicated and
+    checked together."""
+    queues = _as_list(args.queue) or [splits.PILOT_QUEUE]
+    exports = _as_list(args.ai_export)
+    if exports and len(exports) != len(queues):
+        print(json.dumps({"error": "give one --ai-export per --queue (use 'none' for human-only)"}), file=sys.stderr)
+        return 2
+    exports = [None if (x in (None, "none")) else x for x in exports] or [None] * len(queues)
+    built = {"examples": [], "excluded": [], "unreviewed_positions": {}, "counts": {"candidates": 0}}
+    for queue, export in zip(queues, exports):
+        one = pilot.build(session, queue, pilot.load_jsonl(export) if export else [])
+        built["examples"] += one["examples"]
+        built["excluded"] += [dict(x, queue=queue) for x in one["excluded"]]
+        built["unreviewed_positions"][queue] = one["unreviewed_positions"]
+        built["counts"]["candidates"] += one["counts"]["candidates"]
+    if len(queues) == 1:
+        built["unreviewed_positions"] = built["unreviewed_positions"][queues[0]]
     deduped = dedup.apply(built["examples"], cap=args.cap)
     eligible = [e for e in deduped["kept"] if not e["uncertain"]]
     flagged = [e for e in deduped["kept"] if e["uncertain"]]
@@ -77,15 +103,19 @@ def cmd_build(args, session) -> int:
     split_set = {e["split"] for e in deduped["kept"]}
     manifest = {
         "dataset_format": pilot.DATASET_FORMAT,
-        "queue": args.queue,
+        "queue": queues[0] if len(queues) == 1 else "+".join(queues),
+        "queues": queues,
         # Only an all-train dataset may ever be used for training. Held-out
         # datasets are for evaluation only; test is also never used to tune
         # prompts or the review rubric.
         "allowed_use": ("training" if split_set <= {"train"} else
                         "evaluation only -- held out; never train on it" +
                         ("; never tune prompts or rubric on it" if "test" in split_set else "")),
-        "inputs": {"ai_export": args.ai_export, "ai_export_sha256": _sha(args.ai_export) if args.ai_export else None,
-                   "human_source": "training_annotations (latest per candidate)"},
+        "inputs": ({"ai_export": exports[0], "ai_export_sha256": _sha(exports[0]) if exports[0] else None,
+                    "human_source": "training_annotations (latest per candidate)"} if len(queues) == 1 else
+                   {"queues": [{"queue": q, "ai_export": x, "ai_export_sha256": _sha(x) if x else None}
+                               for q, x in zip(queues, exports)],
+                    "human_source": "training_annotations (latest per candidate)"}),
         "dedup": deduped["report"],
         "files": {EXPORT_FILES[k]: v for k, v in hashes.items()},
         "counts": {
@@ -198,8 +228,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.dataset_cli")
     sub = parser.add_subparsers(dest="command", required=True)
     b = sub.add_parser("build")
-    b.add_argument("--queue", default=splits.PILOT_QUEUE)
-    b.add_argument("--ai-export", help="AI review export (optional; omit for human-only targets)")
+    b.add_argument("--queue", action="append", help="repeatable; default pilot-v1")
+    b.add_argument("--ai-export", action="append",
+                   help="AI review export per --queue, in order ('none' = human-only); omit entirely for human-only")
     b.add_argument("--out-dir", required=True)
     b.add_argument("--cap", type=int, default=dedup.STRUCTURE_CAP)
     c = sub.add_parser("check")
