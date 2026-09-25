@@ -202,3 +202,17 @@ Also required: no additional experiments, no automatic model changes, and a stop
 - Removing a pod from inside itself relies on RunPod's pod-scoped key. The pre-transfer check proves the key works for reads; whether it can remove the pod can only be proven by removing one. The workspace-side watchdog and the orchestrator cover this.
 - If this Codespace sleeps during the run, the pod still stops itself: 60 min after the job ends, or at the hard limit. `launch.py resume` can re-attach and copy the artifacts back within that window.
 - An L4 may not be available in Secure Cloud. A failed pod creation is not charged. Switching to an RTX 4090 needs your OK: its $0.74/hr fits under the price cap, but `--allow-rtx4090` is off by default.
+
+## 9. Launch attempts (2026-09-25): stopped at the pre-transfer safeguard check
+
+- **Access checks (free):** passed. The launcher reads `RUNPOD_API_KEY` from the git-ignored `backend/.env`. Only that line is parsed; the launcher refuses to read a tracked file and scrubs the key from logs; a test covers this. Initial balance: $10.00, no pods.
+- **Cloudflare block:** the first API call was rejected with Cloudflare error 1010, which blocks the default Python-urllib User-Agent. Fixed with an explicit User-Agent.
+- **Attempt 1** (pod `9ag8gyyd6ns8j2`, L4 Secure, $0.49/hr): the watchdog was armed at boot. The check over SSH could not see `RUNPOD_POD_ID`, because SSH sessions do not inherit the container environment. The launcher removed the pod before any data was transferred and confirmed the removal. Fix: the check and `pod_job.sh` load `RUNPOD_POD_ID` and the pod-scoped key from `/proc/1/environ`, without printing them.
+- **Attempt 2** (pod `9al239dpb8kj7l`): the pod id matched, the pod-scoped key was present, `runpodctl` was installed and the watchdog was armed. Both self-access probes failed:
+  - `runpodctl get pod`: legacy syntax;
+  - a REST GET via curl with its default User-Agent.
+
+  The pod was removed before transfer and the removal was confirmed.
+  Fix (commit `4e02b94`, bundle `2ba83a36…`): probe and self-terminate with the current `runpodctl pod get` / `pod delete` syntax, then fall back to the legacy syntax, then to REST with an explicit User-Agent. The probe records each method's first error line, redacted on the pod. Tested locally with a stubbed CLI. **Not yet verified on a real pod.**
+- **Spend so far:** RunPod balance $10.00 → $9.9888, which is **$0.0112** for both attempts. No pods remain, no volumes were created, and no data left the workspace. No training has run.
+- **Blocked:** adding a paid one-pod diagnostic mode was denied by the Claude Code permission classifier ("Real-World Transactions"). Further paid attempts wait for your decision.
