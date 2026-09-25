@@ -1,0 +1,372 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v2-train",
+ "queue": "train-v2",
+ "reviews": [
+  {
+   "position": 13,
+   "source_output_id": "7fb74e13-5d87-4f27-9fba-0f45e75686e2",
+   "source_content_hash": "bb8b853c5ddd9da99061b0eb3ed9a6cb541b5ab967bd65dce4df8ead36b08ce3",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported ('small' for 1-10) and seller_relevance is labeled, but the hypothesis invents a need (labeled unconfirmed).",
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 29,
+   "source_output_id": "57782ad2-6574-4e6e-bc92-27adbd0a14e4",
+   "source_content_hash": "63124b4e756a343a1b34bc4c1b22f20cdc4b465bc6b998c87ecb7fb02fec9c14",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, medical practice, Largo FL, 1-10 and the classification flag match; seller_relevance is hedged and unconfirmed. Stiff.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 73,
+   "source_output_id": "c0c412b9-7a1d-47f0-8ce5-dc7f967c84dc",
+   "source_content_hash": "eaf6b05e5d32f23f31ff00d5acbe65f85c29c046b830830233608f4d3d24da5a",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but both hypotheses invent interest and needs and seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A dental practice named '...Islington' with a .co.uk website (kingscrossdental.co.uk) is recorded in Los Angeles; the record may mix a UK company with a US location.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 77,
+   "source_output_id": "291fd214-4677-4763-ab5a-bd222c91acbe",
+   "source_content_hash": "0ec8f9fd47295cddadbdb798587cd85d7da1d8520137350c6fca67d277bdd462",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but both hypotheses invent interest and needs and seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 87,
+   "source_output_id": "76e81868-1761-4bfc-8abf-127f44efdd49",
+   "source_content_hash": "d2d3342f9801dc5771f46b117b4384bd1d511d9949832bfbb0ea5d7604f25925",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, real estate, Bellevue WA and 1-10 match; seller_relevance describes the demonstration and says it is not a commercial offer.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 100,
+   "source_output_id": "86dfdd26-bd88-4814-b22a-806e531d6f42",
+   "source_content_hash": "23012b3c42f6a095a466cc819fdb888e9a66db5255c802458da84368cc05af3a",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, record facts, capability sentence, call to action and closing; removed invented praise, the specialization with invented growth, and presumed needs (also from the subject and call note); removed the placeholder; added the demonstration label.",
+   "issues": [
+    "invented_activity",
+    "invented_need",
+    "invented_praise",
+    "invented_specialization",
+    "missing_demo_label",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "Introduction to GTMFlow for The Home Team Design Build Together",
+    "email_body": "Hello,\n\nI hope this message finds you well. I noticed that The Home Team Design Build Together has recently been established in the real estate industry and operates out of Millbrae, California.\n\nI represent GTMFlow, which builds outreach workflows. We have capabilities to import company lists, score company fit, and draft outreach for approval.\n\nCould we schedule a brief conversation?\n\nThis email is part of a portfolio demonstration and is not a commercial offer.\n\nThank you for considering this opportunity.\n\nBest regards,\n\nGTMFlow",
+    "call_note": "Initial outreach to introduce GTMFlow."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 109,
+   "source_output_id": "b573b8b5-1828-480f-8df9-97af44eabe7b",
+   "source_content_hash": "2195a021461882fba9d25f39014064b9e4038bb5a45d1913d60a1acd5b2a6bd2",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Omaha NE and 11-50 match; seller_relevance is hedged ('potentially relevant').",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 161,
+   "source_output_id": "0b48454f-60d8-450f-a7e8-039934bf06e3",
+   "source_content_hash": "0827ad87809e6f61668f3a0f05f369426b9a814640aa13e435c00e64c4af8c96",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but both hypotheses invent interest and needs (not even labeled unconfirmed) and seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Camp Kindle' (a camp name) is recorded under 'hospital & health care'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 173,
+   "source_output_id": "828f45d6-145c-4ecd-a95f-beee67cd509f",
+   "source_content_hash": "e07127950dbbf973afc3dc99f51d13153ada88d6832f4484a269d936fcd40534",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents interest (labeled unconfirmed).",
+   "issues": [
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A veterinary clinic is recorded as a 'medical practice' (healthcare segment); outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 185,
+   "source_output_id": "eedee6b9-204f-4abd-bc6c-7ee59669ef24",
+   "source_content_hash": "2939f0dfe1020da065bd2b7a79865759b1d2f665cc8e03053b837bf8a6b298f1",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported (quoted raw), but both hypotheses invent needs or interest and seller_relevance is only 'GTMFlow (demonstration)'.",
+   "issues": [
+    "invented_need_hypothesis",
+    "invented_interest_hypothesis",
+    "vague_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 239,
+   "source_output_id": "aa804925-1c46-4511-9729-6f6d9c543c16",
+   "source_content_hash": "cc64411849e9b8f725073e641758513d0dc8ab9c75b094f9e3672144445ee581",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Kihei HI and 11-50 match; seller_relevance describes the demonstration's capabilities and audience.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 267,
+   "source_output_id": "7cca13ea-7a27-4162-a7b9-4f2735ec657b",
+   "source_content_hash": "0ec83c443d221d1afba366919be75a3c69d465c8215abad8bb57f0974e750643",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct, but seller_relevance asserts the demonstration 'is relevant' and useful for the lead.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 269,
+   "source_output_id": "ec0d5039-e8f5-4899-863e-f79ce57e0dad",
+   "source_content_hash": "56a5a46fca74fe2abb3580fd59aea0f5923c66f9c5b8f5abad18dd640ebb80ef",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Haddonfield NJ and 1-10 match; seller_relevance describes the demonstration. Stiff.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 277,
+   "source_output_id": "513e3ecf-d9af-4eab-b3d8-0b677b6d5e1a",
+   "source_content_hash": "fd3d86746b2ef193246bcd689743d05093df663344fe7519fbbb30548b36a238",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents interest and seller_relevance frames the lead as 'seeking to engage with potential leads'.",
+   "issues": [
+    "invented_interest_hypothesis",
+    "invented_need"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 301,
+   "source_output_id": "afed7eea-881e-4ab6-a9b1-96624a24f1f1",
+   "source_content_hash": "3be952ee739856a4f428a81e3f816b1968bc350ca6eca4e2e169de19289ae859",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, medical practice, Weston FL, 1-10 and the classification flag match; no speculation. Stiff.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 319,
+   "source_output_id": "c5dc73f6-563a-4bbf-903a-db9c74d49436",
+   "source_content_hash": "4e53c6940bc12a30c95f1814746697d1a4e6c1f8a77f3c4c004af03fd418f93a",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Goodlettsville TN and 1-10 match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 341,
+   "source_output_id": "8cd05a7a-8a6b-4955-8f26-3b027a4adebc",
+   "source_content_hash": "c92e8a7293b8bb6c0acf4311bab86b22b3b3e012ce6c7103f87be6f0069ebe13",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents interest (labeled unconfirmed).",
+   "issues": [
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 401,
+   "source_output_id": "95957b0a-5649-4725-9183-0c9c6325d190",
+   "source_content_hash": "b97190b82c105538352c658146859026fa0f3d28b06afa74a069dca3afe7781b",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care ('healthcare company'), South Jordan UT and 1-10 match; the hypotheses only restate that buying intent and current tools are unknown; seller_relevance describes the demonstration.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 407,
+   "source_output_id": "04a8244b-dd0d-46de-bc8e-0bbd37b9c956",
+   "source_content_hash": "ab8bcf8260613cc2c129be9cda115207ec9ec213648205d6265628fc206b65ab",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Maple Grove MN, founded 2020, 11-50 and LinkedIn match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 417,
+   "source_output_id": "3f1ac182-739a-430b-9d56-cb77d326ebb4",
+   "source_content_hash": "54dede9b74dd5541a06d3993289eb51b4d018a7a7549b6d6d1bcc68cd256b105",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care, Henderson KY and 1-10 match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  },
+  {
+   "position": 429,
+   "source_output_id": "ec06cba8-0fed-4528-a036-998da0ee8eff",
+   "source_content_hash": "27917dd7f3cc665296a65af7ede663c0eaf1f67d199af5173af3c3df5b5d8c11",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Livingston NJ, 1-10 and the classification flag match; no speculation.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-25T01:10:48.620751+00:00"
+  }
+ ]
+}

@@ -103,7 +103,8 @@ class Editor(Reviewer):
                 raise ValueError(f"#{pos}: outreach needs a label or relabel")
             body = _insert_before_closing(body, text)
         body = _tidy(body)
-        if body.rstrip().endswith(",") or body.rstrip().split("\n")[-1].strip().rstrip(",") in [c.rstrip(",") for c in CLOSINGS]:
+        last = body.rstrip().split("\n")[-1].strip().rstrip(",").lower()
+        if body.rstrip().endswith(",") or last in [c.rstrip(",").lower() for c in CLOSINGS]:
             body = body.rstrip() + "\nGTMFlow (demonstration)"
         content["email_body"] = body
         if subject is not None:
@@ -128,8 +129,16 @@ class Editor(Reviewer):
 
 
 def _insert_before_closing(body: str, label: str) -> str:
+    """Insert before the closing block: the earliest closing line after which
+    only closings and short signature lines follow."""
     lines = body.split("\n")
+    best = None
     for i in range(len(lines) - 1, -1, -1):
-        if lines[i].strip().startswith(CLOSINGS):
-            return "\n".join(lines[:i]).rstrip() + "\n\n" + label + "\n\n" + "\n".join(lines[i:])
+        line = lines[i].strip()
+        if line.lower().startswith(tuple(c.lower() for c in CLOSINGS)):
+            best = i
+        elif line and len(line) > 40:
+            break
+    if best is not None:
+        return "\n".join(lines[:best]).rstrip() + "\n\n" + label + "\n\n" + "\n".join(lines[best:])
     return body.rstrip() + "\n\n" + label

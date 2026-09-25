@@ -116,7 +116,7 @@ def cmd_build(args, session) -> int:
                    {"queues": [{"queue": q, "ai_export": x, "ai_export_sha256": _sha(x) if x else None}
                                for q, x in zip(queues, exports)],
                     "human_source": "training_annotations (latest per candidate)"}),
-        "dedup": deduped["report"],
+        "dedup": deduped["report"] | {"near_duplicates_eligible": dedup.near_duplicate_report(eligible)},
         "files": {EXPORT_FILES[k]: v for k, v in hashes.items()},
         "counts": {
             "candidates": built["counts"]["candidates"],
@@ -201,7 +201,8 @@ def cmd_evaluate(args, session) -> int:
                             "reference targets from: " + ", ".join(sources)),
         "dataset": args.dataset, "dataset_sha256": _sha(args.dataset), "splits": splits_seen,
         "held_out": held_out,
-        "label": ("HELD-OUT evaluation" if held_out
+        "label": (("HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)"
+                   if "ai" in sources else "HELD-OUT evaluation") if held_out
                   else "IN-SAMPLE (training split) -- descriptive only, NOT a held-out evaluation"),
         "overall": metrics.aggregate([numeric(s) for s in per_example]),
         "by_group": {k: metrics.aggregate([numeric(s) for s in v]) for k, v in sorted(groups.items())},
@@ -210,6 +211,63 @@ def cmd_evaluate(args, session) -> int:
     with open(args.out, "w") as f:
         json.dump(result, f, indent=2, sort_keys=True)
     print(json.dumps({k: result[k] for k in ("system", "label", "reference_label", "overall", "by_group")}, indent=2))
+    return 0
+
+
+def cmd_eval_record(args, session) -> int:
+    """Evaluation record for held-out queues: every candidate is accounted
+    for -- generation attempts and failures (from the paid-run ledger),
+    unresolved candidates, review exclusions, uncertain flags and the
+    eligible set actually evaluated -- plus the frozen criteria and result
+    hashes. Positions and counts only; no company data."""
+    from sqlalchemy import select as _select
+    from app.models import AnnotationCandidate
+    ledger: dict[int, dict[str, Any]] = {}
+    with open(args.ledger) as f:
+        for line in f:
+            if line.strip():
+                r = json.loads(line)
+                ledger[r["attempt"]] = r
+    record: dict[str, Any] = {"criteria_id": criteria.CRITERIA_ID, "criteria_sha256": criteria.criteria_digest(),
+                              "ledger": args.ledger, "ledger_sha256": _sha(args.ledger), "queues": {}}
+    for queue in args.queue:
+        cands = list(session.scalars(_select(AnnotationCandidate).where(AnnotationCandidate.queue == queue)))
+        attempts = [r for r in ledger.values() if r["queue"] == queue]
+        failures = [{"position": r["position"], "task": r["task"], "pass": r["pass"], "reason_codes": r.get("reason_codes")}
+                    for r in attempts if r["outcome"] != "success"]
+        ddir = os.path.join(args.datasets_dir, queue)
+        with open(os.path.join(ddir, "dataset-manifest.json")) as f:
+            manifest = json.load(f)
+        flagged = sorted(r["position"] for r in pilot.load_jsonl(os.path.join(ddir, EXPORT_FILES["flagged"])))
+        eligible = manifest["counts"]["eligible"]
+        results = {}
+        for name in sorted(os.listdir(ddir)):
+            if name.startswith("eval-") and name.endswith(".json"):
+                with open(os.path.join(ddir, name)) as f:
+                    res = json.load(f)
+                results[name] = {"sha256": _sha(os.path.join(ddir, name)), "label": res["label"],
+                                 "system": res["system"], "n": res["overall"]["n"]}
+        record["queues"][queue] = {
+            "candidates": len(cands),
+            "generated": sum(1 for c in cands if c.source_output_id),
+            "generation_attempts": len(attempts),
+            "generation_failures": failures,
+            "unresolved_not_generated": sorted(c.position for c in cands if not c.source_output_id),
+            "review_exclusions": manifest["counts"]["excluded"],
+            "flagged_uncertain_positions": flagged,
+            "eligible_evaluated": eligible["examples"],
+            "eligible_by_task": eligible["by_task"],
+            "eligible_by_segment": eligible["by_segment"],
+            "reference_source": eligible["by_review_source"],
+            "human_verified_references": 0 if set(eligible["by_review_source"]) == {"ai"} else None,
+            "dataset_files": manifest["files"],
+            "results": results,
+        }
+    with open(args.out, "w") as f:
+        json.dump(record, f, indent=2, sort_keys=True)
+    print(json.dumps({q: {k: v for k, v in r.items() if k in ("candidates", "generated", "generation_attempts",
+                                                                "unresolved_not_generated", "eligible_evaluated")}
+                      for q, r in record["queues"].items()}, indent=2))
     return 0
 
 
@@ -239,13 +297,18 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--dataset", required=True)
     e.add_argument("--system", choices=("source", "mock"), required=True)
     e.add_argument("--out", required=True)
+    r = sub.add_parser("eval-record")
+    r.add_argument("--queue", action="append", required=True)
+    r.add_argument("--ledger", required=True)
+    r.add_argument("--datasets-dir", required=True)
+    r.add_argument("--out", required=True)
     q = sub.add_parser("create-eval-queues")
     q.add_argument("--max-examples", type=int, default=splits.PILOT_MAX_EXAMPLES)
     args = parser.parse_args(argv)
     session = get_sessionmaker()()
     try:
         return {"build": cmd_build, "check": cmd_check, "evaluate": cmd_evaluate,
-                "create-eval-queues": cmd_create_eval_queues}[args.command](args, session)
+                "create-eval-queues": cmd_create_eval_queues, "eval-record": cmd_eval_record}[args.command](args, session)
     except (splits.ManifestError, FileNotFoundError, KeyError) as error:
         session.rollback()
         print(json.dumps({"error": f"{type(error).__name__}: {error}"}), file=sys.stderr)

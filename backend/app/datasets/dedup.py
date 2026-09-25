@@ -49,6 +49,53 @@ def structure_signature(example: dict[str, Any]) -> str:
     return hashlib.sha256(" ".join(kept).encode()).hexdigest()[:16]
 
 
+def _masked_tokens(example: dict[str, Any]) -> set[str]:
+    fact_tokens = {
+        tok for fact in example["input_snapshot"]["lead_facts"] for tok in _tokens(str(fact["value"]))
+    }
+    return {t for t in _tokens(target_text(example["task"], example["target"])) if t not in fact_tokens}
+
+
+def near_duplicate_report(examples: list[dict[str, Any]], thresholds: tuple[float, ...] = (0.8, 0.9)) -> dict[str, Any]:
+    """Looser than the exact structure signature: Jaccard similarity of the
+    fact-masked token SETS of every pair of targets within a task (and within
+    each correction policy). Reported only; weights are unchanged."""
+    by_group: dict[str, list[set[str]]] = defaultdict(list)
+    for e in examples:
+        masked = _masked_tokens(e)
+        by_group[e["task"]].append(masked)
+        by_group[f"{e['task']}|{e.get('correction_policy')}"].append(masked)
+    out: dict[str, Any] = {}
+    for key, sets in sorted(by_group.items()):
+        pairs = 0
+        above = {t: 0 for t in thresholds}
+        in_pair = {t: set() for t in thresholds}
+        max_sim = []
+        for i in range(len(sets)):
+            best = 0.0
+            for j in range(len(sets)):
+                if i == j:
+                    continue
+                union = sets[i] | sets[j]
+                sim = len(sets[i] & sets[j]) / len(union) if union else 1.0
+                best = max(best, sim)
+                if j > i:
+                    pairs += 1
+                    for t in thresholds:
+                        if sim >= t:
+                            above[t] += 1
+                            in_pair[t].update((i, j))
+            max_sim.append(best)
+        max_sim.sort()
+        out[key] = {
+            "examples": len(sets), "pairs": pairs,
+            "pairs_at_or_above": {str(t): above[t] for t in thresholds},
+            "examples_with_a_near_duplicate": {str(t): len(in_pair[t]) for t in thresholds},
+            "median_nearest_similarity": round(max_sim[len(max_sim) // 2], 4) if max_sim else None,
+        }
+    return out
+
+
 def apply(examples: list[dict[str, Any]], cap: int = STRUCTURE_CAP) -> dict[str, Any]:
     """Drop exact duplicates, annotate structure groups and weights.
     Returns {"kept": [...], "dropped": [...], "report": {...}}."""

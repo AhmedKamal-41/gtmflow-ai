@@ -247,6 +247,20 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Dataset manifests record `allowed_use`; only all-train datasets may be used for training, and test is also excluded from prompt or rubric tuning | Keeps validation and test out of training and tuning by construction. |
 | The training target stays at 400; expansion (about 450 train candidates, about $0.21) and a minimal-edit training rubric are proposed, not started | 73 eligible examples today. Templated outreach corrections add almost no effective examples, so diversity needs a rubric change or human-written examples, not just volume. |
 
+## Decisions made in Phase 7 (training expansion and reconciliation, 2026-09-25)
+
+| Decision | Reason / status |
+|---|---|
+| Training expansion via a new queue `train-v2` (520 candidates, 260 companies; first wave 450, reserves 70) from the frozen train split, excluding every group already in any queue | Authorized: 500 attempts / $0.30. Actual: 473 attempts, $0.2167. The target was met from wave 1; reserves were not generated. |
+| New correction policy `ai-review-rubric-v2-train` (minimal edit), for training queues only | Designed from training evidence only (pilot outputs and findings, human #4/#6). v1 template corrections left 37 pilot outreach examples worth 15.9 effective. v2 keeps a median 0.72 ROUGE-L of each original versus 0.20 for v1. Refused on held-out queues. Gated by validator plus lints. |
+| The required demonstration sentence rotates across 4 fixed phrasings; everything else comes from the original | The label is mandatory; its wording is not presented as organic diversity. |
+| Held-out references stay under v1 and are frozen, as are predictions, criteria and assignments | A different policy for training and evaluation is documented. Overlap metrics against v1 references may understate v2-trained models; lints and acceptance remain the primary outreach metrics. |
+| You accepted AI-reviewed validation/test references for this experimental version; independent human validation is deferred | All held-out results are relabeled "AI-evaluated". The re-run produced identical metrics (0 differences). No claim of human-verified quality. |
+| Held-out sizes are reported as they are: validation 74, test 71 (not 100) | Generation failures, unresolved candidates and uncertain exclusions are preserved in `phase7-heldout-evaluation-record.json`. |
+| Uncertain records stay excluded unless resolved with evidence; flags are never removed to reach a count | 419 eligible was reached with all 180 flags in place. Where an output had altered a recorded value, the recorded value was restored and the record flagged. |
+| Near-duplicate similarity (Jaccard of fact-masked token sets) is reported alongside exact structure groups, without changing weights | v2 outreach: 0 pairs ≥ 0.8. Weights stay `structure-cap-v1` (effective 397.9 of 419 raw). |
+| Correction: the second-checkpoint docs said "16" held-out evaluation runs; the correct count is 8 | Fixed in the handoff with a note. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).

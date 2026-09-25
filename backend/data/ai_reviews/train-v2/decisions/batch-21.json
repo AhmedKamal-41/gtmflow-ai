@@ -1,0 +1,347 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v2-train",
+ "queue": "train-v2",
+ "reviews": [
+  {
+   "position": 402,
+   "source_output_id": "d379995c-e74b-4739-b920-55529b538dbf",
+   "source_content_hash": "ef221c10e8d8a531e12cd7901dec7f3dee324d6880abbaf447aa1952fc8a2205",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, opening, collaboration interest and call to action; removed invented praise, the specialization and presumed goals; removed the placeholder; added the demonstration label.",
+   "issues": [
+    "invented_need",
+    "invented_praise",
+    "invented_specialization",
+    "missing_demo_label",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Hi there,\n\nI came across Empowered Rehab LLC. At GTMFlow, we draft outreach tailored to company profiles.\n\nI would love to learn more about your team and explore how we might collaborate. Are you open to a brief conversation?\n\nTo be clear, this is a demonstration message from a portfolio project and not a commercial offer.\n\nBest regards,\nGTMFlow Team"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 403,
+   "source_output_id": "df556e33-defd-4a7a-8b28-e0dfe9524078",
+   "source_content_hash": "2e618048f12246acceef81c09a9bc55889687b494be5aa6f6b8f9cc0abc5eba3",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Atlanta GA, founded 2005, 11-50 and LinkedIn match; seller_relevance is conditional ('if they are exploring').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 404,
+   "source_output_id": "f99ff980-4afb-4620-973b-13c5a735b4a2",
+   "source_content_hash": "6ebbbb58ff68c8afbbf8bb5cd369b7ceb428190e28c1923a4270655ff1c9cac1",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, introduction, capability content, record fact and call to action; removed the specialization, invented collaboration opportunities and presumed assistance; removed the placeholder; added the demonstration label.",
+   "issues": [
+    "invented_fit",
+    "invented_need",
+    "invented_specialization",
+    "missing_demo_label",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Hi,\n\nI hope this message finds you well. I am reaching out to introduce our services at GTMFlow. We draft outreach based on specific company attributes and support a streamlined process for evaluating leads.\n\nI noticed that Greenstone Properties operates in the real estate industry. I would love to learn more about your current operations.\n\nIf you're open to it, could we schedule a brief call?\n\nThis email is part of a portfolio demonstration and is not a commercial offer.\n\nBest regards,\n\nGTMFlow"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 405,
+   "source_output_id": "cee3e0c0-cde1-44a6-ad32-4b2498867e5e",
+   "source_content_hash": "8426eae702369db0c963833c570942eef8568e92e0a7e0bc61c6b0822f6ba1cb",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, medical practice, North Ogden UT and 11-50 match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 406,
+   "source_output_id": "74eed92d-252e-4261-8f03-b0848e2c6f00",
+   "source_content_hash": "59e1469797c0890a93aeb99ae27c708b9bfd41d0c33986c6f0c8f3a97ddaad3f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 4,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, the demonstration introduction, the capability sentence and the question; fixed the placeholder opener; removed presumed assistance; removed signature placeholders; completed the demonstration label.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Hello,\n\nI hope this message finds you well. I'm writing from GTMFlow, and I wanted to reach out to introduce our demonstration capabilities. We offer a service that imports company lists, scores company fit with a versioned rubric, and drafts outreach for personalization.\n\nI noticed that Ben Lomond Dental, LLC operates in the medical practice industry and I would love to learn more about your company. Is there a convenient time for you to discuss this further?\n\nPlease note: GTMFlow is a portfolio demonstration, and this email is not a commercial offer.\n\nBest regards,\nGTMFlow"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 408,
+   "source_output_id": "45d0c0b6-9b28-41b3-8feb-9caf8b665d78",
+   "source_content_hash": "88cddce9a24c430cdd5ec6e5f53f3a7d10a99cebcb8a3f4902123cd39baad618",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 4,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, opening, the portfolio-demonstration capability sentence and the neutral question about tools; removed presumed needs and goals; removed the placeholder; completed the demonstration label and signature.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_need",
+    "missing_signature",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Hello,\n\nI hope this message finds you well. I wanted to reach out because I see that Realty One Group Vertical is part of the real estate industry and I believe there may be an opportunity for us to connect.\n\nAt GTMFlow, we offer a portfolio demonstration that can help streamline lead workflows through capabilities such as importing company lists, scoring company fit, and drafting outreach.\n\nCould you share more about the tools or systems you are currently using?\n\nGTMFlow is a portfolio demonstration project, so this message is not a commercial offer.\n\nLooking forward to hearing from you.\n\nBest regards,\nGTMFlow (demonstration)"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 409,
+   "source_output_id": "8dfb9387-19f3-48b5-b2d4-3f45b575b2a4",
+   "source_content_hash": "794039f367a74023eefc07be7a7ba069a414a1469bbe45a45b30d63b983d72ab",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported (raw name), but the hypothesis invents a benefit (labeled unconfirmed).",
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 410,
+   "source_output_id": "228db3f3-844e-49a8-a801-6401f45e5b12",
+   "source_content_hash": "888b19c7e5c463b9c414c63636118efb22fb8040c797fe50ced7723c3ae01b8b",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, introduction, capability sentence, the interest in how they manage outreach and the closing; removed invented 'synergies' (also from the call note), presumed support and the prospect's own website presented as GTMFlow's; removed the placeholder; completed the demonstration label.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_need",
+    "misattributed_website",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Dear Team at IMA Urgent Care & Primary Care,\n\nI hope this message finds you well. I am reaching out to introduce GTMFlow, a demonstration workflow designed to assist companies in streamlining lead outreach processes.\n\nGTMFlow offers capabilities such as importing company lists, scoring fit with a versioned rubric, and drafting outreach messages for approval. I would love to learn more about how your team manages outreach.\n\nI look forward to your thoughts and any open opportunities to discuss further.\n\nTo be clear, this is a demonstration message from a portfolio project and not a commercial offer.\n\nBest regards,\n\nGTMFlow Team",
+    "call_note": "First-touch email to initiate contact."
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 411,
+   "source_output_id": "460c2d86-ca89-4fb0-a34c-5bd422002bd9",
+   "source_content_hash": "075ed30a6a0feb219ae6dea91fa9a569e28fb013a9cb6c5128cb8b77b04d3b0d",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Little Rock AR, founded 2016, 11-50 and LinkedIn match; seller_relevance is hedged ('may be relevant').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 412,
+   "source_output_id": "1b9fd146-8a35-4f6f-8f53-688a3402ae85",
+   "source_content_hash": "a8ae30b32e2fe1a23bde97e635c419746bf7a064f437bc9ad970623862ba6226",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, the workflow-demonstration capability sentence, the invitation and the demonstration signature; replaced invented praise with the record facts; removed presumed operational support and needs; the subject no longer offers 'solutions'; removed the placeholder; completed the demonstration label.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_need",
+    "invented_praise",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "Introduction to GTMFlow for Modern Storage",
+    "email_body": "Hi there,\n\nI hope this message finds you well. I came across Modern Storage, a real estate company in Little Rock, Arkansas.\n\nAt GTMFlow, we offer a workflow demonstration that imports company lists, scores company fit, and drafts tailored outreach. I wonder if you might be interested in seeing a short demo.\n\nIf you\u2019re open to a conversation, I\u2019d love to learn more about your team.\n\nThis email is part of a portfolio demonstration and is not a commercial offer.\n\nBest regards,\n\nGTMFlow (demonstration)"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 413,
+   "source_output_id": "55e05a15-7e09-4e3c-a837-03b27d371c28",
+   "source_content_hash": "7f7ae179417ae7334a8f6566628453f635ab8ea9bf59d3fb4fedb9a9c1ab088b",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Teaneck NJ and 1-10 match; seller_relevance is hedged ('may be relevant').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 414,
+   "source_output_id": "e1d5012b-992b-4e6a-803f-08586be27b48",
+   "source_content_hash": "cf5fd1eb4c4e349eb1561bcee07db61345387ae5d1a6b2df2323fe912827627f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, introduction, interest in their practice and closing; removed the specialization, invented collaboration opportunity and fit, and the prospect's own LinkedIn presented as GTMFlow's; added the demonstration label.",
+   "issues": [
+    "invented_fit",
+    "invented_specialization",
+    "misattributed_profile",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Hello,\n\nI hope this message finds you well. I am reaching out to introduce GTMFlow, which imports company lists and drafts outreach tailored to company facts.\n\nI'd love to learn more about your current practices.\n\nPlease note: GTMFlow is a portfolio demonstration, and this email is not a commercial offer.\n\nLooking forward to your response.\n\nBest regards,\nGTMFlow Team"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 415,
+   "source_output_id": "cea48ff8-a30d-477e-b4e3-3aa3db9317cf",
+   "source_content_hash": "57326f37d3f4469560ad2924a04a04791aca134bd9f75b993f74003ef0079bd2",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents a need and seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 416,
+   "source_output_id": "11d1e884-86a9-473e-94c0-b9c5d324ad37",
+   "source_content_hash": "bd9469d908e768ee903aa9dd0d335af11807f48c3b246bad7d6889a307f8c9aa",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, introduction with the location fact, the demo-workflow capability sentence and the invitation; fixed the broken opener; removed an invented benefit and presumed needs and assistance; removed placeholders; completed the demonstration label.",
+   "issues": [
+    "broken_signature",
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Dear Duggar Realty Team,\n\nI hope this message finds you well. I'm writing from GTMFlow, and I wanted to reach out to introduce our capabilities to your team in Lawrenceville, Georgia.\n\nAt GTMFlow, we offer a demo workflow that can import company lists, score company fit with a versioned rubric, and draft outreach tailored to your prospects. I would love to learn more about your current processes.\n\nIf you\u2019re open to a brief discussion, please let me know a convenient time for you.\n\nGTMFlow is a portfolio demonstration project, so this message is not a commercial offer.\n\nBest regards,\n\nGTMFlow"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 418,
+   "source_output_id": "e0568f51-671f-4147-b5ba-41e86807e5e9",
+   "source_content_hash": "0908e1d74c7f57138b569bbd8e63b0adfbc26ea2b4f48456aa8ad7ccb7388a47",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, record facts, the portfolio-demonstration capability sentences and the question; fixed the broken opener; removed the healthcare specialization, an invented 'strong match' and presumed assistance; removed placeholders; completed the demonstration label.",
+   "issues": [
+    "broken_signature",
+    "fit_as_interest",
+    "incomplete_demo_label",
+    "invented_need",
+    "invented_specialization",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "email_body": "Dear Healing Reins Therapeutic Riding Inc,\n\nI hope this message finds you well. I'm writing from GTMFlow, and I am reaching out to introduce our lead-workflow demonstration. I noticed your organization is located in Henderson, Kentucky.\n\nAt GTMFlow, we offer a portfolio demonstration that helps with company outreach and lead management. We can import company lists, score company fit, and draft outreach materials for approval. If you're interested in learning more, would you be open to a conversation?\n\nTo be clear, this is a demonstration message from a portfolio project and not a commercial offer.\n\nBest regards,\n\nGTMFlow",
+    "call_note": "Email outreach to Healing Reins Therapeutic Riding Inc introducing GTMFlow."
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 419,
+   "source_output_id": "903398d3-b280-4407-bf27-2d968f2e3827",
+   "source_content_hash": "7fa7ae72fa8ca157a487c51b862baeb5e51cc118468b5e58e7405ab487295485",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, La Habra Heights CA and 1-10 ('small') match; no speculation.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "'A New Leaf Landscape Renovation Inc.' (a landscaping name) is recorded as a real estate company; outputs follow the record, but the classification may be wrong.",
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  },
+  {
+   "position": 420,
+   "source_output_id": "25921e9f-2d84-491e-913f-1bf1ca49565b",
+   "source_content_hash": "18e220f291c0502e736cda3564c5623c3634d3d2cb45e1f1ce78713ec9f70c8c",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Kept the greeting, record facts and call to action; fixed the broken opener; removed the specialization, an invented streamlining opportunity and presumed goals; removed placeholders; added the demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_fit",
+    "invented_need",
+    "invented_specialization",
+    "missing_demo_label",
+    "placeholder_signature"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'A New Leaf Landscape Renovation Inc.' (a landscaping name) is recorded as a real estate company; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "email_body": "Dear team at a New Leaf Landscape Renovation Inc.,\n\nI hope this message finds you well. I'm writing from GTMFlow, and we build workflows for outreach and lead management.\n\nI noticed your company is in the real estate industry and is located in La Habra Heights, California.\n\nWould you be open to a brief discussion?\n\nThis email is part of a portfolio demonstration and is not a commercial offer.\n\nBest regards,\n\nGTMFlow"
+   },
+   "reviewed_at": "2026-09-25T01:07:32.675793+00:00"
+  }
+ ]
+}

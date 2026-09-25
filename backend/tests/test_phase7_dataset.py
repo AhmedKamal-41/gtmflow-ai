@@ -368,3 +368,49 @@ def test_v2_policy_gate_and_preservation():
     assert "lint failed: no_placeholder" in cp.check_target("outreach_email", original, ctx)
     assert cp.preservation("outreach_email", original, edited) > 0.6
     assert cp.RUBRIC_V2_TRAIN in cp.TRAIN_ONLY and cp.RUBRIC_V1 not in cp.TRAIN_ONLY
+
+
+def test_near_duplicate_report_counts_similar_pairs_without_changing_weights(db_session, reviewed):
+    details, ai = reviewed
+    examples = dedup.apply(pilot.build(db_session, "pilot-v1", ai)["examples"])["kept"]
+    weights = [e["weight"] for e in examples]
+    report = dedup.near_duplicate_report(examples, thresholds=(0.9,))
+    assert report["outreach_email"]["pairs_at_or_above"]["0.9"] >= 1  # #4 and #6 differ only in facts
+    assert [e["weight"] for e in examples] == weights
+
+
+def test_ai_reference_heldout_is_labeled_ai_evaluated_and_recorded(client, db_session, tmp_path):
+    seed_cohort(db_session)
+    splits.freeze_manifest(db_session)
+    splits.create_pilot_queue(db_session, max_examples=4)
+    splits.create_queue(db_session, queue="validation-v1", split="validation", seed="v", max_examples=4)
+    db_session.commit()
+    save_and_activate(client, DEMO)
+    items = client.get("/api/annotation/queues/validation-v1/candidates").json()["items"]
+    ai_rows = []
+    for c in items[:3]:  # position 4 stays ungenerated (an unresolved failure)
+        d = client.post(f"/api/annotation/candidates/{c['id']}/generate", json={"provider": "mock"}).json()
+        ai_rows.append(_ai_row(d, c["position"], "accepted", uncertain=(c["position"] == 3)))
+    db_session.expire_all()
+    export = tmp_path / "ai.jsonl"
+    export.write_text("".join(json.dumps(r) + "\n" for r in ai_rows))
+    datasets = tmp_path / "datasets"
+    out = datasets / "validation-v1"
+    assert dataset_cli.cmd_build(argparse.Namespace(queue="validation-v1", ai_export=str(export), out_dir=str(out), cap=5), db_session) == 0
+    assert dataset_cli.cmd_evaluate(argparse.Namespace(dataset=str(out / "eligible.jsonl"), system="mock",
+                                                       out=str(out / "eval-mock-eligible.json")), db_session) == 0
+    result = json.loads((out / "eval-mock-eligible.json").read_text())
+    assert result["label"].startswith("HELD-OUT evaluation -- AI-evaluated")
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text("".join(json.dumps(r) + "\n" for r in [
+        {"attempt": 1, "queue": "validation-v1", "position": 4, "task": "outreach_email", "pass": 1,
+         "outcome": "invalid_output", "reason_codes": ["schema_invalid"]},
+        {"attempt": 2, "queue": "validation-v1", "position": 4, "task": "outreach_email", "pass": 2,
+         "outcome": "invalid_output", "reason_codes": ["schema_invalid"]}]))
+    rec_path = tmp_path / "record.json"
+    args = argparse.Namespace(queue=["validation-v1"], ledger=str(ledger), datasets_dir=str(datasets), out=str(rec_path))
+    assert dataset_cli.cmd_eval_record(args, db_session) == 0
+    rec = json.loads(rec_path.read_text())["queues"]["validation-v1"]
+    assert rec["candidates"] == 4 and rec["generated"] == 3 and rec["unresolved_not_generated"] == [4]
+    assert len(rec["generation_failures"]) == 2 and rec["flagged_uncertain_positions"] == [3]
+    assert rec["eligible_evaluated"] == 2 and rec["human_verified_references"] == 0
