@@ -1,6 +1,6 @@
 # Phase 8 handoff: LoRA training (preparation)
 
-Date: 2026-09-25. **Status: needs compute.** Training is authorized (§8), but it has **not run yet**: there is still no RunPod access. No paid compute has been used.
+Date: 2026-09-25. **Status: trained (v1 adapter). Not evaluated.** One real training run completed on 2026-09-25 (§10). Evaluation on the test set is Phase 9 and has not started.
 
 Per the readiness ladder: the runner is **code ready**, verified with tests and CPU smoke runs on a tiny random model. Once you have reviewed the approach, it moves to **needs compute**. It becomes **trained** only after a real run on the pinned data produces an adapter, with the run's command, machine, wall time and artifact location recorded.
 
@@ -228,3 +228,75 @@ Also required: no additional experiments, no automatic model changes, and a stop
   - (b) probe the GraphQL API with the pod key;
   - (c) give the pod a separate, restricted RunPod key used only for self-removal. That puts a credential on the GPU host, so it needs your explicit approval;
   - (d) accept only workspace-side removal: the workspace watchdog plus the launcher. That does not cover this Codespace sleeping.
+
+## 10. Authorized run (attempt 4): training completed (2026-09-25)
+
+**Launcher fix before the run** (commit `37e395e`, bundle `e8629ce6…`). RunPod pods ship the **v1** `runpodctl` (confirmed on the pod: `runpodctl 1.14.15-dac76ad`). Checked against its source and the official release binary, run locally against a mock API:
+
+- It reads `RUNPOD_API_KEY` from the environment first, then `~/.runpod/config.toml` (`apikey`/`apiurl`).
+- `get pod` queries the account-wide `myself { pods }`. The pod-scoped key is not allowed to do that, which was the cause of the "Unauthorized" error in attempt 3.
+- `remove pod` sends the GraphQL `podTerminate` mutation.
+- `runpodctl config` was deliberately **not** used: besides saving the file, it registers an SSH key on the account.
+
+What the fixed launcher does:
+
+- **Shared environment.** At boot, the container start command writes `/gtmflow-pod-env.sh`, which holds no secret: it reads the pod id and the pod-scoped key from the container's main process, writes the CLI config (mode 600), and defines the self-termination function `t` (`runpodctl remove pod`, else GraphQL `podTerminate`). The boot watchdog, the SSH checks and `pod_job.sh` all source the same file. Your account key never leaves the Codespace.
+- **Pre-transfer check.** Requires a GraphQL read of the pod's own record **and** a `podTerminate` authorization probe on a nonexistent pod id, which must return `POD_NOT_FOUND`. For comparison: an authorized account key returns `POD_NOT_FOUND`; an invalid key returns HTTP 401. A read alone is refused (tested locally in both a positive and a negative case). The check reports delete permission as *inferred, not proven*.
+
+**Run** (pod `kphhuk2ckurhv9`, 1× NVIDIA L4 24 GB, Secure Cloud, $0.49/hr, created 03:21:22Z):
+
+- **Pre-transfer check: passed.** The watchdog was armed ("hard limit in 11700s"), the pod id matched, the CLI config matched the pod key with mode 600, and the GraphQL read of the pod's own record returned `RUNNING`. The CLI and GraphQL terminate probes both returned `pod not found to terminate` / `POD_NOT_FOUND`.
+- **Pod setup:** bundle sha verified on the pod; driver CUDA ≥ 12.6; 59 hash-locked packages installed with zero mismatches (torch 2.14.0+cu126, transformers 5.17.0, peft 0.21.0, Python 3.12.13); `plan` passed.
+- **Deviation: training was started by the test suite.** Two refusal tests called `train`/`preflight --confirm-paid-compute` and expected "no CUDA". On the GPU pod they instead ran the real pinned training, and afterwards the real preflight. Config, data, seed, example weights, validation-based selection and the output path were exactly as planned. Consequences:
+  - (a) the GPU preflight gate did not run *before* training; it ran afterwards (see the memory row below);
+  - (b) the training-deadline stop was not active (the pod hard limit still applied; training ended 2 h before it);
+  - (c) the job ended as `failed:tests` (3 failed, 8 passed: the two tests above, plus the launcher test, which needs a git checkout);
+  - (d) the orchestrator therefore took its failed-run path: it saved the evidence archive, skipped the end-of-run self-deletion proof, and removed the pod with the account key.
+
+  The tests are fixed (commits `530882e` and the next commit): they force "no CUDA", and the git-dependent test skips outside a checkout.
+- **Cleanup:** removal confirmed 04:27:50Z. No pods and no network volumes remain (checked through the API afterwards); current spend $0/hr.
+
+**Results** (`run-manifest.json`):
+
+| | |
+|---|---|
+| Steps / epochs | 159 of 159 steps; **3 of 3 epochs**; no early stop |
+| Example weights | Applied: normalizer 0.9497; 25 examples below weight 1; weight sum 397.906 |
+| Validation loss before training | 1.2628 (token-weighted 1.2016), 74 examples |
+| Epoch 1 | training 0.3956 weighted / 0.4252 unweighted; **validation 0.2638**; 1,241 s |
+| Epoch 2 | training 0.2073 / 0.2073; **validation 0.1392**; 1,243 s |
+| Epoch 3 | training 0.1806 / 0.1775; **validation 0.1292** (token-weighted 0.1289); 1,243 s |
+| **Selected checkpoint** | **Epoch 3** (best validation loss 0.1292); LR decayed to 0 |
+| Trainable parameters | 33,030,144 of 4,055,498,240 |
+| Peak GPU memory | torch: 9.27 GiB allocated, 12.49 GiB reserved of 22.03 GiB; `nvidia-smi` device peak 13,087 MiB of 23,034 MiB; mean GPU utilization 98% |
+| Preflight (measured after training) | 3.08 s for the longest (2,285-token) training example; projected 63.1 min, actual 62.1 min |
+| Training wall time | 3,805 s (03:22:33Z → 04:25:58Z) |
+| Pod lifetime | 1 h 06 m 28 s (03:21:22Z → 04:27:50Z) |
+| Provenance | bundle commit `37e395e` (clean); test data "not loaded (reserved for final evaluation)" |
+
+These are **training and validation losses only**. They are not a quality evaluation. The held-out comparison under `heldout-criteria-v1` on test-v1 is Phase 9.
+
+**Artifacts** (workspace, git-ignored, 138 MB): `training/runs/phase8-qwen3-4b-lora-v1/train/`
+
+- `best_adapter/` (`adapter_model.safetensors`: 132 MB, 504 tensors; `adapter_config.json`)
+- `config.json`
+- `tokenizer/`, with its record in the manifest
+- `run-manifest.json` and `log.jsonl` (159 step lines + epoch records)
+- `pod/`: job log, `gpu-memory.csv`, `nvidia-smi.txt`, `pip-freeze.txt`, the lock, preflight, plan, watchdog log, RunPod report
+- `SHA256SUMS` (21 files) and `verification.json`
+
+The original evidence archive is `failed-run.tar.gz` (sha256 `c3b11898…`). **Verification:** adapter, tokenizer and config hashes all match the values recorded in the manifest at training time; the config also matches the repository config; the data hashes match the pinned config.
+
+**Spending** (cumulative against the $3 cap; settled RunPod balance $10.00 → **$9.3869**):
+
+| | USD |
+|---|---|
+| Attempts 1–3 (refused before transfer) | 0.0647 |
+| Attempt 4 (this run) | 0.5484 |
+| **Total** | **$0.6131** |
+
+**Remaining for Phase 8:**
+
+- Self-deletion with the pod key has still **not** been proven end to end, because the failed-run path skipped that step.
+- The adapter is untested for generation quality.
+- Evaluation and application integration belong to Phase 9 and later, and have not started.

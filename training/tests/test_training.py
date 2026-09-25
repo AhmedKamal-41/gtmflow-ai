@@ -222,6 +222,8 @@ def _launcher():
     return module
 
 
+@pytest.mark.skipif(not (Path(__file__).resolve().parents[2] / ".git").exists(),
+                    reason="needs a git checkout (git check-ignore); run bundles have none")
 def test_launcher_reads_only_the_key_from_an_ignored_env_file_and_scrubs_it(tmp_path, monkeypatch, capsys):
     L = _launcher()
     dummy = "rpa_" + "X" * 20  # not a real key
