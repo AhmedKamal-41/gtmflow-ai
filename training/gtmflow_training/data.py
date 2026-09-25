@@ -91,7 +91,8 @@ def load_split(spec: dict[str, Any], role: str) -> list[dict[str, Any]]:
     return rows
 
 
-def build_messages(example: dict[str, Any]) -> tuple[list[dict[str, str]], str]:
+def prompt_messages(example: dict[str, Any]) -> list[dict[str, str]]:
+    """The production request: shared system message + grounded-v2 prompt."""
     ctx = example["input_snapshot"]
     if example["task"] == "company_summary":
         user = build_summary_prompt(ctx)
@@ -99,9 +100,39 @@ def build_messages(example: dict[str, Any]) -> tuple[list[dict[str, str]], str]:
         user = build_outreach_prompt(ctx)
     else:
         raise DataGuardError(f"unknown task {example['task']}")
-    prompt = [{"role": "system", "content": JSON_SYSTEM_MESSAGE}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": JSON_SYSTEM_MESSAGE}, {"role": "user", "content": user}]
+
+
+def build_messages(example: dict[str, Any]) -> tuple[list[dict[str, str]], str]:
     target = json.dumps(example["target"], ensure_ascii=False, sort_keys=True)
-    return prompt, target
+    return prompt_messages(example), target
+
+
+# Fields an evaluation input file may carry. Anything else (reference
+# targets, stored predictions, review data) is refused, so the machine that
+# generates predictions never sees what they are scored against.
+EVAL_INPUT_FIELDS = {"example_id", "split", "subset", "task", "input_snapshot", "prompt_version"}
+
+
+def load_eval_inputs(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Inputs-only held-out file for Phase 9 generation (verified by sha256)."""
+    path = Path(spec["path"])
+    actual = sha256_file(path)
+    if actual != spec["sha256"]:
+        raise DataGuardError(f"{path.name}: sha256 {actual} does not match the pinned {spec['sha256']}")
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    for r in rows:
+        extra = set(r) - EVAL_INPUT_FIELDS
+        if extra:
+            raise DataGuardError(f"{path.name}: {r.get('example_id')} carries non-input fields {sorted(extra)}")
+        if r["prompt_version"] != PROMPT_VERSION:
+            raise DataGuardError(f"{path.name}: prompt version {r['prompt_version']}, expected {PROMPT_VERSION}")
+        if r["split"] not in ("validation", "test"):
+            raise DataGuardError(f"{path.name}: {r['example_id']} is not a held-out example ({r['split']})")
+    ids = [r["example_id"] for r in rows]
+    if len(ids) != len(set(ids)):
+        raise DataGuardError(f"{path.name}: duplicate example ids")
+    return rows
 
 
 def encode(example: dict[str, Any], tokenizer, max_seq_len: int) -> dict[str, Any]:

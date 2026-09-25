@@ -5,6 +5,10 @@
     python3 training/scripts/runpod/launch.py run --bundle-sha256 <sha> --confirm-paid-compute
     python3 training/scripts/runpod/launch.py resume          # re-attach after a local disconnect
     python3 training/scripts/runpod/launch.py terminate       # emergency: remove this run's pod now
+    python3 training/scripts/runpod/launch.py prove-self-delete --confirm-paid-compute   # ~2-4 min pod, no data
+
+Profiles (--profile): phase8-train (default; the Phase 8 training run) and
+phase9-eval (Phase 9 generation: 2 h hard lifetime, $0.60/hr price cap).
 
 The RunPod API key is read from $RUNPOD_API_KEY, else the RUNPOD_API_KEY line of
 backend/.env (only that line is parsed; the file must be git-ignored), else
@@ -55,9 +59,6 @@ STATE_DIR = TRAINING / "runs" / "runpod"
 STATE = STATE_DIR / "state.json"
 EVENTS = STATE_DIR / "events.jsonl"
 KNOWN_HOSTS = STATE_DIR / "known_hosts"
-BUNDLE = TRAINING / "runs" / "gtmflow-phase8-bundle.tar.gz"
-POD_JOB = Path(__file__).resolve().parent / "pod_job.sh"
-LOCAL_RUN = TRAINING / "runs" / RUN_NAME / "train"
 SSH_KEY = Path.home() / ".ssh" / "gtmflow_runpod_ed25519"
 KEY_FILE = Path.home() / ".config" / "gtmflow" / "runpod_api_key"
 ENV_FILE = REPO / "backend" / ".env"
@@ -78,6 +79,45 @@ COPY_BACK_RESERVE_SECONDS = 40 * 60  # training must end this long before the ha
 BUDGET_USD = 3.00
 CONTAINER_DISK_GB = 50
 DISK_USD_PER_GB_MONTH = 0.10
+POD_NAME_FAMILY = "gtmflow-"  # any pod of this project; only one may exist at a time
+PROOF_LIMIT_SECONDS = 120   # proof pod: the boot watchdog removes it this long after boot
+PROOF_WINDOW_SECONDS = 600  # ...and it must be gone within this long after creation
+
+HERE = Path(__file__).resolve().parent
+PHASE8_ALLOWED = (r"^(BUNDLE_COMMIT|training/.*|backend/|backend/app/|backend/app/ai/|backend/app/ai/prompts\.py|"
+                  r"backend/data/|backend/data/datasets/|backend/data/datasets/(train-combined-v1|validation-v1)/"
+                  r"(eligible\.jsonl|dataset-manifest\.json)?)$")
+PHASE8_FORBIDDEN = r"(test-v1|\.env($|/)|\.db$|\.sqlite|flagged)"
+# Phase 9: code, prompts, inputs-only held-out files and the two pinned adapter
+# files. No dataset files (they carry the references), no reviews, no secrets.
+PHASE9_ALLOWED = (r"^(BUNDLE_COMMIT|backend/|backend/app/|backend/app/ai/|backend/app/ai/prompts\.py|"
+                  r"training/(?!runs/).*|training/runs/|"
+                  r"training/runs/phase9-eval-inputs/((validation|test)-(eligible|flagged)\.jsonl|inputs-manifest\.json)?|"
+                  r"training/runs/phase8-qwen3-4b-lora-v1/|training/runs/phase8-qwen3-4b-lora-v1/train/|"
+                  r"training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/(adapter_config\.json|adapter_model\.safetensors)?)$")
+PHASE9_FORBIDDEN = r"(\.env($|/)|\.db$|\.sqlite|backend/data/|ai_reviews|/eligible\.jsonl$|flagged-uncertain)"
+
+PROFILES = {
+    "phase8-train": {
+        "run_name": RUN_NAME, "local_run": TRAINING / "runs" / RUN_NAME / "train",
+        "bundle": TRAINING / "runs" / "gtmflow-phase8-bundle.tar.gz", "pod_job": HERE / "pod_job.sh",
+        "remote_archive": "/workspace/phase8-run-v1.tar.gz", "pod_name_prefix": "gtmflow-phase8-",
+        "hard_limit_seconds": HARD_LIMIT_SECONDS, "claim_limit_seconds": CLAIM_LIMIT_SECONDS,
+        "grace_seconds": GRACE_SECONDS, "copy_back_reserve_seconds": COPY_BACK_RESERVE_SECONDS,
+        "max_cost_per_hr": MAX_COST_PER_HR, "allowed": PHASE8_ALLOWED, "forbidden": PHASE8_FORBIDDEN,
+        "config": "phase8-qwen3-4b-lora-v1.json",
+    },
+    "phase9-eval": {
+        "run_name": "phase9-eval-v1", "local_run": TRAINING / "runs" / "phase9-eval-v1" / "run",
+        "bundle": TRAINING / "runs" / "gtmflow-phase9-bundle.tar.gz", "pod_job": HERE / "pod_eval_job.sh",
+        "remote_archive": "/workspace/phase9-eval-v1.tar.gz", "pod_name_prefix": "gtmflow-phase9-",
+        "hard_limit_seconds": 2 * 3600, "claim_limit_seconds": 30 * 60,
+        "grace_seconds": 30 * 60, "copy_back_reserve_seconds": 20 * 60,
+        "max_cost_per_hr": 0.60, "allowed": PHASE9_ALLOWED, "forbidden": PHASE9_FORBIDDEN,
+        "config": "phase9-eval-v1.json",
+    },
+}
+P: dict = PROFILES["phase8-train"]  # set from --profile (or the saved state) in main()
 
 # Shared pod-side environment, written at boot by the container start command
 # and sourced by every pod-side context (the boot watchdog, SSH-launched checks
@@ -247,16 +287,15 @@ def terminate(pod_id: str, reason: str) -> bool:
 
 
 def check_bundle(expected_sha: str | None) -> dict:
-    if not BUNDLE.exists():
-        sys.exit(f"bundle missing: run training/scripts/make_bundle.sh ({BUNDLE})")
-    digest = sha256(BUNDLE)
+    bundle = P["bundle"]
+    if not bundle.exists():
+        sys.exit(f"bundle missing: build it first ({bundle})")
+    digest = sha256(bundle)
     if expected_sha and digest != expected_sha:
         sys.exit(f"bundle sha256 {digest} != expected {expected_sha}")
-    allowed = re.compile(r"^(BUNDLE_COMMIT|training/.*|backend/|backend/app/|backend/app/ai/|backend/app/ai/prompts\.py|"
-                         r"backend/data/|backend/data/datasets/|backend/data/datasets/(train-combined-v1|validation-v1)/"
-                         r"(eligible\.jsonl|dataset-manifest\.json)?)$")
-    forbidden = re.compile(r"(test-v1|\.env($|/)|\.db$|\.sqlite|flagged)", re.I)
-    with tarfile.open(BUNDLE) as tar:
+    allowed = re.compile(P["allowed"])
+    forbidden = re.compile(P["forbidden"], re.I)
+    with tarfile.open(bundle) as tar:
         members = {m.name.removeprefix("./").rstrip("/") + ("/" if m.isdir() else ""): m for m in tar.getmembers()}
         names = [n for n in members if n not in ("", "./", "/")]
         bad = [n for n in names if not allowed.match(n) or forbidden.search(n)]
@@ -264,7 +303,7 @@ def check_bundle(expected_sha: str | None) -> dict:
             sys.exit(f"bundle holds files outside the allowlist: {bad[:10]}")
         commit = tar.extractfile(members["BUNDLE_COMMIT"]).read().decode().strip()
     datasets = sorted(n for n in names if n.endswith(".jsonl"))
-    return {"sha256": digest, "bytes": BUNDLE.stat().st_size, "commit": commit, "members": len(names),
+    return {"sha256": digest, "bytes": bundle.stat().st_size, "commit": commit, "members": len(names),
             "datasets": datasets}
 
 
@@ -297,10 +336,11 @@ def remote(state: dict, path: str) -> str:
 
 # ---------------------------------------------------------------- phases
 
-def create_pod(allow_4090: bool) -> dict:
+def create_pod(allow_4090: bool, name_prefix: str | None = None, hard_limit: int | None = None,
+               claim_limit: int | None = None) -> dict:
     pub = SSH_KEY.with_suffix(".pub").read_text().strip()
     body = {
-        "name": POD_NAME_PREFIX + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"),
+        "name": (name_prefix or P["pod_name_prefix"]) + datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S"),
         "imageName": IMAGE,
         "cloudType": "SECURE",
         "computeType": "GPU",
@@ -315,8 +355,8 @@ def create_pod(allow_4090: bool) -> dict:
         "minRAMPerGPU": 30,
         "allowedCudaVersions": ["12.6", "12.7", "12.8", "12.9", "13.0"],
         "env": {"PUBLIC_KEY": pub,
-                "GTMFLOW_HARD_LIMIT_SECONDS": str(HARD_LIMIT_SECONDS),
-                "GTMFLOW_CLAIM_LIMIT_SECONDS": str(CLAIM_LIMIT_SECONDS)},
+                "GTMFLOW_HARD_LIMIT_SECONDS": str(hard_limit or P["hard_limit_seconds"]),
+                "GTMFLOW_CLAIM_LIMIT_SECONDS": str(claim_limit or P["claim_limit_seconds"])},
         "dockerStartCmd": ["bash", "-c", WATCHDOG_CMD],
     }
     status, pod = rest("POST", "/pods", body)
@@ -439,17 +479,18 @@ def prove_self_delete(state: dict) -> bool:
 
 def upload_and_start(state: dict) -> None:
     ssh(state, "mkdir -p /workspace/upload /workspace/job && touch /workspace/job/claimed")
-    scp(state, str(BUNDLE), remote(state, "/workspace/upload/gtmflow-phase8-bundle.tar.gz"))
-    scp(state, str(POD_JOB), remote(state, "/workspace/upload/pod_job.sh"))
-    remote_sha = ssh(state, "sha256sum /workspace/upload/gtmflow-phase8-bundle.tar.gz").stdout.split()[0]
+    bundle_name, job_name = P["bundle"].name, P["pod_job"].name
+    scp(state, str(P["bundle"]), remote(state, f"/workspace/upload/{bundle_name}"))
+    scp(state, str(P["pod_job"]), remote(state, f"/workspace/upload/{job_name}"))
+    remote_sha = ssh(state, f"sha256sum /workspace/upload/{bundle_name}").stdout.split()[0]
     if remote_sha != state["bundle"]["sha256"]:
         raise RuntimeError(f"bundle checksum on pod {remote_sha} != local {state['bundle']['sha256']}")
     event("bundle_transferred", sha256=remote_sha)
-    train_deadline = state["hard_limit_at"] - COPY_BACK_RESERVE_SECONDS
+    train_deadline = state["hard_limit_at"] - P["copy_back_reserve_seconds"]
     state["train_deadline_unix"] = train_deadline
     save_state(state)
-    args = " ".join(shlex.quote(a) for a in (state["bundle"]["sha256"], str(int(train_deadline)), str(GRACE_SECONDS)))
-    ssh(state, f"setsid nohup bash /workspace/upload/pod_job.sh {args} >/dev/null 2>&1 < /dev/null & echo started")
+    args = " ".join(shlex.quote(a) for a in (state["bundle"]["sha256"], str(int(train_deadline)), str(P["grace_seconds"])))
+    ssh(state, f"setsid nohup bash /workspace/upload/{job_name} {args} >/dev/null 2>&1 < /dev/null & echo started")
     event("job_started", train_deadline=iso(train_deadline))
 
 
@@ -460,7 +501,7 @@ def poll(state: dict) -> str:
             return "hard_limit_passed"
         try:
             out = ssh(state, "cat /workspace/job/status 2>/dev/null; echo ---; "
-                             "grep -E 'STATUS|\"type\": \"(step|epoch|preflight|early_stop|deadline_stop|baseline_validation)\"|ERROR' "
+                             "grep -E 'STATUS|\"type\": \"(step|epoch|preflight|early_stop|deadline_stop|baseline_validation|pass|pass_skipped|validation_gate)\"|ERROR' "
                              "/workspace/job/job.log | tail -n 1", timeout=90, check=False)
             if out.returncode != 0:
                 raise RuntimeError(out.stderr.strip()[-200:])
@@ -482,20 +523,23 @@ def poll(state: dict) -> str:
 
 
 def fetch_and_verify(state: dict, status: str) -> dict:
-    local_dir = TRAINING / "runs" / RUN_NAME
+    run_name = P["run_name"]
+    local_dir = TRAINING / "runs" / run_name
     local_dir.mkdir(parents=True, exist_ok=True)
     if status != "done":
         # Keep the evidence of a failed run: job log, status, whatever the run wrote.
         ssh(state, "cd /workspace && tar -czf /workspace/failed-run.tar.gz job "
-                   f"$(test -d gtmflow/training/runs/{RUN_NAME} && echo gtmflow/training/runs/{RUN_NAME}) "
+                   f"$(test -d gtmflow/training/runs/{run_name} && echo gtmflow/training/runs/{run_name}) "
                    "/watchdog.log 2>/dev/null; true", timeout=600, check=False)
         scp(state, remote(state, "/workspace/failed-run.tar.gz"), str(local_dir / "failed-run.tar.gz"))
         event("failed_run_evidence_saved", path=str(local_dir / "failed-run.tar.gz"))
         return {"verified": False, "status": status}
-    remote_sha = ssh(state, "cat /workspace/phase8-run-v1.tar.gz.sha256").stdout.strip()
-    archive = local_dir / "phase8-run-v1.tar.gz"
-    scp(state, remote(state, "/workspace/phase8-run-v1.tar.gz"), str(archive))
-    result = verify_archive(archive, remote_sha, LOCAL_RUN)
+    remote_archive = P["remote_archive"]
+    remote_sha = ssh(state, f"cat {remote_archive}.sha256").stdout.strip()
+    archive = local_dir / Path(remote_archive).name
+    scp(state, remote(state, remote_archive), str(archive))
+    verify = verify_eval_archive if P is PROFILES["phase9-eval"] else verify_archive
+    result = verify(archive, remote_sha, P["local_run"])
     result["status"] = status
     event("artifacts_verified", **result)
     if not result["verified"]:
@@ -508,14 +552,16 @@ def final_accounting(state: dict) -> dict:
     hours = (ended - state["created_at"]) / 3600
     rate = float(state.get("cost_per_hr") or 0)
     disk = CONTAINER_DISK_GB * DISK_USD_PER_GB_MONTH / 730 * hours
-    ours = [p for p in list_pods() if str(p.get("name", "")).startswith(POD_NAME_PREFIX)]
+    ours = [p for p in list_pods() if str(p.get("name", "")).startswith(POD_NAME_FAMILY)]
     report = {"pod_id": state["pod_id"], "gpu": state.get("gpu"), "cost_per_hr": rate,
               "created_at": iso(state["created_at"]), "terminated_at": iso(ended),
               "billed_hours_estimate": round(hours, 3), "estimated_usd": round(rate * hours + disk, 3),
               "balance_before": state.get("balance_before"), "balance_after": balance(),
               "remaining_gtmflow_pods": [p.get("id") for p in ours],
               "network_volumes_created": 0, "volume_disk_gb": 0}
-    (TRAINING / "runs" / RUN_NAME / "runpod-report.json").write_text(json.dumps(report, indent=2))
+    report_dir = TRAINING / "runs" / state.get("run_name", P["run_name"])
+    report_dir.mkdir(parents=True, exist_ok=True)
+    (report_dir / "runpod-report.json").write_text(json.dumps(report, indent=2))
     event("accounting", **report)
     return report
 
@@ -547,11 +593,39 @@ def verify_archive(archive: Path, expected_sha: str, dest: Path) -> dict:
     tok_ok = bool(tok.get("saved_files_sha256")) and all(
         sha256(dest / "tokenizer" / n) == d for n, d in tok["saved_files_sha256"].items())
     config_ok = sha256(dest / "config.json") == manifest["config_sha256"] == sha256(
-        TRAINING / "configs" / f"{RUN_NAME}.json")
+        TRAINING / "configs" / PROFILES["phase8-train"]["config"])
     return {"verified": not mismatches and adapter_ok and tok_ok and config_ok, "archive_sha256": local_sha,
             "files_checked": len(sums), "mismatches": mismatches, "adapter_ok": adapter_ok,
             "adapter_tensors": len([k for k in header if k != "__metadata__"]),
             "tokenizer_ok": tok_ok, "config_matches_repo": config_ok, "local_path": str(dest)}
+
+
+def verify_eval_archive(archive: Path, expected_sha: str, dest: Path) -> dict:
+    """Phase 9 copy-back: archive checksum, every file against the pod-side
+    SHA256SUMS, prediction files against the run manifest, and config,
+    inputs and adapter hashes against the repository's pinned config."""
+    local_sha = sha256(archive)
+    if local_sha != expected_sha:
+        raise RuntimeError(f"archive checksum mismatch: local {local_sha} expected {expected_sha}")
+    if dest.exists():
+        raise RuntimeError(f"{dest} already exists; refusing to overwrite")
+    dest.mkdir(parents=True)
+    with tarfile.open(archive) as tar:
+        tar.extractall(dest, filter="data")
+    sums = (dest / "SHA256SUMS").read_text().splitlines()
+    mismatches = [name for digest, name in (line.split(maxsplit=1) for line in sums)
+                  if sha256(dest / name.removeprefix("./")) != digest]
+    manifest = json.loads((dest / "run-manifest.json").read_text())
+    pinned = json.loads((TRAINING / "configs" / PROFILES["phase9-eval"]["config"]).read_text())
+    preds_ok = all(sha256(dest / "predictions" / n) == d for n, d in manifest["predictions_sha256"].items())
+    config_ok = manifest["config_sha256"] == sha256(TRAINING / "configs" / PROFILES["phase9-eval"]["config"])
+    inputs_ok = manifest["inputs_sha256"] == {k: v["sha256"] for k, v in pinned["inputs"].items()}
+    adapter_ok = manifest["adapter_sha256"] == pinned["adapter"]["sha256"]
+    return {"verified": not mismatches and preds_ok and config_ok and inputs_ok and adapter_ok,
+            "archive_sha256": local_sha, "files_checked": len(sums), "mismatches": mismatches,
+            "predictions_ok": preds_ok, "config_matches_repo": config_ok, "inputs_match_pins": inputs_ok,
+            "adapter_matches_pins": adapter_ok, "stopped": manifest.get("stopped"),
+            "passes": manifest.get("passes"), "local_path": str(dest)}
 
 
 # -------------------------------------------------------------- commands
@@ -573,20 +647,21 @@ def cmd_run(args) -> int:
     if load_state().get("pod_id") and not load_state().get("finished"):
         print(f"refused: an unfinished run exists in {STATE}; use resume or terminate", file=sys.stderr)
         return 2
-    if LOCAL_RUN.exists():
-        print(f"refused: {LOCAL_RUN} already exists (one run only)", file=sys.stderr)
+    if P["local_run"].exists():
+        print(f"refused: {P['local_run']} already exists (one run only)", file=sys.stderr)
         return 2
     bundle = check_bundle(args.bundle_sha256)
-    if any(str(p.get("name", "")).startswith(POD_NAME_PREFIX) for p in list_pods()):
-        print("refused: a gtmflow-phase8 pod already exists", file=sys.stderr)
+    if any(str(p.get("name", "")).startswith(POD_NAME_FAMILY) for p in list_pods()):
+        print("refused: a gtmflow pod already exists", file=sys.stderr)
         return 2
-    state = {"bundle": bundle, "balance_before": balance(), "started_at": now()}
+    state = {"profile": args.profile, "run_name": P["run_name"], "bundle": bundle,
+             "balance_before": balance(), "started_at": now()}
     save_state(state)
-    event("creating_pod", gpu_types=GPU_TYPES + (FALLBACK_GPU_TYPES if args.allow_rtx4090 else []),
-          hard_limit_hours=HARD_LIMIT_SECONDS / 3600, max_cost_per_hr=MAX_COST_PER_HR)
+    event("creating_pod", profile=args.profile, gpu_types=GPU_TYPES + (FALLBACK_GPU_TYPES if args.allow_rtx4090 else []),
+          hard_limit_hours=P["hard_limit_seconds"] / 3600, max_cost_per_hr=P["max_cost_per_hr"])
     pod = create_pod(args.allow_rtx4090)
     state.update(pod_id=pod["id"], created_at=now(), cost_per_hr=pod.get("costPerHr"))
-    state["hard_limit_at"] = state["created_at"] + HARD_LIMIT_SECONDS
+    state["hard_limit_at"] = state["created_at"] + P["hard_limit_seconds"]
     state["local_watchdog_pid"] = start_local_watchdog(pod["id"], state["hard_limit_at"] + 120)
     save_state(state)
     event("pod_created", pod=pod["id"], cost_per_hr=pod.get("costPerHr"), hard_limit=iso(state["hard_limit_at"]))
@@ -598,10 +673,10 @@ def drive(state: dict, fresh: bool) -> int:
     try:
         if fresh:
             rate = float(state.get("cost_per_hr") or 0)
-            if not 0 < rate <= MAX_COST_PER_HR:
-                raise RuntimeError(f"pod price ${rate}/hr outside the allowed (0, {MAX_COST_PER_HR}]")
+            if not 0 < rate <= P["max_cost_per_hr"]:
+                raise RuntimeError(f"pod price ${rate}/hr outside the allowed (0, {P['max_cost_per_hr']}]")
             wait_for_ssh(state)
-            if float(state.get("cost_per_hr") or 0) > MAX_COST_PER_HR:
+            if float(state.get("cost_per_hr") or 0) > P["max_cost_per_hr"]:
                 raise RuntimeError(f"pod price ${state['cost_per_hr']}/hr above cap")
             state["safeguards"] = verify_safeguards(state)
             save_state(state)
@@ -657,6 +732,67 @@ def cmd_terminate(args) -> int:
     return 0 if gone else 1
 
 
+def cmd_prove_self_delete(args) -> int:
+    """Paid, a few minutes: create one pod exactly like a run pod (same image,
+    GPU type, start command and shared pod environment) but with a hard
+    lifetime of PROOF_LIMIT_SECONDS and nothing else to do. The boot watchdog
+    must remove it with the pod-scoped key through `t` -- the same path that
+    protects a run when this workspace is unavailable. Nothing else removes
+    it inside the observation window, so its disappearance is the proof. On
+    timeout the watchdog log is read over SSH and the account key removes the
+    pod. No data is transferred."""
+    if not args.confirm_paid_compute:
+        print("refused: needs --confirm-paid-compute", file=sys.stderr)
+        return 2
+    if any(str(p.get("name", "")).startswith(POD_NAME_FAMILY) for p in list_pods()):
+        print("refused: a gtmflow pod already exists", file=sys.stderr)
+        return 2
+    proof = {"purpose": "prove pod self-deletion", "balance_before": balance(), "started_at": now()}
+    pod = create_pod(False, name_prefix="gtmflow-proof-", hard_limit=PROOF_LIMIT_SECONDS,
+                     claim_limit=PROOF_LIMIT_SECONDS)
+    proof.update(pod_id=pod["id"], created_at=now(), cost_per_hr=pod.get("costPerHr"))
+    backstop = start_local_watchdog(pod["id"], proof["created_at"] + PROOF_WINDOW_SECONDS + 300)
+    event("proof_pod_created", pod=pod["id"], cost_per_hr=pod.get("costPerHr"),
+          self_delete_after_boot_s=PROOF_LIMIT_SECONDS, window_s=PROOF_WINDOW_SECONDS)
+    proven, booted, log = False, False, None
+    try:
+        if not 0 < float(pod.get("costPerHr") or 0) <= P["max_cost_per_hr"]:
+            raise RuntimeError(f"pod price {pod.get('costPerHr')}/hr outside the cap")
+        deadline = proof["created_at"] + PROOF_WINDOW_SECONDS
+        while now() < deadline:
+            time.sleep(10)
+            current = get_pod(pod["id"])
+            if current is None:
+                proven = True
+                break
+            if not booted and current.get("publicIp") and (current.get("portMappings") or {}).get("22"):
+                booted = True
+                proof.update(ssh_host=current["publicIp"], ssh_port=current["portMappings"]["22"])
+                event("proof_pod_running", pod=pod["id"])
+        if not proven and proof.get("ssh_host"):
+            try:
+                log = ssh(proof, "cat /watchdog.log", timeout=60, check=False).stdout[-2000:]
+            except (RuntimeError, subprocess.TimeoutExpired):
+                log = None
+    finally:
+        gone = True if proven else terminate(pod["id"], "self-deletion proof window elapsed")
+        proof.update(finished_at=now(), self_delete_proven=proven, removal_confirmed=gone,
+                     watchdog_log_on_failure=log)
+        try:
+            os.kill(backstop, 15)
+        except OSError:
+            pass
+        hours = (proof["finished_at"] - proof["created_at"]) / 3600
+        proof.update(estimated_usd=round(float(pod.get("costPerHr") or 0) * hours, 4),
+                     balance_after=balance(),
+                     remaining_gtmflow_pods=[p.get("id") for p in list_pods()
+                                             if str(p.get("name", "")).startswith(POD_NAME_FAMILY)])
+        (STATE_DIR / "self-delete-proof.json").write_text(json.dumps(proof, indent=2, default=str))
+        event("self_delete_proof", **{k: proof.get(k) for k in ("pod_id", "self_delete_proven", "removal_confirmed",
+                                                                "estimated_usd", "remaining_gtmflow_pods")})
+    return 0 if proven else 1
+
+
 def cmd_watchdog(args) -> int:
     while now() < args.at:
         time.sleep(min(60, max(1, args.at - now())))
@@ -669,14 +805,19 @@ def cmd_watchdog(args) -> int:
 
 
 def main() -> int:
+    global P
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check")
     c.add_argument("--bundle-sha256")
+    c.add_argument("--profile", choices=sorted(PROFILES), default="phase8-train")
     r = sub.add_parser("run")
+    r.add_argument("--profile", choices=sorted(PROFILES), default="phase8-train")
     r.add_argument("--bundle-sha256", required=True)
     r.add_argument("--confirm-paid-compute", action="store_true")
     r.add_argument("--allow-rtx4090", action="store_true")
+    pr = sub.add_parser("prove-self-delete")
+    pr.add_argument("--confirm-paid-compute", action="store_true")
     sub.add_parser("resume")
     t = sub.add_parser("terminate")
     t.add_argument("--pod")
@@ -684,8 +825,12 @@ def main() -> int:
     w.add_argument("--pod", required=True)
     w.add_argument("--at", type=float, required=True)
     args = parser.parse_args()
-    return {"check": cmd_check, "run": cmd_run, "resume": cmd_resume,
-            "terminate": cmd_terminate, "watchdog": cmd_watchdog}[args.cmd](args)
+    if getattr(args, "profile", None):
+        P = PROFILES[args.profile]
+    elif args.cmd in ("resume", "terminate") and load_state().get("profile"):
+        P = PROFILES[load_state()["profile"]]
+    return {"check": cmd_check, "run": cmd_run, "resume": cmd_resume, "terminate": cmd_terminate,
+            "watchdog": cmd_watchdog, "prove-self-delete": cmd_prove_self_delete}[args.cmd](args)
 
 
 if __name__ == "__main__":

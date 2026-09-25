@@ -26,7 +26,7 @@ from typing import Any
 from app.ai.mock_client import MockAIClient
 from app.core.database import get_sessionmaker
 from app.datasets import checks, dedup, pilot
-from app.evaluation import criteria, metrics
+from app.evaluation import criteria, metrics, phase9
 from app.services import splits
 
 EXPORT_FILES = {
@@ -214,6 +214,61 @@ def cmd_evaluate(args, session) -> int:
     return 0
 
 
+def cmd_evaluate_predictions(args, session) -> int:
+    """Phase 9: score generated predictions (or the stored gpt-4o-mini outputs
+    with --system source) on a held-out set with the frozen metrics and the
+    phase9 report view. Every example is scored; a missing, empty, truncated
+    or unparseable generation is a failure, never dropped."""
+    rows = pilot.load_jsonl(args.dataset)
+    if not rows or not all(r["split"] in ("validation", "test") for r in rows):
+        print(json.dumps({"error": "evaluate-predictions is for held-out (validation/test) datasets only"}), file=sys.stderr)
+        return 1
+    preds: dict[str, dict[str, Any]] = {}
+    if args.system == "source":
+        preds = {r["example_id"]: {"output": r["source_output"]} for r in rows}
+        system_name, pred_sha = "gpt-4o-mini (stored source_output)", None
+    else:
+        if not args.predictions or not args.system_name:
+            print(json.dumps({"error": "--predictions and --system-name are required"}), file=sys.stderr)
+            return 1
+        wanted = {r["example_id"] for r in rows}
+        for rec in pilot.load_jsonl(args.predictions):
+            if rec["system"] == args.system_name and rec["example_id"] in wanted:
+                if rec["example_id"] in preds:
+                    print(json.dumps({"error": f"duplicate prediction {rec['example_id']}"}), file=sys.stderr)
+                    return 1
+                preds[rec["example_id"]] = rec
+        system_name, pred_sha = args.system_name, _sha(args.predictions)
+    per_example = []
+    for r in rows:
+        s = phase9.score_prediction(r, preds.get(r["example_id"]))
+        per_example.append({"example_id": r["example_id"], "position": r["position"], "task": r["task"],
+                            "split": r["split"], "segment": r["segment"], "uncertain": r["uncertain"], **s})
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for s in per_example:
+        groups[f"task={s['task']}"].append(s)
+        groups[f"task={s['task']}|segment={s['segment']}"].append(s)
+    sources = sorted({r["review_source"] for r in rows})
+    result = {
+        "system": system_name, "predictions": args.predictions, "predictions_sha256": pred_sha,
+        "report_view_id": phase9.REPORT_VIEW_ID, "report_view_sha256": phase9.report_view_digest(),
+        "criteria_id": criteria.CRITERIA_ID, "criteria_sha256": criteria.criteria_digest(),
+        "metrics_version": metrics.METRICS_VERSION,
+        "dataset": args.dataset, "dataset_sha256": _sha(args.dataset), "splits": sorted({r["split"] for r in rows}),
+        "reference_label": ("AI-derived reference targets (review_source=ai, human_verified=false); "
+                            "not human-verified quality" if sources == ["ai"] else "references from: " + ", ".join(sources)),
+        "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)"
+                 if "ai" in sources else "HELD-OUT evaluation",
+        "overall": phase9.aggregate(per_example),
+        "by_group": {k: phase9.aggregate(v) for k, v in sorted(groups.items())},
+        "per_example": per_example,
+    }
+    with open(args.out, "w") as f:
+        json.dump(result, f, indent=2, sort_keys=True)
+    print(json.dumps({k: result[k] for k in ("system", "label", "overall")}, indent=2))
+    return 0
+
+
 def cmd_eval_record(args, session) -> int:
     """Evaluation record for held-out queues: every candidate is accounted
     for -- generation attempts and failures (from the paid-run ledger),
@@ -297,6 +352,12 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--dataset", required=True)
     e.add_argument("--system", choices=("source", "mock"), required=True)
     e.add_argument("--out", required=True)
+    ep = sub.add_parser("evaluate-predictions")
+    ep.add_argument("--dataset", required=True)
+    ep.add_argument("--system", choices=("predictions", "source"), default="predictions")
+    ep.add_argument("--predictions")
+    ep.add_argument("--system-name")
+    ep.add_argument("--out", required=True)
     r = sub.add_parser("eval-record")
     r.add_argument("--queue", action="append", required=True)
     r.add_argument("--ledger", required=True)
@@ -308,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
     session = get_sessionmaker()()
     try:
         return {"build": cmd_build, "check": cmd_check, "evaluate": cmd_evaluate,
+                "evaluate-predictions": cmd_evaluate_predictions,
                 "create-eval-queues": cmd_create_eval_queues, "eval-record": cmd_eval_record}[args.command](args, session)
     except (splits.ManifestError, FileNotFoundError, KeyError) as error:
         session.rollback()

@@ -101,7 +101,9 @@ STEP=plan
 
 status running:tests
 STEP=tests
-.venv/bin/python -m pytest -q || fail "tests"
+# The GPU is hidden from the test suite: no test can start real GPU work
+# (in the Phase 8 run a refusal test started the real training instead).
+CUDA_VISIBLE_DEVICES="" .venv/bin/python -m pytest -q || fail "tests"
 
 status running:preflight
 STEP=preflight

@@ -243,3 +243,157 @@ def test_launcher_reads_only_the_key_from_an_ignored_env_file_and_scrubs_it(tmp_
     with pytest.raises(SystemExit, match="not git-ignored"):
         L._key_from_env_file(tracked)
     env.unlink()
+
+
+# ------------------------------------------------------ Phase 9 generation
+
+from gtmflow_training import generate as G  # noqa: E402
+
+PHASE9_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "phase9-eval-v1.json"
+
+
+def _eval_input(i: int, split: str, subset: str, task: str) -> dict:
+    return {"example_id": f"{split}-{subset}-{i}", "split": split, "subset": subset, "task": task,
+            "input_snapshot": CTX, "prompt_version": "grounded-v2"}
+
+
+def _phase9_config(tmp_path: Path) -> Path:
+    cfg = json.loads(PHASE9_CONFIG.read_text())
+    tasks = ("company_summary", "outreach_email")
+    for name in cfg["pass_order"]:
+        split, subset = name.split("-")
+        path = tmp_path / f"{name}.jsonl"
+        path.write_text("".join(json.dumps(_eval_input(i, split, subset, tasks[i % 2])) + "\n" for i in range(3)))
+        cfg["inputs"][name] = {"path": str(path), "sha256": D.sha256_file(path)}
+    cfg["base_model"]["cache_dir"] = str((PHASE9_CONFIG.parent / cfg["base_model"]["cache_dir"]).resolve())
+    cfg["smoke"]["examples"] = 3
+    out = tmp_path / "phase9.json"
+    out.write_text(json.dumps(cfg))
+    return out
+
+
+def test_eval_inputs_refuse_references_and_non_heldout_rows(tmp_path):
+    good = tmp_path / "ok.jsonl"
+    good.write_text(json.dumps(_eval_input(1, "test", "eligible", "company_summary")) + "\n")
+    assert len(D.load_eval_inputs({"path": str(good), "sha256": D.sha256_file(good)})) == 1
+    for name, row in (("target", {**_eval_input(1, "test", "eligible", "company_summary"), "target": SUMMARY}),
+                      ("source", {**_eval_input(1, "test", "eligible", "company_summary"), "source_output": SUMMARY}),
+                      ("train", _eval_input(1, "train", "eligible", "company_summary"))):
+        bad = tmp_path / f"{name}.jsonl"
+        bad.write_text(json.dumps(row) + "\n")
+        with pytest.raises(D.DataGuardError):
+            D.load_eval_inputs({"path": str(bad), "sha256": D.sha256_file(bad)})
+    with pytest.raises(D.DataGuardError, match="does not match"):
+        D.load_eval_inputs({"path": str(good), "sha256": "0" * 64})
+
+
+def test_adapter_hashes_are_verified(tmp_path):
+    (tmp_path / "adapter_config.json").write_text("{}")
+    pinned = {"adapter_config.json": D.sha256_file(tmp_path / "adapter_config.json")}
+    assert G.verify_adapter(tmp_path, pinned) == pinned
+    with pytest.raises(D.DataGuardError, match="adapter"):
+        G.verify_adapter(tmp_path, {"adapter_config.json": "0" * 64})
+
+
+def test_generate_run_refuses_without_confirmation_or_gpu(monkeypatch):
+    monkeypatch.setattr(G.torch.cuda, "is_available", lambda: False)  # never the real GPU path in tests
+    assert G.main(["run", "--config", str(PHASE9_CONFIG)]) == 2
+    assert G.main(["run", "--config", str(PHASE9_CONFIG), "--confirm-paid-compute"]) == 2
+
+
+@needs_tokenizer
+def test_generation_smoke_is_complete_deterministic_and_base_means_adapter_off(tmp_path):
+    cfg_path = _phase9_config(tmp_path)
+    runs = []
+    for i in (1, 2):
+        m = G.run(G.load_config(str(cfg_path)), "smoke", tmp_path / f"gen{i}")
+        runs.append({s: (tmp_path / f"gen{i}" / "predictions" / f"{s}.jsonl").read_text() for s in G.SYSTEMS})
+        assert m["stopped"] is None and not m["validation_gate"]["enforced"]
+    assert runs[0] == runs[1]  # greedy + fixed batches: byte-identical
+    recs = {s: [json.loads(l) for l in runs[0][s].splitlines()] for s in G.SYSTEMS}
+    for s in G.SYSTEMS:  # every input of every pass has a prediction record
+        assert len(recs[s]) == 12 and len({(r["pass"], r["example_id"]) for r in recs[s]}) == 12
+    # The base system is the plain model: generating without any adapter gives the same tokens.
+    cfg = G.load_config(str(cfg_path))
+    tok = T.load_tokenizer(cfg)
+    tok.padding_side = "left"
+    plain = T.load_model(cfg, tiny=True).eval()
+    rows = G.load_inputs(cfg, limit=3)["validation-eligible"]
+    plain_out = []
+    for batch in G.batches(rows, tok, cfg["smoke"]["batch_size"]):
+        plain_out += G.generate_batch(plain, tok, batch, cfg["smoke"]["max_new_tokens"], G.eos_ids(plain, tok), "cpu")
+    base_val = [r for r in recs["qwen3-4b-base"] if r["pass"] == "validation-eligible"]
+    assert [r["text"] for r in plain_out] == [r["text"] for r in base_val]
+    lora_val = [r for r in recs["qwen3-4b-lora-v1"] if r["pass"] == "validation-eligible"]
+    assert [r["text"] for r in lora_val] != [r["text"] for r in base_val]  # the (random) adapter is applied
+
+
+@needs_tokenizer
+def test_enforced_validation_gate_stops_before_any_test_generation(tmp_path):
+    cfg = G.load_config(str(_phase9_config(tmp_path)))
+    m = G.run(cfg, "smoke", tmp_path / "gated", enforce_gate=True)  # tiny model: always truncated -> gate fails
+    assert m["stopped"] == "validation gate failed" and not m["validation_gate"]["passed"]
+    skipped = [p for p in m["passes"] if not p["generated"]]
+    assert {p["name"] for p in skipped} == {"test-eligible", "test-flagged"} and len(skipped) == 4
+    test_recs = [l for s in G.SYSTEMS for l in (tmp_path / "gated" / "predictions" / f"{s}.jsonl").read_text().splitlines()
+                 if '"split": "test"' in l]
+    assert test_recs == []
+
+
+def test_phase9_bundle_allowlist_matches_the_pod_and_refuses_references():
+    import re
+    L = _launcher()
+    job = (Path(__file__).resolve().parents[1] / "scripts" / "runpod" / "pod_eval_job.sh").read_text()
+    assert f'PHASE9_ALLOWED = r"{L.PHASE9_ALLOWED}"' in job and f'PHASE9_FORBIDDEN = r"{L.PHASE9_FORBIDDEN}"' in job
+    ok = lambda n: bool(re.match(L.PHASE9_ALLOWED, n)) and not re.search(L.PHASE9_FORBIDDEN, n, re.I)
+    for name in ("BUNDLE_COMMIT", "backend/app/ai/prompts.py", "training/gtmflow_training/generate.py",
+                 "training/runs/phase9-eval-inputs/test-eligible.jsonl", "training/runs/phase9-eval-inputs/validation-flagged.jsonl",
+                 "training/runs/phase9-eval-inputs/inputs-manifest.json",
+                 "training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/adapter_model.safetensors"):
+        assert ok(name), name
+    for name in ("backend/data/datasets/test-v1/eligible.jsonl", "backend/data/datasets/test-v1/flagged-uncertain.jsonl",
+                 "backend/data/ai_reviews/test-v1/decisions/1.json", "backend/.env", "backend/app/core/config.py",
+                 "training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/README.md",
+                 "training/runs/phase8-qwen3-4b-lora-v1/train/tokenizer/tokenizer.json",
+                 "training/runs/phase8-qwen3-4b-lora-v1/train/run-manifest.json",
+                 "training/runs/phase9-eval-inputs/test-eligible-with-targets.jsonl", "training/runs/runpod/state.json"):
+        assert not ok(name), name
+    assert L.PROFILES["phase9-eval"]["max_cost_per_hr"] * L.PROFILES["phase9-eval"]["hard_limit_seconds"] / 3600 <= 1.20
+
+
+@pytest.mark.parametrize("pod_removes_itself", [True, False])
+def test_self_delete_proof_logic(tmp_path, monkeypatch, pod_removes_itself):
+    L = _launcher()
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(L, "now", lambda: clock["t"])
+    monkeypatch.setattr(L.time, "sleep", lambda s: clock.__setitem__("t", clock["t"] + s))
+    monkeypatch.setattr(L, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(L, "EVENTS", tmp_path / "events.jsonl")
+    monkeypatch.setattr(L, "balance", lambda: {"clientBalance": 9.0})
+    monkeypatch.setattr(L, "start_local_watchdog", lambda pod, at: 999999)
+    monkeypatch.setattr(L.os, "kill", lambda pid, sig: None)
+    monkeypatch.setattr(L, "ssh", lambda *a, **k: type("R", (), {"stdout": "armed ... Unauthorized"})())
+    pods = {"p1": {"id": "p1", "name": "gtmflow-proof-x", "costPerHr": 0.49, "publicIp": "1.2.3.4",
+                   "portMappings": {"22": 2222}}}
+    created = {}
+    def create_pod(allow, name_prefix=None, hard_limit=None, claim_limit=None):
+        created.update(name_prefix=name_prefix, hard_limit=hard_limit)
+        return pods["p1"]
+    def get_pod(pid):  # the pod's own watchdog removes it ~150 s after creation (if it can)
+        if pod_removes_itself and clock["t"] > 1150:
+            pods.pop(pid, None)
+        return pods.get(pid)
+    terminated = []
+    monkeypatch.setattr(L, "create_pod", create_pod)
+    monkeypatch.setattr(L, "get_pod", get_pod)
+    monkeypatch.setattr(L, "terminate", lambda pid, reason: terminated.append(pid) or pods.pop(pid, None) or True)
+    monkeypatch.setattr(L, "list_pods", lambda: [])  # nothing else running before/after
+    rc = L.cmd_prove_self_delete(type("A", (), {"confirm_paid_compute": True})())
+    record = json.loads((tmp_path / "self-delete-proof.json").read_text())
+    assert created == {"name_prefix": "gtmflow-proof-", "hard_limit": L.PROOF_LIMIT_SECONDS}
+    if pod_removes_itself:
+        assert rc == 0 and record["self_delete_proven"] and terminated == []  # nothing but the pod removed it
+    else:
+        assert rc == 1 and not record["self_delete_proven"] and terminated == ["p1"]  # account key cleaned up
+        assert record["watchdog_log_on_failure"] and clock["t"] >= 1000 + L.PROOF_WINDOW_SECONDS
+    assert record["removal_confirmed"]
