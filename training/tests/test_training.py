@@ -86,15 +86,17 @@ def test_split_guards(tmp_path):
         D.load_split(tampered, "train")
 
 
-def test_config_refuses_a_test_dataset_and_train_needs_confirmation(tmp_path):
+def test_config_refuses_a_test_dataset_and_train_needs_confirmation(tmp_path, monkeypatch):
     cfg = json.loads(CONFIG.read_text())
     cfg["data"]["test"] = {"dir": "x", "sha256": {}}
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps(cfg))
     with pytest.raises(D.DataGuardError, match="reserved"):
         T.load_config(str(bad))
+    # Force "no GPU": on a GPU host this call would otherwise start the real run.
+    monkeypatch.setattr(T.torch.cuda, "is_available", lambda: False)
     assert T.main(["train", "--config", str(CONFIG)]) == 2  # no --confirm-paid-compute
-    assert T.main(["train", "--config", str(CONFIG), "--confirm-paid-compute"]) == 2  # no CUDA here
+    assert T.main(["train", "--config", str(CONFIG), "--confirm-paid-compute"]) == 2  # no CUDA
 
 
 def test_pinned_config_matches_phase7_datasets():
@@ -196,7 +198,7 @@ def test_deadline_stops_after_a_completed_epoch_and_keeps_the_best_adapter(tmp_p
 
 
 @needs_tokenizer
-def test_preflight_measures_without_changing_or_saving_weights(tmp_path):
+def test_preflight_measures_without_changing_or_saving_weights(tmp_path, monkeypatch):
     cfg = T.load_config(str(_smoke_config(tmp_path)))
     cfg["_tiny_preflight"] = True  # CPU stand-in for the GPU path
     m = T.run(cfg, "preflight", tmp_path / "pf")
@@ -204,8 +206,9 @@ def test_preflight_measures_without_changing_or_saving_weights(tmp_path):
     assert m["preflight"]["longest_train_tokens"] > 0
     assert (tmp_path / "pf" / "preflight.json").exists()
     assert not (tmp_path / "pf" / "best_adapter").exists()
+    monkeypatch.setattr(T.torch.cuda, "is_available", lambda: False)  # never the real GPU path in tests
     assert T.main(["preflight", "--config", str(CONFIG)]) == 2  # needs confirmation
-    assert T.main(["preflight", "--config", str(CONFIG), "--confirm-paid-compute"]) == 2  # no CUDA here
+    assert T.main(["preflight", "--config", str(CONFIG), "--confirm-paid-compute"]) == 2  # no CUDA
 
 
 # ------------------------------------------------------- RunPod launcher
