@@ -343,7 +343,9 @@ def wait_for_ssh(state: dict) -> None:
 def verify_safeguards(state: dict) -> dict:
     """Refuse to transfer data unless the pod-side self-termination is armed
     and the pod can reach the RunPod API with its own key."""
-    out = ssh(state, "cat /watchdog.log; cat /watchdog.boot; pgrep -fc 'sleep' || true; "
+    load_env = """while IFS= read -r -d '' kv; do case "$kv" in RUNPOD_POD_ID=*|RUNPOD_API_KEY=*) export "$kv";; esac; done </proc/1/environ; """
+    out = ssh(state, load_env + "cat /watchdog.log; cat /watchdog.boot; pgrep -fc 'sleep' || true; "
+                     "[ -n \"${RUNPOD_API_KEY:-}\" ] && echo POD_KEY=present || echo POD_KEY=absent; "
                      "echo POD=$RUNPOD_POD_ID; command -v runpodctl || echo NO_RUNPODCTL; "
                      "(runpodctl get pod \"$RUNPOD_POD_ID\" >/dev/null 2>&1 && echo SELF_API=runpodctl) || "
                      "(curl -fsS -o /dev/null -H \"Authorization: Bearer ${RUNPOD_API_KEY:-}\" "
@@ -353,6 +355,8 @@ def verify_safeguards(state: dict) -> dict:
     self_api = re.search(r"SELF_API=(\w+)", out)
     pod_ok = f"POD={state['pod_id']}" in out
     result = {"watchdog_armed": armed, "self_api": self_api.group(1) if self_api else None,
+              "pod_key": "present" if "POD_KEY=present" in out else "absent",
+              "runpodctl": "NO_RUNPODCTL" not in out,
               "pod_id_matches": pod_ok, "watchdog_log": [l for l in out.splitlines() if "armed" in l]}
     event("safeguards_checked", **result)
     if not (armed and pod_ok and result["self_api"] in ("runpodctl", "rest")):
