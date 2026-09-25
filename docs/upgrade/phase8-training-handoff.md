@@ -216,3 +216,15 @@ Also required: no additional experiments, no automatic model changes, and a stop
   Fix (commit `4e02b94`, bundle `2ba83a36…`): probe and self-terminate with the current `runpodctl pod get` / `pod delete` syntax, then fall back to the legacy syntax, then to REST with an explicit User-Agent. The probe records each method's first error line, redacted on the pod. Tested locally with a stubbed CLI. **Not yet verified on a real pod.**
 - **Spend so far:** RunPod balance $10.00 → $9.9888, which is **$0.0112** for both attempts. No pods remain, no volumes were created, and no data left the workspace. No training has run.
 - **Blocked:** adding a paid one-pod diagnostic mode was denied by the Claude Code permission classifier ("Real-World Transactions"). Further paid attempts wait for your decision.
+- **Attempt 3** (authorized single retry; pod `jizdlmae149op7`, L4 Secure, $0.49/hr, bundle `2ba83a36…`, created 03:00:30Z, removal confirmed 03:07:14Z): SSH was up after about 6 minutes; the watchdog was armed, the pod id matched and the pod-scoped key was present. All three self-access probes failed. Exact errors, with credentials hidden:
+  - `runpodctl pod get`: `Error: unknown command "pod" for "runpodctl"`. The installed runpodctl is the older v1 CLI.
+  - `runpodctl get pod`: `Runpod config file not found, please run 'runpodctl config' to create it Error: Unauthorized`.
+  - REST `GET /v1/pods/{id}` using the pod key, with an explicit User-Agent: `curl: (22) The requested URL returned error: 403`.
+
+  Following the pre-transfer rule, the launcher removed the pod before any transfer and confirmed the removal. **No further paid retry**, as you instructed.
+- **Spend after 3 attempts:** balance $10.00 → **$9.9546**, which is **$0.0454** so far. The launcher's per-pod estimates add up to about $0.072; the balance may settle slightly lower. No pods, no volumes, no launcher or watchdog processes remain. No data left the workspace, and no training has run.
+- **Open decision (yours).** The pod-scoped key did not authenticate for self-management through runpodctl v1 (no config file) or REST (403). Options, each needing one more paid attempt of about $0.06:
+  - (a) inside the pod, run `runpodctl config --apiKey "$RUNPOD_API_KEY"` (never printed) before probing with the v1 `get pod` / `remove pod`;
+  - (b) probe the GraphQL API with the pod key;
+  - (c) give the pod a separate, restricted RunPod key used only for self-removal. That puts a credential on the GPU host, so it needs your explicit approval;
+  - (d) accept only workspace-side removal: the workspace watchdog plus the launcher. That does not cover this Codespace sleeping.
