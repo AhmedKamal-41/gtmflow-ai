@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from app.ai.json_parser import parse_json_strict
-from app.ai.prompts import build_outreach_prompt, build_summary_prompt
+from app.ai.prompts import JSON_SYSTEM_MESSAGE, build_outreach_prompt, build_summary_prompt
 from app.core.config import settings
 
 
@@ -82,10 +82,7 @@ class OpenAIClient(AIClient):
                 messages=[
                     {
                         "role": "system",
-                        "content": (
-                            "Reply with strict JSON only -- no commentary, no "
-                            "markdown fences."
-                        ),
+                        "content": JSON_SYSTEM_MESSAGE,
                     },
                     {"role": "user", "content": prompt},
                 ],

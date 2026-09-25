@@ -16,6 +16,11 @@ from typing import Any
 
 PROMPT_VERSION = "grounded-v2"
 
+# System message the real client sends with every prompt. Training
+# (training/gtmflow_training) formats examples with exactly this message and
+# the builders below, so a fine-tuned model sees production-identical input.
+JSON_SYSTEM_MESSAGE = "Reply with strict JSON only -- no commentary, no markdown fences."
+
 SYSTEM_RULES = (
     "You are a careful B2B sales analyst. "
     "Use ONLY the seller profile and lead facts in the context. "

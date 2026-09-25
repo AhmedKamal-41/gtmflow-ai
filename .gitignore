@@ -37,3 +37,8 @@ frontend/tsconfig.tsbuildinfo
 backend/.backups/
 backend/data/datasets/
 backend/data/generation_ledgers/
+
+# Phase 8 training (local venv, downloaded models, run outputs)
+training/.venv/
+training/.cache/
+training/runs/
