@@ -93,30 +93,48 @@ VIRTUAL_ENV=.venv uv pip install -r requirements-lock-cpu.txt --extra-index-url 
 - Suggested approval ceiling: **$3.00**. The launch command below also hard-stops after 4 hours, which bounds compute at about $2 even if throughput is far below the estimate.
 - Alternative: one A100 80 GB at $1.59/hr, about 15–25 minutes, about $0.40–$0.70.
 
-**Steps:**
+**Spending safeguard.** A shell `timeout` does not stop RunPod billing, so the pod removes itself. `scripts/runpod/launch.py` sets up five layers:
 
-1. **On the Codespace, after committing:**
+1. **Hard lifetime.** Armed by the pod's container start command at boot, independent of SSH. The pod removes itself 3.25 h after first boot, and the clock survives container restarts.
+2. **Claim check.** If the job has not started 30 min after boot, the pod removes itself.
+3. **Post-job grace.** When the job ends, whether it succeeded or failed, the pod removes itself 60 min later unless the orchestrator already has.
+4. **Workspace watchdog.** A detached process in this workspace removes the pod through the API at the hard limit plus 2 min.
+5. **Orchestrator.** It removes the pod as soon as the artifacts are verified, or on any error, and then confirms through the API that the pod is gone.
 
-   ```bash
-   training/scripts/make_bundle.sh    # writes training/runs/gtmflow-phase8-bundle.tar.gz and prints its sha256
-   ```
+The price is capped at $0.80/hr, so the worst case is 3.25 h × $0.80 + disk ≈ $2.62 (under $3). No volume disk or network volume is created. Before any data is sent, the orchestrator checks over SSH that the pod-side watchdog is armed and that the pod's own API key works; otherwise it removes the pod.
 
-   The bundle holds the committed `training/` package, `backend/app/ai/prompts.py`, and the train and validation datasets. It does **not** hold test data.
+**Steps** (from the repository root):
 
-2. **Create the GPU machine** (for example a RunPod L4 Secure Cloud pod with a CUDA 12.x template) and copy the bundle to it (scp or the provider's file transfer).
+```bash
+training/scripts/make_bundle.sh                                  # after committing; prints the bundle sha256
+python3 training/scripts/runpod/launch.py check --bundle-sha256 <sha>                          # free: API key, balance, bundle allowlist
+python3 training/scripts/runpod/launch.py run   --bundle-sha256 <sha> --confirm-paid-compute   # the paid run
+python3 training/scripts/runpod/launch.py resume      # re-attach if this workspace disconnected mid-run
+python3 training/scripts/runpod/launch.py terminate   # emergency stop
+```
 
-3. **On the GPU machine:**
+**What `run` does:**
 
-   ```bash
-   mkdir -p /workspace/gtmflow && tar -xzf gtmflow-phase8-bundle.tar.gz -C /workspace/gtmflow
-   cd /workspace/gtmflow/training
-   pip install uv && uv venv --python 3.12 .venv && VIRTUAL_ENV=.venv uv pip install -r requirements-gpu.txt
-   .venv/bin/python -m gtmflow_training.train plan --config configs/phase8-qwen3-4b-lora-v1.json   # also fetches the pinned tokenizer
-   .venv/bin/python -m pytest -q                                                                     # all 8 tests, including tokenizer ones
-   timeout 4h .venv/bin/python -m gtmflow_training.train train --config configs/phase8-qwen3-4b-lora-v1.json --confirm-paid-compute
-   tar -czf /workspace/phase8-run-v1.tar.gz -C runs/phase8-qwen3-4b-lora-v1 train
-   ```
+1. Creates one Secure Cloud **NVIDIA L4** pod:
+   - image `runpod/base:1.3.2-ubuntu2204`;
+   - 50 GB container disk, no volume disk;
+   - SSH on 22/tcp with a local key (only the public half is sent).
+2. Verifies the safeguards and uploads the bundle and `pod_job.sh` (sha256 checked on both ends).
+3. Starts the job detached. On the pod, `scripts/runpod/pod_job.sh`:
+   - verifies the bundle checksum and allowlist (no test data, secrets or database);
+   - checks that the driver supports CUDA 12.6 or later;
+   - installs `requirements-gpu-lock.txt` with `--require-hashes` and checks every installed version against the lock;
+   - runs `plan`, then the tests;
+   - runs `preflight`, a real-model memory and throughput check, gated on peak reserved memory ≤ 90% of the GPU and a projected time that fits;
+   - runs `train` with a deadline 40 min before the hard limit;
+   - packages the run with `SHA256SUMS`.
+4. Copies the archive back to `training/runs/phase8-qwen3-4b-lora-v1/`.
+5. Verifies the copy:
+   - the archive checksum and every file's hash;
+   - the adapter and tokenizer hashes recorded in the manifest;
+   - that the config matches the repository.
+6. Removes the pod, confirms the removal, and writes `runpod-report.json` with the runtime, price and estimated cost.
 
-4. **Copy `phase8-run-v1.tar.gz` back, then terminate the pod.** The artifact is the LoRA adapter (about 130 MB) plus `run-manifest.json` and `log.jsonl`.
+The API key is read from `~/.config/gtmflow/runpod_api_key` (mode 600) or `$RUNPOD_API_KEY`. It is never printed.
 
 After the run, the status can move to "trained". Evaluating the adapter on the test set is Phase 9 work.

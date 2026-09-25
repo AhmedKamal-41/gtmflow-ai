@@ -147,8 +147,7 @@ def test_formatting_is_production_identical_and_masks_the_prompt():
 
 # --------------------------------------------------------------- smoke
 
-@needs_tokenizer
-def test_smoke_run_is_deterministic_and_applies_weights(tmp_path):
+def _smoke_config(tmp_path: Path) -> Path:
     cfg = json.loads(CONFIG.read_text())
     train_rows = [_row(i, "train", w, task=t) for i, (w, t) in enumerate(
         [(0.25, "outreach_email"), (0.5, "company_summary"), (1.0, "company_summary"), (1.0, "outreach_email")])]
@@ -159,6 +158,12 @@ def test_smoke_run_is_deterministic_and_applies_weights(tmp_path):
     cfg["smoke"].update({"train_examples": 4, "validation_examples": 2})
     path = tmp_path / "cfg.json"
     path.write_text(json.dumps(cfg))
+    return path
+
+
+@needs_tokenizer
+def test_smoke_run_is_deterministic_and_applies_weights(tmp_path):
+    path = _smoke_config(tmp_path)
     manifests, logs = [], []
     for i in (1, 2):
         out = tmp_path / f"run{i}"
@@ -166,9 +171,38 @@ def test_smoke_run_is_deterministic_and_applies_weights(tmp_path):
         manifests.append(json.loads((out / "run-manifest.json").read_text()))
         logs.append((out / "log.jsonl").read_text())
         assert (out / "best_adapter" / "adapter_model.safetensors").exists()
+        assert (out / "config.json").read_bytes() == path.read_bytes()
+        assert (out / "tokenizer" / "tokenizer.json").exists()
     assert logs[0] == logs[1]
-    weighting = manifests[0]["result"]["weighting"]
+    m = manifests[0]
+    weighting = m["result"]["weighting"]
     assert weighting["applied"] and weighting["examples_below_weight_1"] == 2
     assert math.isclose(weighting["normalizer_mean_weight"], 0.6875)
-    assert manifests[0]["test_data"].startswith("not loaded")
-    assert manifests[0]["result"]["best_validation_loss"] < manifests[0]["validation_before_training"]["loss"]
+    assert m["test_data"].startswith("not loaded")
+    assert m["result"]["best_validation_loss"] < m["validation_before_training"]["loss"]
+    assert m["result"]["epochs_completed"] == 2 and not m["result"]["stopped_for_deadline"]
+    assert all({"weighted_objective", "unweighted_mean"} <= set(h["train"]) for h in m["result"]["history"])
+    assert m["tokenizer"]["revision"] == "cdbee75f17c01a7cc42f958dc650907174af0554"
+    assert "adapter_model.safetensors" in m["artifact_sha256"]
+
+
+@needs_tokenizer
+def test_deadline_stops_after_a_completed_epoch_and_keeps_the_best_adapter(tmp_path):
+    cfg = T.load_config(str(_smoke_config(tmp_path)))
+    cfg["_deadline_unix"] = 0  # already past: the first epoch runs, the second must not start
+    m = T.run(cfg, "smoke", tmp_path / "out")
+    assert m["result"]["stopped_for_deadline"] and m["result"]["epochs_completed"] == 1
+    assert (tmp_path / "out" / "best_adapter" / "adapter_model.safetensors").exists()
+
+
+@needs_tokenizer
+def test_preflight_measures_without_changing_or_saving_weights(tmp_path):
+    cfg = T.load_config(str(_smoke_config(tmp_path)))
+    cfg["_tiny_preflight"] = True  # CPU stand-in for the GPU path
+    m = T.run(cfg, "preflight", tmp_path / "pf")
+    assert m["preflight"]["projected_training_minutes"] >= 0
+    assert m["preflight"]["longest_train_tokens"] > 0
+    assert (tmp_path / "pf" / "preflight.json").exists()
+    assert not (tmp_path / "pf" / "best_adapter").exists()
+    assert T.main(["preflight", "--config", str(CONFIG)]) == 2  # needs confirmation
+    assert T.main(["preflight", "--config", str(CONFIG), "--confirm-paid-compute"]) == 2  # no CUDA here

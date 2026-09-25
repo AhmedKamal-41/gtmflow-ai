@@ -11,8 +11,16 @@ smoke  -- the full pipeline on CPU with a tiny randomly initialized model of
           the base architecture (real tokenizer, real formatting, real
           weighting, real LoRA, real checkpoint selection) on a few examples.
           Free; proves the code path, not model quality.
+preflight -- brief GPU check with the real pinned model: loads it, adds
+          LoRA, runs forward+backward on the longest training example and a
+          forward pass on the longest validation example, and reports peak
+          GPU memory and a projected run time. No optimizer step, nothing
+          saved but preflight.json. Refuses without --confirm-paid-compute
+          and a CUDA GPU.
 train  -- the real run on the pinned base model. Refuses to start without
-          --confirm-paid-compute and a CUDA GPU.
+          --confirm-paid-compute and a CUDA GPU. With --deadline-unix it
+          stops after the last epoch that can finish (plus a reserve) before
+          that time, keeping the best adapter so far.
 
 Fitting uses the train split only (example-weighted); validation is used
 only for tuning (per-epoch loss, best-checkpoint selection, early
@@ -24,6 +32,7 @@ per-epoch metrics, and wall-clock time.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -227,8 +236,16 @@ def train_loop(cfg: dict[str, Any], train_enc, val_enc, peft_model, device: str,
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda(total_steps, int(tc["warmup_ratio"] * total_steps)))
     selection = cfg["selection"]
     best, best_epoch, bad_epochs, history, step = math.inf, None, 0, [], 0
+    deadline, reserve = cfg.get("_deadline_unix"), cfg.get("_deadline_reserve_seconds", 0)
+    stopped_for_deadline, last_epoch_seconds = False, None
     peft_model.train()
     for epoch in range(1, tc["epochs"] + 1):
+        if deadline is not None and last_epoch_seconds is not None and time.time() + 1.1 * last_epoch_seconds + reserve > deadline:
+            log({"type": "deadline_stop", "before_epoch": epoch, "last_epoch_seconds": round(last_epoch_seconds, 1)})
+            stopped_for_deadline = True
+            break
+        epoch_started = time.time()
+        sum_wl = sum_w = sum_l = 0.0
         order = torch.randperm(len(train_enc), generator=torch.Generator().manual_seed(cfg["seed"] + epoch)).tolist()
         groups = [order[i:i + accum] for i in range(0, len(order), accum)]
         for group in groups:
@@ -237,6 +254,10 @@ def train_loop(cfg: dict[str, Any], train_enc, val_enc, peft_model, device: str,
             for idx in group:
                 enc = train_enc[idx]
                 raw = example_loss(peft_model, enc, device)
+                raw_value = raw.item()
+                sum_wl += weights[idx] * raw_value
+                sum_w += weights[idx]
+                sum_l += raw_value
                 loss = W.weighted_loss(raw, weights[idx], normalizer) / len(group)
                 loss.backward()
                 step_loss += loss.item()
@@ -246,10 +267,13 @@ def train_loop(cfg: dict[str, Any], train_enc, val_enc, peft_model, device: str,
             step += 1
             log({"type": "step", "epoch": epoch, "step": step, "weighted_train_loss": round(step_loss, 6),
                  "lr": scheduler.get_last_lr()[0], "grad_norm": round(grad_norm, 4)})
+        train_losses = {"weighted_objective": sum_wl / sum_w, "unweighted_mean": sum_l / len(order)}
         val = evaluate(peft_model, val_enc, device)
         improved = val["loss"] < best - selection["min_delta"]
-        history.append({"epoch": epoch, "validation": val, "improved": improved})
-        log({"type": "epoch", "epoch": epoch, "validation": val, "improved": improved})
+        last_epoch_seconds = time.time() - epoch_started
+        history.append({"epoch": epoch, "train": train_losses, "validation": val, "improved": improved,
+                        "seconds": round(last_epoch_seconds, 1)})
+        log({"type": "epoch", "epoch": epoch, "train": train_losses, "validation": val, "improved": improved})
         if improved:
             best, best_epoch, bad_epochs = val["loss"], epoch, 0
             peft_model.save_pretrained(out_dir / "best_adapter")
@@ -260,8 +284,67 @@ def train_loop(cfg: dict[str, Any], train_enc, val_enc, peft_model, device: str,
                 break
     return {"steps": step, "steps_per_epoch": steps_per_epoch, "planned_steps": total_steps,
             "best_epoch": best_epoch, "best_validation_loss": best, "history": history,
+            "epochs_completed": len(history), "stopped_for_deadline": stopped_for_deadline,
             "weighting": {"applied": use_weights, "normalizer_mean_weight": round(normalizer, 6),
                           "weight_sum": round(sum(weights), 3), "examples_below_weight_1": sum(1 for w in weights if w < 1)}}
+
+
+def gpu_memory(device: str) -> dict[str, Any] | None:
+    if device != "cuda":
+        return None
+    return {"peak_allocated_gib": round(torch.cuda.max_memory_allocated() / 2**30, 2),
+            "peak_reserved_gib": round(torch.cuda.max_memory_reserved() / 2**30, 2),
+            "total_gib": round(torch.cuda.get_device_properties(0).total_memory / 2**30, 2)}
+
+
+def preflight(cfg: dict[str, Any], train_enc, val_enc, peft_model, device: str, log) -> dict[str, Any]:
+    """Worst-case memory and a throughput sample on the real model, without
+    changing any weights (no optimizer step)."""
+    longest_train = max(train_enc, key=lambda e: len(e["input_ids"]))
+    longest_val = max(val_enc, key=lambda e: len(e["input_ids"]))
+    peft_model.train()
+    timings = []
+    for _ in range(3):  # first pass warms up kernels; later passes are timed
+        if device == "cuda":
+            torch.cuda.synchronize()
+        t0 = time.time()
+        example_loss(peft_model, longest_train, device).backward()
+        if device == "cuda":
+            torch.cuda.synchronize()
+        timings.append(time.time() - t0)
+    peft_model.zero_grad(set_to_none=True)
+    with torch.no_grad():
+        peft_model.eval()
+        t0 = time.time()
+        example_loss(peft_model, longest_val, device)
+        if device == "cuda":
+            torch.cuda.synchronize()
+        val_seconds = time.time() - t0
+        peft_model.train()
+    tokens = len(longest_train["input_ids"])
+    train_sec_per_token = min(timings[1:]) / tokens
+    val_sec_per_token = val_seconds / len(longest_val["input_ids"])
+    train_tokens = sum(len(e["input_ids"]) for e in train_enc)
+    val_tokens = sum(len(e["input_ids"]) for e in val_enc)
+    epochs = cfg["training"]["epochs"]
+    projected = epochs * train_tokens * train_sec_per_token + (epochs + 1) * val_tokens * val_sec_per_token
+    result = {"longest_train_tokens": tokens, "longest_validation_tokens": len(longest_val["input_ids"]),
+              "train_seconds_per_longest_example": round(min(timings[1:]), 3),
+              "validation_seconds_per_longest_example": round(val_seconds, 3),
+              "projected_training_minutes": round(projected / 60, 1), "gpu_memory": gpu_memory(device)}
+    log({"type": "preflight", **result})
+    return result
+
+
+def tokenizer_record(tokenizer, cfg: dict[str, Any], out_dir: Path) -> dict[str, Any]:
+    tok_dir = out_dir / "tokenizer"
+    tokenizer.save_pretrained(tok_dir)
+    template = tokenizer.chat_template or ""
+    return {"repo": cfg["base_model"]["repo"], "revision": cfg["base_model"]["revision"],
+            "class": type(tokenizer).__name__, "vocab_size": len(tokenizer),
+            "eos_token": tokenizer.eos_token, "pad_token": tokenizer.pad_token,
+            "chat_template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+            "saved_files_sha256": {p.name: D.sha256_file(p) for p in sorted(tok_dir.iterdir()) if p.is_file()}}
 
 
 def run(cfg: dict[str, Any], mode: str, out_dir: Path) -> dict[str, Any]:
@@ -297,25 +380,40 @@ def run(cfg: dict[str, Any], mode: str, out_dir: Path) -> dict[str, Any]:
             "validation_tokens_per_eval": manifest["data_stats"]["validation"]["total_tokens"],
         }
     else:
+        tiny = mode == "smoke" or cfg.get("_tiny_preflight", False)
         if mode == "smoke":
             cfg = json.loads(json.dumps(cfg))
             cfg["training"].update(cfg["smoke"]["training_overrides"])
-            device = "cpu"
-        else:
-            device = "cuda"
-        model = load_model(cfg, tiny=(mode == "smoke"))
+        device = "cpu" if tiny else "cuda"
+        if device == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+        model = load_model(cfg, tiny=tiny)
         peft_model = add_lora(model, cfg)
         trainable = sum(p.numel() for p in peft_model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in peft_model.parameters())
         manifest["parameters"] = {"trainable": trainable, "total": total}
+        if mode == "preflight":
+            manifest["preflight"] = preflight(cfg, train_enc, val_enc, peft_model, device, log)
+            return _finish(manifest, out_dir, "preflight.json", started, log_file)
+        manifest["tokenizer"] = tokenizer_record(tokenizer, cfg, out_dir)
+        with open(out_dir / "config.json", "wb") as f, open(cfg["_config_path"], "rb") as src:
+            f.write(src.read())
         before = evaluate(peft_model, val_enc, device)
         log({"type": "baseline_validation", "validation": before})
         manifest["validation_before_training"] = before
         manifest["result"] = train_loop(cfg, train_enc, val_enc, peft_model, device, out_dir, log)
-        manifest["artifact"] = str(out_dir / "best_adapter")
+        manifest["gpu_memory"] = gpu_memory(device)
+        adapter = out_dir / "best_adapter"
+        manifest["artifact"] = str(adapter)
+        manifest["artifact_sha256"] = ({p.name: D.sha256_file(p) for p in sorted(adapter.iterdir()) if p.is_file()}
+                                       if adapter.exists() else None)
+    return _finish(manifest, out_dir, "plan.json" if mode == "plan" else "run-manifest.json", started, log_file)
+
+
+def _finish(manifest: dict[str, Any], out_dir: Path, name: str, started: float, log_file) -> dict[str, Any]:
     manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
     manifest["wall_seconds"] = round(time.time() - started, 1)
-    with open(out_dir / ("plan.json" if mode == "plan" else "run-manifest.json"), "w") as f:
+    with open(out_dir / name, "w") as f:
         json.dump(manifest, f, indent=2, sort_keys=True, default=str)
     log_file.close()
     return manifest
@@ -323,19 +421,25 @@ def run(cfg: dict[str, Any], mode: str, out_dir: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m gtmflow_training.train")
-    parser.add_argument("mode", choices=("plan", "smoke", "train"))
+    parser.add_argument("mode", choices=("plan", "smoke", "preflight", "train"))
     parser.add_argument("--config", required=True)
     parser.add_argument("--out", help="output directory (default: config output_dir/<mode>)")
     parser.add_argument("--confirm-paid-compute", action="store_true",
-                        help="required for 'train': confirms the user approved this paid GPU run")
+                        help="required for 'preflight' and 'train': confirms the user approved this paid GPU run")
+    parser.add_argument("--deadline-unix", type=float,
+                        help="train: do not start an epoch that cannot finish (plus --deadline-reserve-seconds) before this time")
+    parser.add_argument("--deadline-reserve-seconds", type=float, default=1200)
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
-    if args.mode == "train":
+    if args.deadline_unix:
+        cfg["_deadline_unix"] = args.deadline_unix
+        cfg["_deadline_reserve_seconds"] = args.deadline_reserve_seconds
+    if args.mode in ("preflight", "train"):
         if not args.confirm_paid_compute:
-            print("refused: 'train' needs --confirm-paid-compute (paid GPU run requires explicit approval)", file=sys.stderr)
+            print(f"refused: '{args.mode}' needs --confirm-paid-compute (paid GPU run requires explicit approval)", file=sys.stderr)
             return 2
         if not torch.cuda.is_available():
-            print("refused: 'train' needs a CUDA GPU", file=sys.stderr)
+            print(f"refused: '{args.mode}' needs a CUDA GPU", file=sys.stderr)
             return 2
         gpu_gb = torch.cuda.get_device_properties(0).total_memory / 2**30
         if gpu_gb < cfg["hardware"]["min_gpu_memory_gib"] or not torch.cuda.is_bf16_supported():
@@ -348,9 +452,10 @@ def main(argv: list[str] | None = None) -> int:
     except D.DataGuardError as error:
         print(f"data guard: {error}", file=sys.stderr)
         return 3
-    summary = {k: manifest.get(k) for k in ("mode", "data_stats", "plan", "parameters", "wall_seconds")}
+    summary = {k: manifest.get(k) for k in ("mode", "data_stats", "plan", "parameters", "preflight", "gpu_memory", "wall_seconds")}
     if "result" in manifest:
-        summary["result"] = {k: manifest["result"][k] for k in ("steps", "best_epoch", "best_validation_loss", "weighting")}
+        summary["result"] = {k: manifest["result"][k] for k in
+                             ("steps", "epochs_completed", "best_epoch", "best_validation_loss", "stopped_for_deadline", "weighting")}
     print(json.dumps(summary, indent=2, default=str))
     return 0
 
