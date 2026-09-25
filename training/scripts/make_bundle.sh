@@ -19,8 +19,9 @@ trap 'rm -rf "$WORK"' EXIT
 git -C "$REPO" archive --format=tar "$COMMIT" training backend/app/ai/prompts.py | tar -x -C "$WORK"
 mkdir -p "$WORK/backend/data/datasets"
 for d in train-combined-v1 validation-v1; do
-  cp -r "$REPO/backend/data/datasets/$d" "$WORK/backend/data/datasets/$d"
-  rm -f "$WORK/backend/data/datasets/$d"/eval-*.json
+  mkdir -p "$WORK/backend/data/datasets/$d"
+  cp "$REPO/backend/data/datasets/$d/eligible.jsonl" "$REPO/backend/data/datasets/$d/dataset-manifest.json" \
+     "$WORK/backend/data/datasets/$d/"   # eligible examples only; uncertain/flagged files are not shipped
 done
 echo "$COMMIT" > "$WORK/BUNDLE_COMMIT"
 mkdir -p "$(dirname "$OUT")"
