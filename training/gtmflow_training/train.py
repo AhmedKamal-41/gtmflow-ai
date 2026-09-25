@@ -79,8 +79,12 @@ def _git() -> dict[str, Any]:
             return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.strip()
         except Exception:  # noqa: BLE001
             return None
+    commit = run("rev-parse", "HEAD")
+    if commit is None and (REPO_ROOT / "BUNDLE_COMMIT").exists():
+        # Running from a make_bundle.sh bundle (git archive of a clean commit).
+        return {"commit": (REPO_ROOT / "BUNDLE_COMMIT").read_text().strip(), "dirty": False, "source": "bundle"}
     status = run("status", "--porcelain")
-    return {"commit": run("rev-parse", "HEAD"), "dirty": bool(status) if status is not None else None}
+    return {"commit": commit, "dirty": bool(status) if status is not None else None, "source": "git"}
 
 
 def environment() -> dict[str, Any]:
