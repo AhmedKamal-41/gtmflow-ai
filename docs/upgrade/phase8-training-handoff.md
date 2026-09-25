@@ -1,6 +1,6 @@
 # Phase 8 handoff: LoRA training (preparation)
 
-Date: 2026-09-25. **Status: code ready. Not trained.** No paid compute has been used. The work stopped before any training run.
+Date: 2026-09-25. **Status: needs compute.** Training is authorized (§8), but it has **not run yet**: there is still no RunPod access. No paid compute has been used.
 
 Per the readiness ladder: the runner is **code ready**, verified with tests and CPU smoke runs on a tiny random model. Once you have reviewed the approach, it moves to **needs compute**. It becomes **trained** only after a real run on the pinned data produces an adapter, with the run's command, machine, wall time and artifact location recorded.
 
@@ -148,3 +148,57 @@ The smoke runs used the real data format but a **random 4.9M-parameter model**. 
 3. **Data transfer confirmation.** The bundle carries the PDL-derived training and validation records (CC-BY-4.0 source data) to the GPU provider. The test data is not included.
 
 **Not in scope (Phase 9):** evaluating the trained adapter on the test set, and comparing it with the gpt-4o-mini baseline under `heldout-criteria-v1`.
+
+## 8. Run authorization and launch preparation (2026-09-25)
+
+**Authorized by you:**
+
+- one run of `phase8-qwen3-4b-lora-v1` with the pinned config;
+- **at most $3.00 total RunPod usage**, covering setup, GPU preflight, training and storage;
+- transfer of the train/validation bundle to your private RunPod instance. No test data, application secrets or database may be included.
+
+Also required: no additional experiments, no automatic model changes, and a stop before Phase 9 and before application integration.
+
+**Prepared and verified before renting a GPU** (all local, $0; commit `ef60df3`):
+
+| Item | Evidence |
+|---|---|
+| **Spending safeguard.** A shell `timeout` does not stop billing, so the pod removes itself. There are five layers: (1) a hard lifetime of 3.25 h from first boot, armed in the container start command so it works without any SSH session and survives restarts; (2) removal if the job has not started 30 min after boot; (3) removal 60 min after the job ends, whether it succeeded or failed; (4) a workspace-side watchdog that removes the pod through the API; (5) the orchestrator removes the pod after verified copy-back or on any error, then confirms through the API. | Local simulation with a stubbed `runpodctl`: the claim check fired at 3 s; after a simulated restart the lifetime still counted from first boot and fired on time; a failed job recorded `failed:verify` and removed the pod after its grace period. |
+| **Budget arithmetic.** The price is capped at $0.80/hr (L4 Secure is $0.49/hr). The worst case is 3.25 h × $0.80 + 50 GB container disk (about $0.02) ≈ **$2.62**, under $3. There is no volume disk and no network volume. At the actual L4 price the worst case is about $1.62. | `launch.py` constants: `MAX_COST_PER_HR`, `HARD_LIMIT_SECONDS` |
+| **Safety check before transfer.** The orchestrator checks over SSH that the watchdog is armed and that the pod's own API key reaches the RunPod API. If either check fails, it removes the pod before sending any data. | `launch.py verify_safeguards` |
+| **Bundle** `30c77a9a…73c0` (commit `ef60df3`, 402,670 bytes, 33 members). The only data files are the train and validation eligible sets and their manifests. | The allowlist is checked in the workspace and again on the pod. A tampered bundle containing a `test-v1` file was refused on both sides, before extraction. The bundle was re-verified from an extracted copy: plan exit 0, 10 tests passed. |
+| **Pinned GPU environment.** `requirements-gpu-lock.txt` is the full resolution for Linux x86_64 with Python 3.12 and CUDA 12.6: 62 packages, including the `nvidia-*` libraries and triton, all hashed. The pod installs with `--require-hashes` and compares `pip freeze` against the lock. It refuses a driver older than CUDA 12.6. | `uv pip compile` exit 0 |
+| **GPU preflight** (`train preflight`). Loads the real pinned model and adds LoRA. Runs forward and backward on the longest training example (2,285 tokens) and a forward pass on the longest validation example. Records peak allocated and reserved GPU memory and a projected run time. There is no optimizer step and no adapter is saved. **Gate:** peak reserved memory ≤ 90% of the GPU, and 1.3 × the projected time fits before the training deadline. | CPU stand-in test: 10 tests passed |
+| **Run records** added to the manifest: per-epoch training loss (weighted objective and unweighted mean), per-epoch seconds, peak GPU memory, epochs completed, tokenizer files with hashes and the chat-template hash, a copy of the config, and adapter file hashes. The pod also records `nvidia-smi` memory samples every 5 s, `pip freeze`, the job log and the watchdog log. | smoke and tests |
+| **Deadline-aware stop.** Training does not start an epoch that cannot finish, plus a 10-minute reserve, before the deadline. The deadline is 40 min before the hard limit, which leaves time for copy-back. The best adapter so far is kept. | test: the deadline stops the run after one epoch and keeps the adapter |
+| **Copy-back verification.** The orchestrator checks the archive sha256 against the pod's value, checks every file against the pod-side `SHA256SUMS`, checks the adapter and tokenizer hashes against the manifest, and checks that the config sha matches the repository config. | On a packaged local smoke run: clean copy verified (10 files, 28 adapter tensors). A single flipped adapter byte and a wrong archive sha were both caught. |
+
+**Remaining blocker: RunPod access.** This workspace has no RunPod API key. `launch.py` needs one to create the pod, confirm its removal and read the balance.
+
+- **Your one-time setup:**
+  1. Create a RunPod account and buy credit.
+  2. Create an API key with read/write permission.
+  3. Store the key in `~/.config/gtmflow/runpod_api_key` (mode 600) from a separate terminal, never in chat.
+- **The credit purchase is a prepaid deposit, not the run's cost.** The minimum purchase is reportedly $10; confirm it on RunPod's Billing page. RunPod credit is non-refundable. The run itself is expected to use about $0.30–$0.50 and cannot exceed about $2.62 under the safeguards.
+- **What the script creates:**
+
+  | Setting | Value |
+  |---|---|
+  | Cloud and GPU | Secure Cloud, on-demand (not spot), 1× NVIDIA L4 |
+  | Image | `runpod/base:1.3.2-ubuntu2204` |
+  | Resources | ≥8 vCPU, ≥30 GB RAM, 50 GB container disk, 0 GB volume disk |
+  | Ports | 22/tcp with a public IP |
+  | SSH | the public key of the workspace-local `~/.ssh/gtmflow_runpod_ed25519`, passed as `PUBLIC_KEY`; the private key never leaves the workspace |
+  | Start command | the watchdog above, then `/start.sh` |
+
+- **Launch, once the key is in place:**
+  ```bash
+  python3 training/scripts/runpod/launch.py check --bundle-sha256 30c77a9a49e751b1c5349e23e27f8491b2c6a059bbf09f2d2aa05ea2550b73c0
+  python3 training/scripts/runpod/launch.py run --bundle-sha256 30c77a9a49e751b1c5349e23e27f8491b2c6a059bbf09f2d2aa05ea2550b73c0 --confirm-paid-compute
+  ```
+
+**Known residual risks:**
+
+- Removing a pod from inside itself relies on RunPod's pod-scoped key. The pre-transfer check proves the key works for reads; whether it can remove the pod can only be proven by removing one. The workspace-side watchdog and the orchestrator cover this.
+- If this Codespace sleeps during the run, the pod still stops itself: 60 min after the job ends, or at the hard limit. `launch.py resume` can re-attach and copy the artifacts back within that window.
+- An L4 may not be available in Secure Cloud. A failed pod creation is not charged. Switching to an RTX 4090 needs your OK: its $0.74/hr fits under the price cap, but `--allow-rtx4090` is off by default.
