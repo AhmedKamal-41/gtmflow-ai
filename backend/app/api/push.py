@@ -12,6 +12,7 @@ from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
 from app.schemas.integration_push import (
     BatchPushResult,
     BatchPushSummary,
+    DeliveryResolution,
     IntegrationPushRead,
     PushRequest,
 )
@@ -19,11 +20,16 @@ from app.schemas.pagination import Page
 from app.services.integration_push import (
     SLACK,
     BlockedLeadError,
+    DeliveryInProgressError,
     DeliveryNotApprovedError,
+    DeliveryOutcomeUnknownError,
     IncompleteImportError,
+    ResolutionError,
+    deliver_lead_to_slack,
     lead_has_successful_slack_push,
-    push_lead_to_slack,
+    resolve_unknown_delivery,
 )
+from app.services.draft_review import REVIEWER_LABEL
 from app.services.pagination import pagination_params, paginate
 
 router = APIRouter(tags=["push"])
@@ -88,7 +94,13 @@ def push_one_lead(
         )
 
     try:
-        push = push_lead_to_slack(session, lead)
+        result = deliver_lead_to_slack(session, lead, redeliver=request.redeliver, actor="api:lead-push")
+    except (DeliveryInProgressError, DeliveryOutcomeUnknownError) as e:
+        session.commit()
+        raise HTTPException(status_code=409, detail={
+            "message": str(e), "push_id": str(e.push.id) if e.push is not None else None,
+            "status": e.push.status if e.push is not None else None,
+        }) from e
     except BlockedLeadError as e:
         # Persist the audit WorkflowEvent the service already added, then
         # report the block. This is not overridable by force=true.
@@ -122,8 +134,24 @@ def push_one_lead(
             ),
         ) from e
     session.commit()
-    session.refresh(push)
-    return push
+    item = IntegrationPushRead.model_validate(result.push)
+    item.replay = result.replay
+    return item
+
+
+@router.post("/api/pushes/{push_id}/resolve", response_model=IntegrationPushRead)
+def resolve_push(push_id: UUID, body: DeliveryResolution, session: Session = Depends(get_session)) -> IntegrationPushRead:
+    """Phase 11: record what an operator found in Slack for a delivery whose
+    outcome is unknown. Nothing is sent by this endpoint."""
+    push = session.get(IntegrationPush, push_id)
+    if push is None:
+        raise HTTPException(status_code=404, detail="Push not found")
+    try:
+        push = resolve_unknown_delivery(session, push, body.resolution, body.note, REVIEWER_LABEL)
+    except ResolutionError as e:
+        session.rollback()
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from None
+    return IntegrationPushRead.model_validate(push)
 
 
 @router.post(
@@ -162,7 +190,7 @@ def push_batch_hot_leads(
         if lead.score is not None and lead.score.priority == "Hot"
     ]
 
-    pushed = skipped = failed = blocked = 0
+    pushed = skipped = failed = blocked = uncertain = 0
     results: list[BatchPushResult] = []
 
     for lead in hot_leads:
@@ -179,7 +207,20 @@ def push_batch_hot_leads(
             continue
 
         try:
-            push = push_lead_to_slack(session, lead)
+            result = deliver_lead_to_slack(session, lead, redeliver=request.force, actor="api:batch-push")
+            push = result.push
+        except (DeliveryInProgressError, DeliveryOutcomeUnknownError) as e:
+            uncertain += 1
+            results.append(
+                BatchPushResult(
+                    lead_id=lead.id,
+                    company_name=lead.company_name,
+                    status="outcome_unknown" if isinstance(e, DeliveryOutcomeUnknownError) else "in_progress",
+                    push_id=e.push.id if e.push is not None else None,
+                    reason=str(e)[:200],
+                )
+            )
+            continue
         except BlockedLeadError as e:
             # Not overridable by force=true: distinct from "skipped" (already
             # pushed) and from "failed" (attempted delivery, transport error).
@@ -214,7 +255,27 @@ def push_batch_hot_leads(
                 )
             )
             continue
-        session.flush()  # populate push.id
+        if result.replay:
+            skipped += 1
+            results.append(
+                BatchPushResult(
+                    lead_id=lead.id,
+                    company_name=lead.company_name,
+                    status="skipped",
+                    push_id=push.id,
+                    reason="this approved draft was already delivered",
+                )
+            )
+            continue
+        if push.status == "unknown":
+            uncertain += 1
+            results.append(
+                BatchPushResult(
+                    lead_id=lead.id, company_name=lead.company_name, status="outcome_unknown",
+                    push_id=push.id, reason=(push.response_text or "")[:200] or None,
+                )
+            )
+            continue
 
         if push.status in ("success", "mock_success"):
             pushed += 1
@@ -249,6 +310,7 @@ def push_batch_hot_leads(
                 "skipped": skipped,
                 "failed": failed,
                 "blocked": blocked,
+                "uncertain": uncertain,
             },
         )
     )
@@ -261,6 +323,7 @@ def push_batch_hot_leads(
         skipped=skipped,
         failed=failed,
         blocked=blocked,
+        uncertain=uncertain,
         results=results,
     )
 

@@ -138,6 +138,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const body = (await response.json()) as { detail?: unknown };
       if (typeof body?.detail === "string") detail = body.detail;
+      else if (
+        body?.detail &&
+        typeof body.detail === "object" &&
+        typeof (body.detail as { message?: unknown }).message === "string"
+      )
+        detail = (body.detail as { message: string }).message;
       else if (body?.detail) detail = JSON.stringify(body.detail);
     } catch {
       // body wasn't JSON; leave detail undefined
@@ -261,6 +267,18 @@ export function pushLead(
   return request<IntegrationPush>(`/api/leads/${leadId}/push`, {
     method: "POST",
     body: JSON.stringify({ integration_type: "slack", force }),
+  });
+}
+
+// Phase 11: record what an operator found in Slack for a delivery whose
+// outcome is unknown. Nothing is sent.
+export function resolvePush(
+  pushId: string,
+  resolution: "confirmed_delivered" | "confirmed_not_delivered",
+): Promise<IntegrationPush> {
+  return request<IntegrationPush>(`/api/pushes/${pushId}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ resolution }),
   });
 }
 

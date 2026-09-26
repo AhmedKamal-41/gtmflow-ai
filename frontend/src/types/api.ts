@@ -189,9 +189,18 @@ export type IntegrationPush = {
   lead_id: string;
   integration_type: string;
   payload: Record<string, unknown> & { text?: string };
-  status: string; // "success" | "mock_success" | "failed"
+  status: string; // "success" | "mock_success" | "failed" | "unknown" | "pending"
   response_text: string | null;
   created_at: string;
+  // Phase 11 delivery ledger (null on rows from before Phase 11).
+  approved_output_id?: string | null;
+  attempt?: number | null;
+  delivery_mode?: "mock" | "real" | null;
+  outcome_code?: string | null;
+  resolution?: string | null;
+  resolution_note?: string | null;
+  resolved_at?: string | null;
+  replay?: boolean;
 };
 
 export type UploadResponseError = {
@@ -388,7 +397,13 @@ export type MetricsDashboard = {
   outreach_generated: number;
   outreach_approved: number;
   outreach_rejected: number;
-  approval_rate: number;
+  // Phase 11: one cohort -- distinct operational outreach drafts by their
+  // latest review; approved + rejected + pending = generated.
+  outreach_pending_review: number;
+  approval_rate: number; // approved drafts / drafts, never above 100
+  reviewed_approval_rate: number; // approved / (approved + rejected)
+  approval_events: number; // raw events, audit only
+  rejection_events: number;
   // Count of successful push rows. A lead pushed twice contributes 2.
   leads_pushed: number;
   // Distinct leads with at least one successful push.
@@ -406,6 +421,30 @@ export type MetricsDashboard = {
   fit_partial_match: number;
   fit_weak_match: number;
   fit_insufficient_evidence: number;
+  // Phase 11 delivery ledger and mock-versus-real breakdowns.
+  push_unknown_count: number;
+  push_pending_count: number;
+  real_messages_delivered: number;
+  mock_messages_delivered: number;
+  generation_by_mode: Record<"mock" | "real" | "unknown", GenerationModeCounts>;
+  delivery_by_mode: Record<"mock" | "real" | "unknown", DeliveryModeCounts>;
+  data_mode: "empty" | "mock_only" | "real_only" | "mixed";
+};
+export type GenerationModeCounts = {
+  drafts_generated: number;
+  drafts_approved: number;
+  drafts_rejected: number;
+  drafts_pending_review: number;
+  approval_rate: number;
+};
+export type DeliveryModeCounts = {
+  attempts: number;
+  delivered: number;
+  unique_leads_delivered: number;
+  failed: number;
+  outcome_unknown: number;
+  pending: number;
+  success_rate: number;
 };
 export type SellerProfileContent = {
   profile_kind: "seller" | "demo";

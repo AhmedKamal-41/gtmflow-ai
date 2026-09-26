@@ -106,6 +106,7 @@ function Dashboard({
 }) {
   return (
     <div className="space-y-6">
+      <DataModeBanner mode={m.data_mode} />
       {/* Headline stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
@@ -253,12 +254,24 @@ function Dashboard({
           icon="x"
         />
         <StatCard label="Approval rate" value={`${m.approval_rate}%`} icon="target" />
+        <StatCard label="Pending review" value={m.outreach_pending_review} icon="clock" />
+        <StatCard
+          label="Approved of reviewed"
+          value={`${m.reviewed_approval_rate}%`}
+          icon="check"
+        />
         <StatCard label="Pushed (rows)" value={m.leads_pushed} icon="send" />
         <StatCard label="Unique leads pushed" value={m.unique_leads_pushed} icon="send" />
         <StatCard
           label="Failed pushes"
           value={m.failed_push_count}
           tone={m.failed_push_count > 0 ? "danger" : "default"}
+          icon="alert"
+        />
+        <StatCard
+          label="Delivery outcome unknown"
+          value={m.push_unknown_count}
+          tone={m.push_unknown_count > 0 ? "warning" : "default"}
           icon="alert"
         />
         <StatCard
@@ -269,16 +282,22 @@ function Dashboard({
         />
       </div>
 
+      <ModeBreakdown m={m} />
+
       {/* How to read */}
       <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
         <Icon name="alert" className="h-4 w-4 flex-none translate-y-0.5 text-slate-400" />
         <p>
           <span className="font-semibold text-slate-700">How to read this:</span>{" "}
-          <em>Pushed (rows)</em> counts every successful push, so a lead pushed
-          twice contributes 2. <em>Unique leads pushed</em> deduplicates by
-          lead. Approval, push-success, and missing-data are true ratios of the
-          rows in this database (divide-by-zero returns 0%). Numbers refresh on
-          load and when you press Refresh.
+          Approval counts each outreach draft once, by its latest review: a
+          draft approved, rejected and approved again is one approved draft, so
+          the approval rate can never pass 100%. A new or edited draft is a new
+          draft. <em>Pushed (rows)</em> counts every delivered message, so a
+          lead delivered twice contributes 2; <em>Unique leads pushed</em>
+          deduplicates by lead. A delivery with an unknown outcome may or may
+          not have reached Slack and is never resent automatically. Mock and
+          real are shown separately below. Numbers refresh on load and when you
+          press Refresh.
         </p>
       </div>
 
@@ -294,3 +313,105 @@ function Dashboard({
     </div>
   );
 }
+
+const DATA_MODE_TEXT: Record<MetricsDashboard["data_mode"], string | null> = {
+  empty: null,
+  mock_only:
+    "Everything below comes from the mock generator and the mock Slack webhook: no real model wrote these drafts and no message left this app.",
+  real_only: "Everything below comes from a real model and a real Slack webhook.",
+  mixed: "This data mixes mock and real work. See the mock-versus-real breakdown below.",
+};
+
+function DataModeBanner({ mode }: { mode: MetricsDashboard["data_mode"] }) {
+  const text = DATA_MODE_TEXT[mode];
+  if (!text) return null;
+  return (
+    <div
+      aria-label="Data mode"
+      className={`rounded-xl border p-3.5 text-sm ${
+        mode === "mock_only"
+          ? "border-brand-200 bg-brand-50 text-brand-800"
+          : "border-amber-200 bg-amber-50 text-amber-900"
+      }`}
+    >
+      {text}
+    </div>
+  );
+}
+
+const MODE_LABEL = { mock: "Mock", real: "Real", unknown: "Not recorded" } as const;
+
+function ModeBreakdown({ m }: { m: MetricsDashboard }) {
+  const modes = ["mock", "real", "unknown"] as const;
+  return (
+    <Card
+      title="Mock versus real"
+      subtitle="Generation (which model wrote the draft) and delivery (which Slack webhook) are separate. Each column sums to the totals above."
+      icon="chart"
+    >
+      <div className="grid gap-6 lg:grid-cols-2">
+        <table aria-label="Generation by mode" className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1">Drafts</th>
+              <th>Generated</th>
+              <th>Approved</th>
+              <th>Rejected</th>
+              <th>Pending</th>
+              <th>Approval rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modes.map((mode) => {
+              const g = m.generation_by_mode[mode];
+              return (
+                <tr key={mode} className="border-t border-slate-100">
+                  <td className="py-1.5 font-medium text-slate-700">{MODE_LABEL[mode]}</td>
+                  <td>{g.drafts_generated}</td>
+                  <td>{g.drafts_approved}</td>
+                  <td>{g.drafts_rejected}</td>
+                  <td>{g.drafts_pending_review}</td>
+                  <td>{g.approval_rate}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <table aria-label="Delivery by mode" className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1">Slack</th>
+              <th>Attempts</th>
+              <th>Delivered</th>
+              <th>Unique leads</th>
+              <th>Failed</th>
+              <th>Unknown</th>
+              <th>Pending</th>
+            </tr>
+          </thead>
+          <tbody>
+            {modes.map((mode) => {
+              const d = m.delivery_by_mode[mode];
+              return (
+                <tr key={mode} className="border-t border-slate-100">
+                  <td className="py-1.5 font-medium text-slate-700">{MODE_LABEL[mode]}</td>
+                  <td>{d.attempts}</td>
+                  <td>{d.delivered}</td>
+                  <td>{d.unique_leads_delivered}</td>
+                  <td>{d.failed}</td>
+                  <td>{d.outcome_unknown}</td>
+                  <td>{d.pending}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Real messages delivered: {m.real_messages_delivered}. Mock deliveries never leave this app ({m.mock_messages_delivered}).
+        &ldquo;Not recorded&rdquo; covers rows from before these fields existed.
+      </p>
+    </Card>
+  );
+}
+

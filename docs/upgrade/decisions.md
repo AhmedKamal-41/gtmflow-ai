@@ -300,6 +300,20 @@ Full detail and verification evidence: `docs/upgrade/phase10-integration-handoff
 | The existing standalone demo's labeled auto-approval of its synthetic batch is unchanged. Its mock drafts carry no flags. | Pre-existing, mock-only behavior; out of scope. |
 | `apply_legacy_score` moved from the scoring router to `app/services/legacy_scoring.py`, with the behavior unchanged. | Contract section 2 layering: the job handlers must not import a router. |
 
+## Decisions made in Phase 11 (reliable Slack routing and corrected metrics, 2026-09-26)
+
+Full detail and verification: `docs/upgrade/phase11-routing-metrics-handoff.md`.
+
+| Decision | Why |
+|---|---|
+| **Delivery ledger on `integration_pushes`** (migration `0011`): claim-before-send with a unique `delivery_key` per approved draft attempt. The claim is committed before any send. | Durable database coordination that works the same for API requests, workers and restarts, on Postgres and SQLite. No new dependency. Closes audit D.3. |
+| **Three outcomes:** `failed` (definitely not delivered), `unknown` (may have been delivered), and delivered (`success`/`mock_success`). A claim older than 120 s without an outcome becomes `unknown`. | Slack webhooks have no idempotency key, so an ambiguous send must be surfaced, not guessed. |
+| **Nothing resends automatically.** `unknown` blocks the draft until an operator resolves it. Only a definite failure, or an explicit `redeliver`/`force`, starts a new attempt. | "Handle uncertain delivery outcomes explicitly without blindly resending." |
+| **A repeat push of a delivered draft is a replay** (`replay: true`, no send). `force` keeps its meaning (the Hot threshold on single pushes; re-push on the batch route and job). The new `redeliver` makes a single-lead re-send explicit. | Removes accidental duplicates without removing deliberate re-sends. Two existing tests that pushed twice now use `redeliver`. |
+| **Approval metrics use one cohort:** distinct operational outreach drafts by their latest operational review, the same ordering the approval gate uses. Raw event counts are kept as audit-only fields. | Fixes audit E.1 at its definition. A rate above 100% is impossible by construction, not by clamping. |
+| **Mock versus real is two dimensions:** generation (model) and delivery (webhook). `delivery_mode` is recorded at claim time. | Closes audit D.4/E.3. A real-model draft can be delivered to a mock webhook, so a single "mode" would be wrong. |
+| Legacy push rows are **not backfilled** (their ledger fields stay NULL; their mode is inferred only where the status determines it). | Rule 6: don't reconstruct what wasn't recorded. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).

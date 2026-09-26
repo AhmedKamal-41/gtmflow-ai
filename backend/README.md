@@ -99,6 +99,17 @@ Job types: `fit_score`, `legacy_score`, `generate_summary`,
 The worker uses the same `.env` as the API. **If `.env` has
 `USE_MOCK_AI=false`, the worker makes real (possibly paid) model calls.**
 
+## Slack delivery (Phase 11)
+
+Every push goes through a delivery ledger: a repeat push of an already
+delivered draft returns the earlier row with `replay: true` and sends
+nothing. A deliberate re-send needs `"redeliver": true` (single lead) or
+`"force": true` (batch route and `push_hot` job). A timeout or dropped
+connection is recorded as `status: "unknown"` and is never resent
+automatically; after checking the channel, record the finding with
+`POST /api/pushes/{push_id}/resolve` (`confirmed_delivered` or
+`confirmed_not_delivered`). Guarantees: `docs/integrations.md`.
+
 ## AI providers
 
 `USE_MOCK_AI=true` (default) uses the deterministic mock. With

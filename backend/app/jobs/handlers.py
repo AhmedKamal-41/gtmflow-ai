@@ -169,10 +169,12 @@ def _hot_leads(session: Session, job: BackgroundJob) -> list[UUID]:
 def _push(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
     from app.services.integration_push import (
         BlockedLeadError,
+        DeliveryInProgressError,
         DeliveryNotApprovedError,
+        DeliveryOutcomeUnknownError,
         IncompleteImportError,
+        deliver_lead_to_slack,
         lead_has_successful_slack_push,
-        push_lead_to_slack,
     )
 
     if lead.score is None or lead.score.priority != "Hot":
@@ -180,17 +182,29 @@ def _push(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[s
     if not job.params.get("force", False) and lead_has_successful_slack_push(session, lead.id):
         return ITEM_SKIPPED, {"reason": "already_pushed"}
     try:
-        push = push_lead_to_slack(session, lead)
+        # The Phase 11 ledger makes this safe across restarts: an item re-run
+        # after a crash finds the earlier claim or delivery and sends nothing.
+        result = deliver_lead_to_slack(session, lead, redeliver=job.params.get("force", False),
+                                       actor=f"job:{job.id}")
+    except DeliveryInProgressError as error:
+        return ITEM_BLOCKED, {"reason": "delivery_in_progress", "push_id": str(error.push.id) if error.push else None}
+    except DeliveryOutcomeUnknownError as error:
+        return ITEM_BLOCKED, {"reason": "delivery_outcome_unknown", "push_id": str(error.push.id)}
     except BlockedLeadError as error:
         return ITEM_BLOCKED, {"reason": f"lead_status:{error.lead_status}"}
     except IncompleteImportError as error:
         return ITEM_BLOCKED, {"reason": f"batch_incomplete:{error.batch_status}"}
     except DeliveryNotApprovedError as error:
         return ITEM_BLOCKED, {"reason": "not_approved", "blockers": error.blockers}
-    session.flush()
+    push = result.push
+    if result.replay:
+        return ITEM_SKIPPED, {"reason": "already_delivered", "push_id": str(push.id)}
     if push.status in ("success", "mock_success"):
         return ITEM_SUCCEEDED, {"push_id": str(push.id), "push_status": push.status}
-    # Never retried automatically: a retry could deliver the same lead twice.
+    if push.status == "unknown":
+        return ITEM_BLOCKED, {"reason": "delivery_outcome_unknown", "push_id": str(push.id)}
+    # Never retried automatically: failed means not delivered, but a retry is
+    # an explicit new request.
     return ITEM_FAILED, {"push_id": str(push.id), "reason": "delivery_failed"}
 
 

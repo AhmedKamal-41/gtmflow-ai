@@ -51,10 +51,10 @@ def _upload_score_generate(client: TestClient, csv: str, batch_name: str) -> tup
     return lead, output
 
 
-def test_approve_reject_approve_still_inflates_approval_rate(client: TestClient) -> None:
-    """Characterization test: this is the DOCUMENTED partial-fix behavior,
-    not a bug to silently tolerate forever. If Phase 11 fixes the metric,
-    update this test -- don't just delete it."""
+def test_approve_reject_approve_counts_one_approved_draft(client: TestClient) -> None:
+    """Formerly a characterization of the E.1 bug (approval_rate 200%).
+    Phase 11 fixed the metric: one draft, latest review approved -> one
+    approved draft, 100%. The raw events stay visible for audit."""
     lead, output = _upload_score_generate(client, CSV, "phase3-a1")
 
     client.post(
@@ -69,8 +69,10 @@ def test_approve_reject_approve_still_inflates_approval_rate(client: TestClient)
 
     metrics = client.get("/api/metrics/dashboard").json()
     assert metrics["outreach_generated"] == 1
-    assert metrics["outreach_approved"] == 2  # two distinct approve *decisions*
-    assert metrics["approval_rate"] == 200.0  # still exceeds 100% -- Phase 11 to fix
+    assert metrics["outreach_approved"] == 1  # one draft, currently approved
+    assert metrics["outreach_rejected"] == 0
+    assert metrics["approval_rate"] == 100.0  # by construction, not clamped
+    assert metrics["approval_events"] == 2 and metrics["rejection_events"] == 1  # audit history kept
 
 
 def test_blocked_status_survives_approve_outreach(client: TestClient) -> None:

@@ -20,6 +20,7 @@ import { usePaginatedHistory } from "@/hooks/usePaginatedHistory";
 import {
   APIError,
   approveOutreach,
+  resolvePush,
   generateOutreach,
   generateSummary,
   getAIOutputs,
@@ -57,6 +58,7 @@ type ActionLabel =
   | "Reject"
   | "Edit"
   | "Refresh"
+  | "Resolve"
   | null;
 
 export default function LeadDetailPage() {
@@ -740,7 +742,14 @@ export default function LeadDetailPage() {
         <HistoryPanel
           state={pushesHistory}
           emptyLabel="Not pushed yet."
-          renderItems={(items) => <PushHistory pushes={items} />}
+          renderItems={(items) => (
+            <PushHistory
+              pushes={items}
+              onResolve={(pushId, resolution) =>
+                void runAction("Resolve", () => resolvePush(pushId, resolution))
+              }
+            />
+          )}
         />
       </section>
     </div>

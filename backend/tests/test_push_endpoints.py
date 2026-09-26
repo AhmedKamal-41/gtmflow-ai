@@ -208,8 +208,11 @@ def test_get_lead_pushes_returns_history(client: TestClient) -> None:
     _, leads = _scored_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
-    # second push to ensure history ordering
-    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
+    # Phase 11: a plain repeat is a replay of the same delivery (no new row)...
+    replay = client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"}).json()
+    assert replay["replay"] is True
+    # ...and a second delivery must be requested explicitly.
+    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack", "redeliver": True})
 
     response = client.get(f"/api/leads/{hot['id']}/pushes")
     assert response.status_code == 200

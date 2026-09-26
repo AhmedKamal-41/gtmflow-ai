@@ -69,6 +69,22 @@ def test_metrics_empty_database_returns_zeros(client: TestClient) -> None:
         "fit_partial_match": 0,
         "fit_weak_match": 0,
         "fit_insufficient_evidence": 0,
+        # Phase 11
+        "outreach_pending_review": 0,
+        "reviewed_approval_rate": 0.0,
+        "approval_events": 0,
+        "rejection_events": 0,
+        "push_unknown_count": 0,
+        "push_pending_count": 0,
+        "real_messages_delivered": 0,
+        "mock_messages_delivered": 0,
+        "generation_by_mode": {m: {"drafts_generated": 0, "drafts_approved": 0, "drafts_rejected": 0,
+                                   "drafts_pending_review": 0, "approval_rate": 0.0}
+                               for m in ("mock", "real", "unknown")},
+        "delivery_by_mode": {m: {"attempts": 0, "delivered": 0, "unique_leads_delivered": 0, "failed": 0,
+                                 "outcome_unknown": 0, "pending": 0, "success_rate": 0.0}
+                             for m in ("mock", "real", "unknown")},
+        "data_mode": "empty",
     }
 
 
@@ -167,12 +183,16 @@ def test_metrics_push_success_rate_counts_mock_and_success(
 def test_metrics_unique_leads_pushed_dedupes_repeat_pushes(
     client: TestClient,
 ) -> None:
-    """Same lead pushed twice -> leads_pushed=2, unique_leads_pushed=1."""
+    """Same lead delivered twice -> leads_pushed=2, unique_leads_pushed=1.
+    Phase 11: the second delivery is an explicit redeliver; a plain repeat
+    push is a replay and sends nothing."""
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
     approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
-    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
+    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})  # replay
+    assert client.get("/api/metrics/dashboard").json()["leads_pushed"] == 1
+    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack", "redeliver": True})
     body = client.get("/api/metrics/dashboard").json()
     assert body["leads_pushed"] == 2
     assert body["unique_leads_pushed"] == 1
