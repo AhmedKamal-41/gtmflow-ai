@@ -56,7 +56,8 @@ Uncertain-flagged examples are refused, and so are datasets from another prompt 
 ```bash
 # Local environment (Python 3.12; uv is used because python3.12-venv lacks ensurepip here)
 uv venv --python 3.12 .venv
-VIRTUAL_ENV=.venv uv pip install -r requirements-lock-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+VIRTUAL_ENV=.venv uv pip install -r requirements-lock-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu \
+  --index-strategy unsafe-best-match   # all exact pins; without it uv takes certifi from the torch index and fails (plain pip and CI do not)
 
 .venv/bin/python -m pytest -q                                                     # tests (CPU, free)
 .venv/bin/python -m gtmflow_training.train plan  --config configs/phase8-qwen3-4b-lora-v1.json   # token counts and steps; no weights

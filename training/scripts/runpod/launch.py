@@ -56,7 +56,6 @@ REPO = Path(__file__).resolve().parents[3]
 TRAINING = REPO / "training"
 RUN_NAME = "phase8-qwen3-4b-lora-v1"
 STATE_DIR = TRAINING / "runs" / "runpod"
-STATE = STATE_DIR / "state.json"
 EVENTS = STATE_DIR / "events.jsonl"
 KNOWN_HOSTS = STATE_DIR / "known_hosts"
 SSH_KEY = Path.home() / ".ssh" / "gtmflow_runpod_ed25519"
@@ -105,7 +104,7 @@ PROFILES = {
         "hard_limit_seconds": HARD_LIMIT_SECONDS, "claim_limit_seconds": CLAIM_LIMIT_SECONDS,
         "grace_seconds": GRACE_SECONDS, "copy_back_reserve_seconds": COPY_BACK_RESERVE_SECONDS,
         "max_cost_per_hr": MAX_COST_PER_HR, "allowed": PHASE8_ALLOWED, "forbidden": PHASE8_FORBIDDEN,
-        "config": "phase8-qwen3-4b-lora-v1.json",
+        "config": "phase8-qwen3-4b-lora-v1.json", "state_file": "state.json",
     },
     "phase9-eval": {
         "run_name": "phase9-eval-v1", "local_run": TRAINING / "runs" / "phase9-eval-v1" / "run",
@@ -114,7 +113,7 @@ PROFILES = {
         "hard_limit_seconds": 2 * 3600, "claim_limit_seconds": 30 * 60,
         "grace_seconds": 30 * 60, "copy_back_reserve_seconds": 20 * 60,
         "max_cost_per_hr": 0.60, "allowed": PHASE9_ALLOWED, "forbidden": PHASE9_FORBIDDEN,
-        "config": "phase9-eval-v1.json",
+        "config": "phase9-eval-v1.json", "state_file": "state-phase9-eval-v1.json",
     },
 }
 P: dict = PROFILES["phase8-train"]  # set from --profile (or the saved state) in main()
@@ -179,15 +178,28 @@ def event(kind: str, **fields) -> None:
     print(line, flush=True)
 
 
-def load_state() -> dict:
-    return json.loads(STATE.read_text()) if STATE.exists() else {}
+def state_path(profile: dict | None = None) -> Path:
+    """Each profile keeps its own state file, so a later run never overwrites
+    an earlier run's record (Phase 8 keeps its original state.json)."""
+    return STATE_DIR / (profile or P)["state_file"]
+
+
+def load_state(profile: dict | None = None) -> dict:
+    path = state_path(profile)
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def save_state(state: dict) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = STATE.with_suffix(".tmp")
+    path = state_path()
+    tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2, sort_keys=True))
-    tmp.replace(STATE)
+    tmp.replace(path)
+
+
+def unfinished_profiles() -> list[str]:
+    return [name for name, prof in PROFILES.items()
+            if load_state(prof).get("pod_id") and not load_state(prof).get("finished")]
 
 
 def sha256(path: Path) -> str:
@@ -644,8 +656,9 @@ def cmd_run(args) -> int:
     if not args.confirm_paid_compute:
         print("refused: needs --confirm-paid-compute", file=sys.stderr)
         return 2
-    if load_state().get("pod_id") and not load_state().get("finished"):
-        print(f"refused: an unfinished run exists in {STATE}; use resume or terminate", file=sys.stderr)
+    if unfinished_profiles():
+        print(f"refused: an unfinished run exists ({', '.join(unfinished_profiles())}); use resume or terminate",
+              file=sys.stderr)
         return 2
     if P["local_run"].exists():
         print(f"refused: {P['local_run']} already exists (one run only)", file=sys.stderr)
@@ -818,17 +831,19 @@ def main() -> int:
     r.add_argument("--allow-rtx4090", action="store_true")
     pr = sub.add_parser("prove-self-delete")
     pr.add_argument("--confirm-paid-compute", action="store_true")
-    sub.add_parser("resume")
+    rs = sub.add_parser("resume")
+    rs.add_argument("--profile", choices=sorted(PROFILES))
     t = sub.add_parser("terminate")
     t.add_argument("--pod")
+    t.add_argument("--profile", choices=sorted(PROFILES))
     w = sub.add_parser("watchdog")
     w.add_argument("--pod", required=True)
     w.add_argument("--at", type=float, required=True)
     args = parser.parse_args()
     if getattr(args, "profile", None):
         P = PROFILES[args.profile]
-    elif args.cmd in ("resume", "terminate") and load_state().get("profile"):
-        P = PROFILES[load_state()["profile"]]
+    elif args.cmd in ("resume", "terminate") and len(unfinished_profiles()) == 1:
+        P = PROFILES[unfinished_profiles()[0]]  # the one run in progress, whichever profile
     return {"check": cmd_check, "run": cmd_run, "resume": cmd_resume, "terminate": cmd_terminate,
             "watchdog": cmd_watchdog, "prove-self-delete": cmd_prove_self_delete}[args.cmd](args)
 

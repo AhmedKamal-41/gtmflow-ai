@@ -397,3 +397,22 @@ def test_self_delete_proof_logic(tmp_path, monkeypatch, pod_removes_itself):
         assert rc == 1 and not record["self_delete_proven"] and terminated == ["p1"]  # account key cleaned up
         assert record["watchdog_log_on_failure"] and clock["t"] >= 1000 + L.PROOF_WINDOW_SECONDS
     assert record["removal_confirmed"]
+
+
+def test_each_profile_keeps_its_own_state_and_unfinished_runs_block_new_ones(tmp_path, monkeypatch):
+    L = _launcher()
+    monkeypatch.setattr(L, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(L, "EVENTS", tmp_path / "events.jsonl")
+    phase8 = tmp_path / "state.json"
+    phase8.write_text(json.dumps({"pod_id": "old", "finished": True}))
+    before = phase8.read_bytes()
+    monkeypatch.setattr(L, "P", L.PROFILES["phase9-eval"])
+    L.save_state({"pod_id": "new"})
+    assert phase8.read_bytes() == before  # the Phase 8 record is never overwritten
+    assert json.loads((tmp_path / "state-phase9-eval-v1.json").read_text()) == {"pod_id": "new"}
+    assert L.unfinished_profiles() == ["phase9-eval"]
+    monkeypatch.setattr(L, "P", L.PROFILES["phase8-train"])
+    monkeypatch.setattr(L, "list_pods", lambda: pytest.fail("refusal must come before any API call"))
+    args = type("A", (), {"confirm_paid_compute": True, "bundle_sha256": "x", "profile": "phase8-train",
+                          "allow_rtx4090": False})()
+    assert L.cmd_run(args) == 2
