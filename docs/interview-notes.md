@@ -1,75 +1,69 @@
 # Interview notes
 
-Four pre-written answers at four lengths. Use the right one for the question.
+Pre-written answers at four lengths. Every number traces to `docs/upgrade/` (see `resume-bullets.md` for the sources).
 
 ## 20-second pitch
 
-> GTMFlow AI is a portfolio project that takes a CSV of sales leads, scores them on a deterministic 100-point model, drafts a personalized outreach email with a mock-by-default AI client, lets a human approve or reject the draft, and pushes Hot leads to Slack, with an adoption dashboard that shows approval rate, push success rate, and an estimated time-saved figure.
+> GTMFlow is a lead-to-outreach tool for one sales team. It imports and scores companies, drafts outreach grounded only in the company record, requires a signed-in person to approve the exact draft, and routes approved Hot leads to Slack without ever double-sending. I also fine-tuned a small open model for the drafting step and evaluated it against a baseline. That evaluation was done by AI review, not people. The app runs in mock mode by default and isn't deployed.
 
 ## 60-second pitch
 
-> The project is full-stack: FastAPI backend, Postgres, Next.js dashboard, all wired together so a non-technical revenue team could actually run the workflow.
+> The backend is FastAPI, SQLAlchemy and PostgreSQL with 12 Alembic migrations; the frontend is Next.js and TypeScript.
 >
-> Lead scoring is a deterministic 100-point model, industry fit, persona, company size, pain-point keywords. No LLM in the score; it's auditable. The AI client is behind an interface with a `MockAIClient` and an `OpenAIClient`, mock by default so the demo runs without keys. The mock generator labels every inference explicitly and keeps evidence separate, and the real-mode prompt has anti-hallucination guardrails pinned by a unit test.
->
-> Slack push is the integration. Mock when `SLACK_WEBHOOK_URL` is empty; otherwise `httpx.post` with a 10-second timeout. Every attempt persists an `IntegrationPush` row with the full payload and the response, that's the audit trail.
->
-> The metrics endpoint computes adoption and ROI, approval rate, push success rate, automation coverage, and an estimated time-saved figure I'm careful to frame as a demo number, not real revenue. The full backend has 117 passing tests; the frontend builds clean. The whole thing is the GTM-Engineering loop end-to-end.
+> - **Generation:** the model gets a context of record facts and an activated seller profile, and must cite the ids of everything it uses. The server rejects any draft that cites something outside the context, so an invalid draft is never saved.
+> - **Review:** a person approves the exact content hash they saw. Runtime checks flag known bad phrasings and require an explicit acknowledgement.
+> - **Jobs and delivery:** batch work runs in a database-backed job queue with leases and crash recovery. Slack delivery uses a claim-before-send ledger, so concurrent requests or restarted workers can't send twice, and a timeout becomes an explicit "unknown" instead of a blind resend.
+> - **The model:** Qwen3-4B with a LoRA adapter, trained on 419 AI-reviewed examples. A blind AI review rated 69% of its held-out drafts acceptable, versus 1% for the base model. I verified the integration once on a temporary GPU.
+> - **Access:** everything is behind server-side sessions with CSRF protection, roles, and an actor on every audit event.
 
-## Technical explanation (5 minutes, deep dive)
+## Technical deep dive (5 minutes)
 
-**Architecture**
-- Backend: FastAPI, SQLAlchemy 2.0 declarative ORM, Pydantic v2, Postgres. Six tables. Tests run on in-memory SQLite via a `StaticPool`-backed engine, with `get_session` overridden in pytest fixtures.
-- Frontend: Next.js 15 App Router, strict TypeScript, Tailwind v3.4. Seven user routes. One typed fetch wrapper + one `APIError` class; no SWR / React Query / Redux.
-- The two are decoupled by a single typed surface, TypeScript types in `frontend/src/types/api.ts` mirror Pydantic response models.
+**Grounding and review**
+- **Grounded context:** the context holds record facts with ids, their provenance, the stated unknowns, and the fit score (labeled "not evidence of interest"). The output schema requires fact, capability and claim ids that exist in the context. Validation failures save nothing.
+- **Exact-draft approvals:** an approval stores the content hash that was shown. Delivery re-checks that the draft, company inputs and seller revision are unchanged. An edit is a new immutable revision.
 
-**Lead scoring**
-- Deterministic 100-point model with seven categories and a penalty bucket. Hot ≥ 80, Warm 55–79, Cold 0–54.
-- `score_lead()` is a pure function. Same input → same output, no I/O. Same function powers unit tests (via `SimpleNamespace`) and the live service (via SQLAlchemy ORM instances), the function only reads attributes.
-- 11 unit tests including the band-boundary edges (54, 55, 79, 80) and a determinism test (3× identical runs).
+**Model work (Phases 7–10)**
+- **Data:** splits by company group (no leakage), with training, validation and test sets frozen by hash.
+- **Training:** LoRA r=16 on Qwen3-4B-Instruct in bf16, with per-example weights, on one rented L4: 63 minutes and $0.61. The pod has five layers of self-termination safeguards.
+- **Evaluation:** frozen criteria, failure-inclusive scoring, and a blind AI review by a fresh agent that saw no scores or system names.
+  - The two main outreach faults were traced to phrasing kept in the training data.
+  - The shared test failure turned out to be a lint false positive on a company name.
+- **Integration:** an OpenAI-compatible client that fails closed without configuration. On a temporary pod, 7 of 20 outputs were byte-identical to the evaluation outputs and all 20 got the same quality verdicts. The likely cause of the differences is batch-versus-single-request numerics; that wasn't proven by a controlled run.
 
-**AI workflow**
-- `AIClient` ABC with `MockAIClient` and `OpenAIClient` implementations.
-- `MockAIClient` is fully deterministic, same lead context produces the same JSON output.
-- `OpenAIClient` lazy-imports the openai SDK inside `_call(...)`, so missing the package surfaces a clean error instead of an `ImportError` at app startup. The key is validated at construction time; empty key → `AIConfigError` before any network call.
-- Prompts use `response_format={"type": "json_object"}` and a strict system rule about evidence vs inference. Four guardrail phrases are pinned by a unit test that fails immediately if they drift.
+**Reliability**
+- **Jobs:** each item commits with a fenced lease renewal, so a stale worker can't commit. Retries are bounded, and a crash loop is detected. The worker SIGKILL test is in the Phase 10 handoff.
+- **Slack ledger:** a unique claim key per approved-draft attempt. Outcomes are `failed` or `unknown`, and resolving an unknown is an operator action. At most one send per attempt, but not exactly-once: Slack webhooks have no idempotency key.
 
-**Slack integration**
-- Payload builder + sender are separate functions. Builder is pure (great unit test surface). Sender uses `httpx.post` with a 10-second timeout.
-- Mock mode when `SLACK_WEBHOOK_URL` is empty, no network call, just persists with `status: "mock_success"`.
-- Secret safety: the URL is never logged or returned. The httpx error path is sanitized, connection errors return a generic message instead of forwarding `str(err)`, which can embed the URL. Asserted by a regression test.
+**Access control (Phase 12)**
+- **Deny by default:** an app-wide dependency protects every route except health checks and login.
+- **Sessions and passwords:** scrypt passwords, sessions stored only as hashes, and HttpOnly, SameSite=Lax, Secure cookies. Idle and absolute expiry, rotation at login, revocation on logout and on user changes, and account lockout.
+- **CSRF:** a token derived from the session and required on every state change. Viewers are read-only.
+- **Audit:** a SQLAlchemy hook stamps the actor on every audit event, including work done by the background worker.
 
-**Adoption + ROI metrics**
-- `GET /api/metrics/dashboard` returns 18 fields. Every metric is one `COUNT(*)` or `AVG()`.
-- Divide-by-zero returns `0.0` (via a `_pct(num, denom)` helper).
-- Two push counters: `leads_pushed` (row count, audit-friendly) and `unique_leads_pushed` (distinct lead count, ops-friendly). Both are exposed because the distinction matters.
-- Time-saved is `5 minutes × processed leads`, deliberately framed as estimated, not real revenue impact.
-
-**Testing strategy**
-- 117 backend tests across 12 modules.
-- Endpoint tests use a dependency-overridden in-memory SQLite session, so each test starts from a clean schema.
-- Real OpenAI and real Slack paths are *never* exercised in tests. Both are unit-tested via construction-time errors (`OpenAIClient(api_key="")`) and `monkeypatch` of `httpx.post`.
-- Frontend gates: strict TypeScript (`tsc --noEmit`) + a clean Next.js production build (`next build`).
-- GitHub Actions: `pytest` on backend, `typecheck + build` on frontend, path-filtered so doc-only PRs don't rerun the full pipeline.
+**Testing**
+- **Backend:** runs on SQLite and on disposable PostgreSQL, including real concurrency and process-kill tests. Key tests were mutation-checked (the safeguard was removed and the test had to fail).
+- **Frontend:** Vitest and Testing Library, typecheck and a production build. Counts are in the Phase 12 handoff.
 
 ## GTM / business explanation
 
-> The bottleneck in a lot of revenue teams isn't the lead list, it's the time it takes to decide which leads to prioritize, write something personalized to each one, and route the hot ones somewhere the right rep will see them quickly. GTMFlow AI compresses that into one workflow: upload, score, AI draft, human approve, Slack push.
+> Revenue teams lose time deciding which leads matter, writing something specific to each, and getting the good ones to the right rep. GTMFlow makes that one workflow, with two things I'd insist on in a real team.
 >
-> The two parts I'm most proud of from a GTM-Engineer perspective are the audit trail and the adoption dashboard. Every action, scoring, AI generation, approve, reject, push, emits a `WorkflowEvent`. So when the dashboard says "approval rate is 67%", that number is grounded in actual rows in the database, not a counter on the wire. That same audit trail is what lets a sales ops team say "of every AI draft we made this week, here's what reps approved, here's what got pushed, and here's how much time the workflow saved us if we assume five minutes per lead." The "five minutes per lead" assumption is wrong, you'd want to measure that in a real deployment, but the dashboard is designed so swapping the constant for a measured value is one line.
+> First, trust: a draft can only use facts from the record, a person approves exactly what gets sent, and the system never double-posts to Slack.
 >
-> What this also makes possible is iteration. If approval rate drops below 50%, that's a signal the prompt or the scorer is off and the team should look at it. That's the JD's "iterate based on results" loop.
+> Second, honest measurement: the approval rate counts each draft once, mock and real activity are separated, and time saved is labeled as an estimate.
+>
+> The model work follows the same rule. I report what the evidence supports, "AI-evaluated, 69% acceptable on a small test set", and not more.
 
 ## EliseAI JD mapping
 
-| JD capability | How GTMFlow AI demonstrates it |
+| JD capability | How GTMFlow demonstrates it |
 |---|---|
-| AI workflow automation | Mock + real `AIClient` interface; `services/ai_generation.py` orchestrates lead → context → client → `AIOutput` → `WorkflowEvent`; mock-by-default with anti-hallucination guardrails. |
-| APIs and webhooks | FastAPI backend with ~25 endpoints across 8 routers; Slack incoming-webhook integration via `httpx` with a 10s timeout and full audit trail. |
-| Python | Backend is Python 3.11 + FastAPI + SQLAlchemy 2.0 + Pydantic v2; 117 pytest tests; type hints throughout. |
-| JavaScript / TypeScript | Next.js 15 App Router with strict TypeScript, 7 user routes, custom `APIError` class, typed fetch wrappers. |
-| SQL / PostgreSQL | 6-table schema with FK relationships, JSON columns, indexes; tests run on in-memory SQLite via `StaticPool` so they're fast and isolated. |
-| Scoring / prioritization logic | Deterministic 100-point model with 7 categories + penalties; Hot/Warm/Cold bands; per-category UI breakdown + matched-signal pills. |
-| Adoption / ROI tracking | `GET /api/metrics/dashboard`, 18 fields across pipeline, outreach review, push delivery, and estimated time saved. Divide-by-zero safe. |
-| Non-technical team usability | Internal-tool-style Next.js dashboard with one-click actions (Score / Generate / Approve / Reject / Push), status badges, priority badges, clear error messages, no jargon. |
-| Working in 0-to-1 ambiguity | Built 8 phases bottom-up: scaffold → models → ingestion → scoring → AI → Slack → frontend → metrics → polish. Each phase ended with an explicit "checkpoint" before moving on. |
+| AI workflow automation | Grounded generation across three providers (mock, OpenAI, fine-tuned Qwen), runtime quality checks, background jobs |
+| APIs and webhooks | About 57 API operations; a Slack webhook with a delivery ledger and explicit handling of uncertain outcomes |
+| Python | FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic; PyTorch, PEFT and transformers for the model work |
+| JavaScript / TypeScript | Next.js 15 App Router, strict TypeScript, Vitest and Testing Library suites |
+| SQL / PostgreSQL | 12 migrations; unique constraints and conditional updates for concurrency; window functions for "latest review" metrics |
+| Scoring / prioritization | Deterministic legacy score plus a versioned company-fit score with evidence coverage |
+| Adoption / ROI tracking | Cohort-based approval metrics, delivery outcomes, mock-versus-real breakdowns, an explicit time-saved estimate |
+| Non-technical usability | One-click review, flag acknowledgement, "It arrived / It did not arrive" resolution, plain-language dashboard notes |
+| Working in ambiguity | 12 documented phases, each ending with evidence and an honest readiness level (`docs/upgrade/phase-status.md`) |

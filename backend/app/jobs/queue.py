@@ -18,6 +18,7 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.actor import actor_label
 from app.models import LeadBatch, WorkflowEvent
 from app.models.background_job import (
     ACTIVE_JOB_STATUSES,
@@ -72,7 +73,8 @@ def enqueue(session: Session, job_type: str, batch_id: UUID, params: dict[str, A
         return existing, False
     job = BackgroundJob(job_type=job_type, batch_id=batch_id, params=clean, status=JOB_QUEUED,
                         dedupe_key=key, attempts=0, max_attempts=max_attempts,
-                        max_item_attempts=max_item_attempts, counts={}, cancel_requested=False)
+                        max_item_attempts=max_item_attempts, counts={}, cancel_requested=False,
+                        created_by=actor_label())
     session.add(job)
     try:
         session.flush()

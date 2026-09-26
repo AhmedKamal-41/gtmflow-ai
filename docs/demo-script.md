@@ -1,129 +1,67 @@
 # Demo script
 
-Eleven steps. The whole flow runs in mock mode (no OpenAI key, no Slack webhook) so it works on any machine with Python + Node + Postgres for the live app (pytest uses in-memory SQLite only).
+Nine steps, about 6 minutes. Everything runs in **mock mode**: deterministic mock AI and a mock Slack webhook, no keys, and no message leaves the app. Setup commands are in the README ("Setup (local, mock mode)").
 
-Target audience: a recruiter / hiring manager who has 5–7 minutes to watch the project work end-to-end.
+Audience: a recruiter or hiring manager with 5–7 minutes.
 
-## 1. Start the backend
+## 1. Sign in
 
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-```
+Open http://localhost:3000. You are sent to **/login**. Sign in with the account you created with `python -m app.auth_cli create-user`.
 
-Confirm at http://localhost:8000/api/health:
+> **What to say:** "Every API route requires a signed-in operator, enforced on the backend, not just hidden in the UI. Accounts come from an admin CLI; there's no public sign-up, because this is a single-team tool. Each approval and delivery records who did it."
 
-```json
-{ "status": "ok", "service": "gtmflow-ai-backend", "version": "0.1.0" }
-```
+## 2. Run the demo batch
 
-> **What to say:** "FastAPI service, mock-by-default AI client, no OpenAI key needed for the demo."
+Open **/demo** and click **Run the full demo**. It loads a synthetic 10-lead list, scores it (2 Hot, 4 Warm, 4 Cold), drafts and approves outreach for the two Hot leads, and delivers them to the mock Slack webhook.
 
-## 2. Start the frontend
+> **What to say:** "The demo is labeled as synthetic, and its auto-approval is labeled 'demo-auto-approve'. For real leads, a person approves every draft."
 
-```bash
-cd frontend
-npm run dev
-```
+## 3. Activate a seller profile, upload a list, and use background jobs
 
-Open http://localhost:3000.
+Outreach needs an explicitly activated seller profile. On **/seller-profile**:
 
-> **What to say:** "Next.js App Router, strict TypeScript, internal-tool styling, no auth because this is the workflow surface a sales ops admin would actually use."
+1. Click **Load GTMFlow demonstration template**, then **Save draft**.
+2. Under the saved version, tick both confirmations ("I reviewed version 1…" and "…is a demonstration profile, not a real offer").
+3. Activate it.
 
-## 3. Upload the sample CSV
+Then upload `sample_data/leads_sample.csv` on **/upload** and open the batch. In **Background jobs**, click **Fit-score all leads** and **Generate outreach drafts**. The worker you started (`python -m app.jobs.worker`) picks them up; the panel shows progress and counts.
 
-Navigate to **/upload**. Pick `sample_data/leads_sample.csv`. Type "Demo Leads" in the batch name. Click **Upload**.
+> **What to say:** "Long batch work runs in a worker, not in the web request. Jobs survive a worker crash: another worker resumes from where it stopped, and nothing is done twice."
 
-Expected result card:
-- Total rows: 10
-- Valid: 10
-- Invalid: 0
-- "Open batch detail →"
+## 4. Open a Hot lead
 
-Click that link.
+Click **Cascade Modular Homes**. You see the legacy score breakdown, the company-fit score with its evidence coverage, and the current outreach draft.
 
-> **What to say:** "CSV ingestion validates per-row, normalizes the headers, and keeps unknown columns like `notes` in a `cleaned_data` JSON column on each lead."
+> **What to say:** "Two scores, kept apart: the original 100-point heuristic and a versioned company-fit score that reports how much evidence it had."
 
-## 4. Score the batch
+## 5. Read the grounded draft
 
-On the batch detail page, click **Score batch**.
+The draft cites the record facts it used (fact ids), states what is unknown (intent, budget, current tools), and shows its provenance: prompt, model and seller profile.
 
-Action result banner: *"Scored 10 leads, Hot 2 • Warm 4 • Cold 4 • avg 56.1."*
+> **What to say:** "The model may only use facts in the record and claims in the activated seller profile. The server rejects output that cites anything else, so an invalid draft is never saved. The same checks apply to every model: the mock, OpenAI, or the fine-tuned Qwen model."
 
-The leads table now shows score numbers and Hot / Warm / Cold pills.
+## 6. Review the exact draft
 
-> **What to say:** "Deterministic 100-point model. Industry fit, persona, company size, pain-point keywords from the notes, source quality. No LLM, every score is reproducible from the lead fields alone."
+Click **Approve outreach**. If the draft had runtime quality flags (for example "Exploring Opportunities…" framing), a checkbox would require you to acknowledge them first. You can also reject with a reason, or edit (an edit becomes a new revision that needs its own review).
 
-## 5. Open a Hot lead
+> **What to say:** "An approval names the exact content hash I looked at. If anything changes afterwards (the draft, the company facts, the seller profile) the approval stops authorizing delivery."
 
-Click **Cascade Modular Homes** in the table. Lead workspace opens.
+## 7. Push to Slack, twice
 
-The score breakdown card shows 94/100, the per-category bars (Industry 25/25, Pain 20/20, Persona 15/15, etc.), and a row of matched signals.
+Click **Push to Slack**: the push history shows `mock_success · mock webhook · attempt 1`. Click it again: nothing new is sent. The response is a replay of the same delivery.
 
-> **What to say:** "Every category has a bar and a 'matched signals' pill row. The frontend defends against missing categories, a malformed backend response renders 'Not available' instead of a NaN bar."
+> **What to say:** "Delivery claims a database row before sending, so two tabs, two workers or a restarted job can't send the same approved draft twice. If Slack times out, the outcome is recorded as unknown and never resent automatically. An operator checks the channel and records what happened."
 
-## 6. Generate the AI summary
+## 8. Metrics
 
-Click **Generate summary**.
+Open **/metrics**. A banner says the data is mock-only. The approval rate counts each draft once, by its latest review, so it can't exceed 100%. The "Mock versus real" card splits generation and delivery.
 
-The AI outputs section now shows:
-- **company summary** card with `company_summary`, `detected_pain_points` pills, `fit_reasoning`, an **Evidence** list, an **Inferences** list (each line prefixed `Inference:`), and a confidence label.
+> **What to say:** "Real messages delivered: zero. The dashboard says so instead of counting mock deliveries as real ones. Time saved is an explicit estimate: five minutes per lead."
 
-> **What to say:** "Mock client. Same lead always produces the same summary. Notice that evidence is quoted from real lead fields, and every inference is explicitly labeled, that's the anti-hallucination contract. The same `SYSTEM_RULES` text governs the real-OpenAI prompts, pinned by a unit test."
+## 9. The model work (talk track, no live GPU)
 
-## 7. Generate outreach
+Show `docs/upgrade/phase9-evaluation-handoff.md` and `phase10-integration-handoff.md`.
 
-Click **Generate outreach**.
+> **What to say:** "I fine-tuned Qwen3-4B with LoRA on 419 AI-reviewed examples for about 60 cents of GPU time. On held-out data, a blind AI review rated 69% of its drafts acceptable as-is, against 1% for the base model. Summaries were fine; outreach was the weak spot, and I traced its two main faults to phrasing kept in the training data. All of that is AI-evaluated, not human-verified. Then I ran the app's own client against the real model once, on a temporary GPU pod that deleted itself, and all acceptance checks passed. There's no always-on model server; the app runs on the mock by default."
 
-The AI outputs section now also shows:
-- **outreach email** card with `subject`, multi-line `email_body`, `personalization_points`, `call_note`, confidence.
-
-> **What to say:** "The outreach generator pulls the latest summary's pain points into its context so the call note and subject stay grounded in what the summary already said."
-
-## 8. Approve / reject outreach
-
-Two new buttons appear: **Approve outreach** and **Reject outreach**.
-
-- Click **Approve outreach** → action banner "Approve complete." → status badge updates.
-- Or click **Reject outreach** → browser prompt for a reason → submit.
-
-Both actions emit a `WorkflowEvent` and flip `Lead.status` to `outreach_approved` / `outreach_rejected`.
-
-> **What to say:** "This is the adoption signal, of every AI draft we generated, what % did a human accept? That ratio is on the `/metrics` page."
-
-## 9. Push to Slack (mock)
-
-Click **Push to Slack**.
-
-The action banner shows "Push complete." The lead status flips to `pushed`. A **Push history** row appears with:
-- status pill: `mock_success`
-- timestamp
-- the full Slack `text` payload (with the 🔥 emoji header, score line, contact line, fit reasoning, pain points, suggested subject, call note, and a lead-detail URL)
-- response: `Mocked: Slack webhook URL is not configured.`
-
-> **What to say:** "Mock mode because `SLACK_WEBHOOK_URL` is empty in `.env`. Set it to a real webhook URL and the same code path runs `httpx.post` with a 10-second timeout. The webhook URL is never logged or returned in responses, a unit test asserts that even httpx connection errors don't leak it."
-
-## 10. Open the metrics dashboard
-
-Navigate to **/metrics**.
-
-Four sections:
-- **Lead pipeline**, Total 10 / Processed 10 / Automation coverage 100% / Avg score 56.1 / Hot 2 / Warm 4 / Cold 4 / Missing data 0%
-- **Outreach review**, Generated 1, Approved 1 (or Rejected 1), Approval rate 100%
-- **Push delivery**, Pushed (rows) 1, Unique leads pushed 1, Success rate 100%, Failed 0
-- **Estimated time saved**, Minutes 50, Hours 0.83
-- Blue info panel framing the numbers as estimated / demo, explaining `leads_pushed` vs `unique_leads_pushed`.
-
-> **What to say:** "This is the JD's 'track adoption and ROI of new systems' bullet. Every metric is a single `COUNT(*)` or `AVG()`. Divide-by-zero returns 0.0. Time-saved is deliberately framed as estimated, five minutes per processed lead, not real revenue impact."
-
-## 11. Explain the results
-
-Wrap up by zooming out:
-
-- **2 Hot, 4 Warm, 4 Cold** out of 10 in the sample data. That ratio came out of the deterministic scorer with no human tuning between CSV and dashboard.
-- **AI is mock by default** so the demo runs anywhere. The real-mode prompt template is in `backend/app/ai/prompts.py` with the guardrail phrases pinned by a test.
-- **Slack push has an audit trail.** Every attempt (success, mock, or failure) is a row in `integration_pushes` plus a `WorkflowEvent`. Reviewer-friendly transparency.
-- **117 backend tests + clean Next build.** GitHub Actions runs both.
-
-> **Closing line:** "What I want this project to show is the GTM Engineering loop: ingest → score → AI → human approve → push → measure. The same loop scales to a real CRM-backed deployment by swapping the Slack module for a HubSpot or Salesforce module, the rest of the architecture stays."
+> **Closing line:** "The loop is ingest → score → grounded draft → human approval → safe delivery → honest metrics, with every step audited and every claim tied to evidence in the repo."

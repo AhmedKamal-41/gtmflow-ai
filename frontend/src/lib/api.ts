@@ -112,11 +112,33 @@ export class APIError extends Error {
   }
 }
 
+// ---- Phase 12: session auth --------------------------------------------
+// The session itself is an HttpOnly cookie the browser sends automatically.
+// State-changing requests must also carry the session's CSRF token, which
+// only this origin can read (from /api/auth/session or the login response).
+let csrfToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setCsrfToken(token: string | null): void {
+  csrfToken = token;
+}
+
+// Called once by AuthProvider: what to do when the API says "sign in".
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> | undefined),
   };
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (!SAFE_METHODS.has(method) && csrfToken) {
+    headers["X-CSRF-Token"] = csrfToken;
+  }
   if (
     init?.body &&
     !(init.body instanceof FormData) &&
@@ -127,13 +149,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(url, { ...init, headers });
+    response = await fetch(url, { ...init, headers, credentials: "include" });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     throw new APIError(0, "Network error", message);
   }
 
   if (!response.ok) {
+    if (response.status === 401 && onUnauthorized && !path.startsWith("/api/auth/")) {
+      onUnauthorized();
+    }
     let detail: string | undefined;
     try {
       const body = (await response.json()) as { detail?: unknown };
@@ -155,6 +180,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -484,3 +510,36 @@ export function getBatchFitScores(
 export function getFitProfile(): Promise<FitProfile> {
   return request<FitProfile>("/api/scoring/fit-profile");
 }
+
+// ---- Phase 12: auth endpoints --------------------------------------------
+
+export type SessionInfo = {
+  username: string;
+  role: "operator" | "viewer";
+  expires_at: string;
+  csrf_token: string;
+};
+
+export async function login(username: string, password: string): Promise<SessionInfo> {
+  const info = await request<SessionInfo>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  setCsrfToken(info.csrf_token);
+  return info;
+}
+
+export async function getSession(): Promise<SessionInfo> {
+  const info = await request<SessionInfo>("/api/auth/session");
+  setCsrfToken(info.csrf_token);
+  return info;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await request<void>("/api/auth/logout", { method: "POST" });
+  } finally {
+    setCsrfToken(null);
+  }
+}
+

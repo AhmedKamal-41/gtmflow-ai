@@ -110,7 +110,7 @@ def build(session: Session, queue: str, ai_rows: list[dict[str, Any]]) -> dict[s
         example.update({
             "review_source": "human",
             "reviewer": row["reviewer_label"],
-            "reviewer_authenticated": False,
+            "reviewer_authenticated": str(row["reviewer_label"]).startswith("user:"),
             "human_verified": True,
             "review_id": row["example_id"],
             "review_decision": row["decision"],

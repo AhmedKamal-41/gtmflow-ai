@@ -95,7 +95,7 @@ def test_posted_reviewer_identity_is_rejected(client, db_session):
     assert response.status_code == 422
     assert approve(client, lead["id"], output).status_code == 200
     review = db_session.scalars(select(AIOutputReview)).one()
-    assert review.reviewer_label == "local-demo-unauthenticated"
+    assert review.reviewer_label == "user:test-operator"
     assert review.content_hash == output["content_hash"]
 
 
@@ -157,7 +157,7 @@ def test_edit_creates_an_immutable_revision_that_needs_its_own_review(client, db
     revision = response.json()
     assert revision["origin"] == "human_edited"
     assert revision["parent_output_id"] == original["id"]
-    assert revision["author_label"] == "local-demo-unauthenticated"
+    assert revision["author_label"] == "user:test-operator"
     assert revision["model_used"] == "human_edit"
     assert revision["input_hash"] == original["input_hash"]
     assert revision["seller_profile_content_hash"] == original["seller_profile_content_hash"]

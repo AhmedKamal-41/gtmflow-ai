@@ -314,6 +314,24 @@ Full detail and verification: `docs/upgrade/phase11-routing-metrics-handoff.md`.
 | **Mock versus real is two dimensions:** generation (model) and delivery (webhook). `delivery_mode` is recorded at claim time. | Closes audit D.4/E.3. A real-model draft can be delivered to a mock webhook, so a single "mode" would be wrong. |
 | Legacy push rows are **not backfilled** (their ledger fields stay NULL; their mode is inferred only where the status determines it). | Rule 6: don't reconstruct what wasn't recorded. |
 
+## Decisions made in Phase 12 (access control, release checks, portfolio evidence, 2026-09-26)
+
+Full detail: `docs/upgrade/phase12-release-handoff.md`.
+
+| Decision | Why |
+|---|---|
+| **Server-side sessions, not JWTs:** a random 256-bit token in an HttpOnly, SameSite=Lax, Secure (by default) cookie; only its SHA-256 is stored (`user_sessions`). | Revocation (logout, disable, password change) must take effect at once; a database read yields no usable session. |
+| **Passwords use the standard library's scrypt,** with per-user salt and the parameters stored in each hash. No new dependency. | Contract rule 9. Memory-hard hashing without adding bcrypt or argon2 packages. |
+| **CSRF:** `X-CSRF-Token` equal to a value derived from the session token, required on every state-changing method. It is readable only same-origin (`GET /api/auth/session`). | Cookie authentication needs CSRF protection; a cross-site form cannot read or forge the token. |
+| **Deny by default:** one application-level dependency (`app/api/auth.py`) with an explicit public list (health checks, login). | Any future route is protected automatically. A test walks the OpenAPI schema and asserts every route refuses anonymous requests. |
+| **Two roles:** `operator` (everything) and `viewer` (read-only). Accounts come only from the CLI (`python -m app.auth_cli`); there is no registration endpoint and no multi-tenancy. | Single-workspace app, as scoped. |
+| **Login protections:** generic errors, a dummy hash for unknown users (timing), and a 15-minute lockout after 5 consecutive failures per account. Per-IP throttling is left to a reverse proxy. | Prevents enumeration and online guessing within the app; per-IP limits need shared state across processes. |
+| **Actors:** a request- or job-scoped context variable. Reviews, revisions, seller activations and delivery resolutions record `user:<name>`; jobs record `created_by`; a SQLAlchemy hook installed with the models stamps `actor` on every `WorkflowEvent`, in every process. | "Record authenticated actors server-side" without trusting the request body. Historical labels are not rewritten. |
+| **`reviewer_authenticated` in exports is derived from the label** (`user:` prefix). | True for signed-in reviewers; unchanged (false) for every pre-Phase-12 row, so frozen datasets are unaffected. |
+| **CORS narrowed** to the needed methods and headers (`Content-Type`, `X-CSRF-Token`), with credentials allowed only for configured origins. | Closes audit F.2's permissive headers now that credentials exist. |
+| **Dependencies:** applied `npm audit fix` (no `--force`), which took Next.js 15.5.19 → 15.5.26 and sharp 0.34.5 → 0.35.4 in the lockfile only. Did **not** force Next.js 16 or override Next's pinned PostCSS; did **not** change the training locks. | "Do not blindly force upgrades." The remaining findings, and why they are low impact here, are in the handoff. |
+| **Flaky frontend test:** kept every assertion and gave the CPU-heavy test a 20 s limit. | It was CPU-bound (about 3.1 s alone, 6.4 s under deliberate contention), not timing-dependent. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).

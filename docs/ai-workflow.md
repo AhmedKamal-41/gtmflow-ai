@@ -1,5 +1,8 @@
 # AI workflow
 
+> **Status note (Phase 12):** this document describes the original pre-upgrade AI design (the `"Inference: …"` prefixes, the ungrounded prompts). Since Phase 5, generation is **grounded**: record facts with ids, an activated seller profile, stated unknowns, and output that must cite existing fact, capability and claim ids (`backend/app/ai/grounding.py`). Phase 10 added the `qwen3-4b-lora-v1` provider and runtime quality checks. Current detail: `docs/upgrade/phase5-generation-handoff.md` and `docs/upgrade/phase10-integration-handoff.md`.
+
+
 Two output types, two clients (mock + real), one orchestration service. The full flow is mock-by-default so the demo runs without a key.
 
 ## Output types

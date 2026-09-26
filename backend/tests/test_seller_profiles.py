@@ -42,7 +42,7 @@ def test_revisions_preserve_content_and_emit_matching_audit_events(client, db_se
     assert first["content_hash"] != second["content_hash"]
     assert (first["version"], second["version"]) == (1, 2)
     assert first["status"] == second["status"] == "draft"
-    assert first["editor_label"] == "local-demo-unauthenticated"
+    assert first["editor_label"] == "user:test-operator"
     assert client.get("/api/seller-profile").json() == second
     history = client.get("/api/seller-profile/versions?limit=1").json()
     assert history["items"] == [second]

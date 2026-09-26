@@ -1,7 +1,15 @@
 # GTMFlow AI, Frontend
 
 Next.js 15 + TypeScript + Tailwind dashboard for the GTMFlow AI platform.
-Internal-tool styling, no auth, mirrors every backend endpoint.
+Internal-tool styling behind operator sign-in (`/login`; sessions are enforced by the backend). It mirrors the backend endpoints.
+
+## Auth (Phase 12)
+
+`AuthProvider` (`src/components/AuthProvider.tsx`) resolves the session on load and sends signed-out visitors to `/login?next=…` (same-site paths only). `lib/api.ts` sends cookies with every request, adds `X-CSRF-Token` to state-changing requests, and reports 401 responses. For local development, run the dev server as a proxy so the browser talks to one origin:
+
+```bash
+API_PROXY_TARGET=http://localhost:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
+```
 
 ## Prerequisites
 
@@ -96,4 +104,4 @@ Errors from the backend are surfaced verbatim from `detail` where available, wit
 
 ## Not implemented yet
 
-No auth, no real email send, no HubSpot / Salesforce / Google Sheets / Zapier, no deployment. Time-saved is a portfolio estimate (5 minutes per processed lead), not real revenue impact.
+No self-service registration or multi-tenancy (by design), no real email send, no HubSpot / Salesforce / Google Sheets / Zapier, no deployment. Time-saved is a portfolio estimate (5 minutes per processed lead), not real revenue impact.

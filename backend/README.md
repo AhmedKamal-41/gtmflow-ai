@@ -54,6 +54,48 @@ Migrations are never run automatically by the app process (see `app/main.py`, wh
 
 `python -m app.core.init_db` still exists for quick local/throwaway bring-up without Alembic (e.g. a scratch SQLite file), but is not the path for anything you intend to keep or deploy.
 
+## Operator accounts (Phase 12)
+
+Every route except `/health`, `/api/health` and `POST /api/auth/login` needs
+a signed-in operator. There is no registration endpoint; accounts are made
+with the CLI (the password is prompted twice and never echoed; for scripted
+setup it can come from `GTMFLOW_NEW_PASSWORD`):
+
+```bash
+python -m app.auth_cli create-user admin                  # role: operator (all actions)
+python -m app.auth_cli create-user auditor --role viewer  # read-only
+python -m app.auth_cli set-password admin                 # revokes admin's sessions
+python -m app.auth_cli disable auditor                    # revokes their sessions
+python -m app.auth_cli revoke-sessions admin
+python -m app.auth_cli list
+```
+
+- **Sign-in:** `POST /api/auth/login {username, password}` sets the
+  `gtmflow_session` cookie (HttpOnly, SameSite=Lax, Secure by default) and
+  returns a `csrf_token`.
+- **CSRF:** send that token as `X-CSRF-Token` on every POST, PUT, PATCH and
+  DELETE. `GET /api/auth/session` returns it again for a live session.
+  `POST /api/auth/logout` revokes the session.
+- **Limits:** passwords need 12 or more characters. 5 wrong passwords in a
+  row lock the account for 15 minutes. Sessions expire after
+  `SESSION_IDLE_MINUTES` of inactivity or `SESSION_ABSOLUTE_HOURS` in total.
+- **Recorded actors:** reviews, revisions, seller activations and delivery
+  resolutions record `user:<name>`; background work records
+  `job:user:<name>`; every audit event carries `actor`. Rows from before
+  Phase 12 keep their original `local-demo-unauthenticated` label.
+
+With curl, keep a cookie jar and pass the token:
+
+```bash
+curl -c jar -H 'Content-Type: application/json' -d '{"username":"admin","password":"…"}' \
+  http://localhost:8000/api/auth/login                   # note csrf_token in the response
+curl -b jar -H "X-CSRF-Token: $TOKEN" -X POST http://localhost:8000/api/demo/run
+```
+
+(Tested with curl 8.5.0: it sends the `Secure` cookie to `localhost` and
+`127.0.0.1` over plain http. For any other plain-http host, set
+`SESSION_COOKIE_SECURE=false` for local testing only.)
+
 ## Run the API
 
 ```bash
@@ -190,95 +232,71 @@ The suite runs against in-memory SQLite via a dependency-overridden `get_session
 
 ## Sample curl commands
 
+Sign in first (see "Operator accounts"); `$TOKEN` is the `csrf_token` from
+the login response.
+
 ```bash
-# Upload the demo CSV
-curl -X POST http://localhost:8000/api/batches/upload \
-  -F "batch_name=Demo Leads" \
-  -F "file=@../sample_data/leads_sample.csv"
+A='-b jar -H Content-Type:application/json'   # the session cookie from the login step
+C="-H X-CSRF-Token:$TOKEN"
 
-# Score the whole batch
-curl -X POST http://localhost:8000/api/batches/<batch_id>/score
+curl -b jar $C -X POST http://localhost:8000/api/batches/upload \
+  -F "batch_name=Demo Leads" -F "file=@../sample_data/leads_sample.csv"
+curl -b jar $C -X POST http://localhost:8000/api/batches/<batch_id>/score
+curl -b jar $C -X POST http://localhost:8000/api/leads/<lead_id>/generate-outreach   # needs an active seller profile
 
-# Generate AI summary + outreach for one lead
-curl -X POST http://localhost:8000/api/leads/<lead_id>/generate-summary
-curl -X POST http://localhost:8000/api/leads/<lead_id>/generate-outreach
+# Approve the exact draft shown: its id and content_hash come from the
+# generate/latest-ai-output response; list any quality_flags codes you reviewed.
+curl $A $C -X POST http://localhost:8000/api/leads/<lead_id>/approve-outreach \
+  -d '{"ai_output_id": "<id>", "content_hash": "<content_hash>", "acknowledged_quality_flags": []}'
 
-# Approve / reject outreach (ai_output_id is required -- get it from
-# generate-outreach's response or GET /api/leads/<lead_id>/ai-outputs)
-curl -X POST http://localhost:8000/api/leads/<lead_id>/approve-outreach \
-  -H "Content-Type: application/json" \
-  -d '{"ai_output_id": "<ai_output_id>"}'
-curl -X POST http://localhost:8000/api/leads/<lead_id>/reject-outreach \
-  -H "Content-Type: application/json" \
-  -d '{"ai_output_id": "<ai_output_id>", "reason": "Too generic"}'
+# Deliver (mock unless SLACK_WEBHOOK_URL is set); a repeat is a replay
+curl $A $C -X POST http://localhost:8000/api/leads/<lead_id>/push -d '{"integration_type": "slack"}'
 
-# Push to Slack (mock when SLACK_WEBHOOK_URL is unset)
-curl -X POST http://localhost:8000/api/leads/<lead_id>/push \
-  -H "Content-Type: application/json" \
-  -d '{"integration_type": "slack"}'
+# Queue a background job; a worker (python -m app.jobs.worker) runs it
+curl $A $C -X POST http://localhost:8000/api/batches/<batch_id>/jobs -d '{"job_type": "fit_score"}'
 
-# Push every Hot lead in a batch
-curl -X POST http://localhost:8000/api/batches/<batch_id>/push-hot \
-  -H "Content-Type: application/json" \
-  -d '{"integration_type": "slack"}'
-
-# Adoption + ROI dashboard
-curl http://localhost:8000/api/metrics/dashboard
+curl -b jar http://localhost:8000/api/metrics/dashboard
 ```
 
 ## Mock vs real modes
 
 | Subsystem | Default | How to flip to real |
 |---|---|---|
-| AI (`MockAIClient`) | mock | `USE_MOCK_AI=false` + `OPENAI_API_KEY=sk-…`. Missing key surfaces `AIConfigError` *before* any network call. |
-| Slack (`send_slack_payload`) | mock (`"mock_success"`) | `SLACK_WEBHOOK_URL=https://hooks.slack.com/services/…`. URL is read at send time, never logged or returned in responses. |
-| Database | Postgres (when configured) | Tests use in-memory SQLite via `StaticPool` |
+| AI | mock (`MockAIClient`) | `USE_MOCK_AI=false` plus `AI_PROVIDER=openai` with `OPENAI_API_KEY` (paid), or `AI_PROVIDER=qwen3-4b-lora-v1` with `LORA_INFERENCE_BASE_URL`. Misconfiguration fails before any network call. |
+| Slack | mock (`mock_success`) | `SLACK_WEBHOOK_URL=https://hooks.slack.com/services/…`. Never logged or returned. |
+| Database | PostgreSQL (`DATABASE_URL`) | Tests use in-memory SQLite, or `TEST_DATABASE_URL` for a disposable PostgreSQL |
 
 ## Test notes
 
-- Endpoint tests use a `client` fixture that overrides `get_session` with a SQLite session, so each test starts from a clean schema.
-- The real-OpenAI path is never invoked: a unit test instantiates `OpenAIClient(api_key="")` and asserts the clean `AIConfigError` is raised before any import or call.
-- The real-Slack `httpx.post` path is monkeypatched in unit tests (`app.integrations.slack.httpx.post`) and at the service level (`app.services.integration_push.send_slack_payload`).
-- A test pins the four anti-hallucination phrases in `SYSTEM_RULES` (`"only" + "data"`, `"never invent"`, `"evidence" + "inference"`, `"strict json"`).
+- **Fixtures:** `client` is signed in as an operator and sends the CSRF header. `anon_client` is anonymous, and `app_client()` builds more clients (for example a viewer). All of them override `get_session` with the test database.
+- **Setup and isolation:** `tests/conftest.py` forces mock AI, empty keys, mock Slack, non-Secure cookies (the test client uses plain http) and cheap password hashing. It blocks every non-loopback network connection.
+- **Access control:** `test_phase12_auth.py` walks every route in the app's OpenAPI schema and asserts that anonymous requests are refused.
+- **Postgres-only tests** (concurrency, process kill, takeover) skip unless `TEST_DATABASE_URL` points at a **disposable** PostgreSQL. Every table is dropped around each test.
 
-## Layout (Phase 9)
+## Layout
 
 ```
 app/
-├── api/
-│   ├── health.py            # GET /health, GET /api/health
-│   ├── batches.py           # POST /api/batches/upload, GET /api/batches[/...]
-│   ├── leads.py             # GET /api/leads[/...]
-│   ├── scoring.py           # POST score endpoints, GET /api/leads/{id}/score
-│   ├── ai.py                # generate-summary / generate-outreach / ai-outputs
-│   ├── push.py              # POST push endpoints + GET /api/leads/{id}/pushes
-│   ├── outreach_review.py   # POST approve-outreach / reject-outreach
-│   ├── metrics.py           # GET /api/metrics/dashboard
-│   └── routes.py            # aggregator imported by main.py
-├── core/                    # config, database, init_db helper
-├── models/                  # SQLAlchemy 2.0 models
-├── schemas/                 # Pydantic request/response models
-├── services/
-│   ├── csv_ingestion.py     # CSV parsing + per-row validation (pure, no DB)
-│   ├── ai_generation.py     # orchestrates lead -> AI client -> AIOutput
-│   ├── integration_push.py  # orchestrates lead -> Slack -> IntegrationPush
-│   └── metrics.py           # adoption + ROI counters (read-only)
-├── scoring/
-│   └── lead_scoring.py      # deterministic 100-point scoring (pure, no LLM)
-├── ai/
-│   ├── client.py            # AIClient ABC + OpenAIClient + get_ai_client()
-│   ├── mock_client.py       # deterministic, no-network MockAIClient
-│   ├── prompts.py           # strict-JSON prompt templates (real mode only)
-│   └── json_parser.py       # tolerant JSON-object parser
-└── integrations/
-    └── slack.py             # payload builder + httpx sender (pure, no DB)
-tests/                       # pytest suite
+├── api/            # routers (thin): auth (login + app-wide access check), batches, leads, scoring,
+│                   # fit_scoring, ai, outreach_review, push, jobs, metrics, seller_profile, annotation, demo
+├── core/           # config, database, actor (who is acting), hashing
+├── models/         # SQLAlchemy models (incl. users/sessions, background jobs, delivery ledger)
+├── schemas/        # Pydantic request/response models
+├── services/       # DB writes + WorkflowEvents: generation, draft review, delivery, metrics, auth, ...
+├── jobs/           # durable background jobs: queue, handlers, runner, worker CLI
+├── ai/             # AIClient ABC, mock/OpenAI/LoRA clients, grounding, prompts, runtime quality checks
+├── scoring/        # legacy 100-point scorer and versioned company-fit scorer (pure)
+├── evaluation/     # frozen Phase 7/9 evaluation criteria and metrics
+├── datasets/, pdl/ # dataset building and the PDL importer
+├── integrations/   # Slack payload builder + sender
+└── auth_cli.py     # operator account CLI
+alembic/versions/   # 12 migrations (0001 … 0012_operator_auth)
+tests/              # pytest suite
 ```
 
-## Environment
+## Not implemented
 
-All config is read from `.env` (see `.env.example`). `USE_MOCK_AI` defaults to `true`. `OPENAI_API_KEY` is only required when `USE_MOCK_AI=false`. `SLACK_WEBHOOK_URL` is optional, empty means mock pushes. The webhook URL is never logged or returned in API responses.
-
-## Not implemented yet
-
-Auth, real email send, HubSpot / Salesforce / Sheets / Zapier, deployment recipe. See [`../PROJECT_STATUS.md`](../PROJECT_STATUS.md) and the project roadmap in the root README.
+Deployment (hosting, TLS, a persistent model server), real email sending,
+HubSpot/Salesforce/Sheets, multi-tenancy and self-service registration (by
+design). Current status and release blockers:
+`../docs/upgrade/phase-status.md` and `../docs/upgrade/phase12-release-handoff.md`.

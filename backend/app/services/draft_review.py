@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.core.hashing import content_hash  # noqa: F401 -- re-exported
 from app.ai import quality_checks
+from app.core.actor import actor_label
 from app.ai.grounding import (
     AIOutputValidationError,
     describe_details,
@@ -55,9 +56,10 @@ STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
 STATUS_SUPERSEDED = "superseded"
 
-# No authentication exists (docs/upgrade/audit.md F.1): every review and
-# human revision is stamped with this honest label. Request bodies that try
-# to supply a name are rejected by the schemas (extra="forbid").
+# Before Phase 12 there was no authentication and every review and human
+# revision was stamped with this label; those rows keep it. Since Phase 12
+# the authenticated actor is recorded instead (app/core/actor.py). Request
+# bodies still cannot supply a name (extra="forbid").
 REVIEWER_LABEL = "local-demo-unauthenticated"
 HUMAN_EDIT_MODEL = "human_edit"
 
@@ -264,7 +266,7 @@ def apply_review(
     output: AIOutput,
     decision: str,
     reason: str | None = None,
-    reviewer_label: str = REVIEWER_LABEL,
+    reviewer_label: str | None = None,
     acknowledged_quality_flags: list[str] | None = None,
 ) -> tuple[AIOutputReview, bool]:
     """Record a decision on the exact draft (and content) displayed.
@@ -272,6 +274,7 @@ def apply_review(
     An identical repeat of the current decision is an idempotent no-op; a
     changed decision is a new row and its own event. A blocked lead's status
     is a hard disposition and is never overwritten (Phase 3)."""
+    reviewer_label = reviewer_label or actor_label()
     latest = latest_reviews_by_output(session, [output.id]).get(output.id)
     draft_hash = content_hash(output.content)
     if lead.status not in DISQUALIFIED_STATUSES:
@@ -382,7 +385,7 @@ def create_revision(
         seller_profile_content_hash=output.seller_profile_content_hash,
         seller_profile_kind=output.seller_profile_kind,
         purpose=output.purpose,
-        author_label=REVIEWER_LABEL,
+        author_label=actor_label(),
     )
     session.add(revision)
     session.flush()
@@ -396,7 +399,7 @@ def create_revision(
             "purpose": output.purpose,
             "parent_content_hash": expected_content_hash,
             "content_hash": new_hash,
-            "author_label": REVIEWER_LABEL,
+            "author_label": actor_label(),
         },
     ))
     return revision, True

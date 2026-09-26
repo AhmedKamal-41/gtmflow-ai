@@ -88,7 +88,9 @@ def main() -> int:
     # no OpenAI key, no Slack webhook.
     os.environ.update({"DATABASE_URL": args.database_url, "USE_MOCK_AI": "false", "AI_PROVIDER": "qwen3-4b-lora-v1",
                        "LORA_INFERENCE_BASE_URL": args.base_url, "LORA_INFERENCE_API_KEY": token,
-                       "OPENAI_API_KEY": "", "SLACK_WEBHOOK_URL": ""})
+                       "OPENAI_API_KEY": "", "SLACK_WEBHOOK_URL": "",
+                       # Phase 12: the in-process test client talks plain http.
+                       "SESSION_COOKIE_SECURE": "false"})
     sys.path.insert(0, str(BACKEND))
     from app.ai import quality_checks
     from app.ai.client import AIConfigError, AIProviderError
@@ -178,6 +180,17 @@ def main() -> int:
         if session.scalar(select(func.count()).select_from(AIOutput)):
             sys.exit("refused: the acceptance database is not empty; use a fresh disposable database")
         api = TestClient(app)
+        # Phase 12: sign in as a throwaway operator in the disposable database
+        # (random password, never stored or shown).
+        import secrets as _secrets
+
+        from app.services import auth as auth_service
+
+        password = _secrets.token_urlsafe(24)
+        auth_service.create_user(session, "acceptance-driver", password, "operator")
+        session.commit()
+        login = api.post("/api/auth/login", json={"username": "acceptance-driver", "password": password})
+        api.headers["X-CSRF-Token"] = login.json()["csrf_token"]
         template = api.get("/api/seller-profile/demonstration-template").json()
         saved = api.post("/api/seller-profile", json={"expected_version": 0, "profile": template}).json()
         seq = api.get("/api/seller-profile/status").json()["activation_sequence"]

@@ -297,6 +297,11 @@ beforeEach(async () => {
 // ------------------------------------------------------------------ tests
 
 describe("history panels", () => {
+  // Phase 12: this test renders ~460 history entries through 10 "Load more"
+  // clicks. It is CPU-bound, not timing-dependent: ~3.1 s alone, and it once
+  // exceeded Vitest's default 5 s limit (5,134 ms) while every test file ran
+  // in parallel on 2 vCPUs. The limit now matches the workload; every
+  // assertion is unchanged.
   it("both panels page past 200 entries", async () => {
     render(<LeadDetailPage />);
     await screen.findByText("Alpha Co current draft");
@@ -307,7 +312,7 @@ describe("history panels", () => {
     expect(
       within(section("All AI outputs (history)")).getByText("lead-a summary 229"),
     ).toBeInTheDocument();
-  });
+  }, 20_000);
 
   it.each([
     { heading: "Push history", method: "getPushes", total: 230, label: "push" },

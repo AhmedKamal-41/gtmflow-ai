@@ -39,7 +39,8 @@ from app.models.annotation import (
 )
 from app.schemas.annotation import AnnotationSubmit
 from app.services.ai_generation import _generate, resolve_active_seller
-from app.services.draft_review import REVIEWER_LABEL, ReviewError, create_revision
+from app.core.actor import actor_label
+from app.services.draft_review import ReviewError, create_revision
 from app.services.splits import EXPERIMENT_TARGETS
 
 STATUS_AWAITING_GENERATION = "awaiting_generation"
@@ -189,7 +190,7 @@ def submit_annotation(
         missing_info_handling=request.missing_info_handling,
         notes=request.notes,
         skip_reason=request.skip_reason,
-        reviewer_label=REVIEWER_LABEL,
+        reviewer_label=actor_label(),
         review_mode={"accepted": "accept", "corrected": "correct", "skipped": "skip"}[request.decision],
         timing=timing,
     )
@@ -199,7 +200,7 @@ def submit_annotation(
         "annotation_id": str(row.id), "candidate_id": str(candidate.id), "queue": candidate.queue,
         "decision": row.decision, "source_output_id": str(source.id),
         "target_output_id": str(target_id) if target_id else None,
-        "reviewer_label": REVIEWER_LABEL,
+        "reviewer_label": actor_label(),
     }))
     return row, True
 
@@ -286,7 +287,9 @@ def export_rows(session: Session, queue: str | None = None) -> list[dict[str, An
             "is_mock": source.model_used == "mock",
             "is_demo_seller": source.seller_profile_kind == "demo",
             "reviewer_label": annotation.reviewer_label,
-            "reviewer_authenticated": False,
+            # Phase 12: true only for reviews by a signed-in user; every
+            # annotation recorded before Phase 12 stays False.
+            "reviewer_authenticated": annotation.reviewer_label.startswith("user:"),
             "review_mode": annotation.review_mode,
             "decision": annotation.decision,
             "reviewed_at": annotation.created_at.isoformat(),

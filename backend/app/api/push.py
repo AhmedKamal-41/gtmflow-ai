@@ -29,7 +29,7 @@ from app.services.integration_push import (
     lead_has_successful_slack_push,
     resolve_unknown_delivery,
 )
-from app.services.draft_review import REVIEWER_LABEL
+from app.core.actor import actor_label
 from app.services.pagination import pagination_params, paginate
 
 router = APIRouter(tags=["push"])
@@ -147,7 +147,7 @@ def resolve_push(push_id: UUID, body: DeliveryResolution, session: Session = Dep
     if push is None:
         raise HTTPException(status_code=404, detail="Push not found")
     try:
-        push = resolve_unknown_delivery(session, push, body.resolution, body.note, REVIEWER_LABEL)
+        push = resolve_unknown_delivery(session, push, body.resolution, body.note, actor_label())
     except ResolutionError as e:
         session.rollback()
         raise HTTPException(status_code=e.status_code, detail=e.detail) from None

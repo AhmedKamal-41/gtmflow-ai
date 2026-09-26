@@ -279,7 +279,7 @@ def test_correction_is_exported_exactly_and_unreviewed_or_skipped_are_not(client
     assert row["target_output_id"] == target_id
     assert row["source_output_id"] == outreach_detail["source_output"]["id"]
     assert row["is_mock"] is True and row["is_demo_seller"] is True
-    assert row["reviewer_label"] == "local-demo-unauthenticated" and row["reviewer_authenticated"] is False
+    assert row["reviewer_label"] == "user:test-operator" and row["reviewer_authenticated"] is True
     assert row["notes"] == "Tightened the opening."
     assert row["split"] == "train" and row["manifest_version"] == "company-groups-v1"
     assert row["input_hash"] == outreach_detail["source_output"]["input_hash"]

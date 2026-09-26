@@ -1,5 +1,6 @@
 from app.models.ai_output import AIOutput
 from app.models.ai_output_review import AIOutputReview
+from app.models.auth import User, UserSession
 from app.models.background_job import BackgroundJob, BackgroundJobItem
 from app.models.annotation import (
     AnnotationCandidate,
@@ -37,5 +38,14 @@ __all__ = [
     "SellerProfileActivation",
     "SplitManifest",
     "TrainingAnnotation",
+    "User",
+    "UserSession",
     "WorkflowEvent",
 ]
+
+# Phase 12: stamp the current actor on every WorkflowEvent in EVERY process
+# that uses the models (API, background worker, CLIs), not only the API.
+from app.core.actor import install_event_hook as _install_event_hook  # noqa: E402
+
+_install_event_hook()
+

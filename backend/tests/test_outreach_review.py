@@ -88,7 +88,7 @@ def test_approve_outreach_creates_workflow_event_and_review(
     assert len(reviews) == 1
     assert reviews[0].decision == "approved"
     assert str(reviews[0].ai_output_id) == output_id
-    assert reviews[0].reviewer_label == "local-demo-unauthenticated"
+    assert reviews[0].reviewer_label == "user:test-operator"
     assert reviews[0].legacy_unlinked is False
 
 

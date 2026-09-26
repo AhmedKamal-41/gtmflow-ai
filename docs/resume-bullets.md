@@ -1,40 +1,43 @@
 # Resume bullets
 
-Five bullets, ≤ 17 words each. All numbers are honest and grounded in the project.
+Six bullets, 17 words or fewer each. Every number traces to a recorded result (sources below).
 
-1. Built FastAPI backend with CSV ingestion and deterministic 100-point lead scoring, covered by 117 pytest tests.
+1. Built FastAPI/PostgreSQL GTM workflow app: grounded AI drafting, exact-draft approvals, and audited Slack routing.
 
-2. Designed mock-by-default AI client supporting OpenAI structured JSON with anti-hallucination prompts separating evidence from inference.
+2. Fine-tuned Qwen3-4B with LoRA on 419 AI-reviewed examples; blind AI review rated 69% acceptable.
 
-3. Implemented Slack incoming-webhook integration with mock mode, 10-second timeout, and an audit trail per push attempt.
+3. Integrated the fine-tuned model through an OpenAI-compatible client, verified once on a self-deleting GPU pod.
 
-4. Shipped Next.js + Tailwind dashboard with seven user pages spanning upload, batches, lead workspace, and metrics.
+4. Built a database-backed job queue with leases and bounded retries; recovered a killed worker without duplicates.
 
-5. Added adoption/ROI metrics endpoint computing approval rate, push success rate, and estimated time saved (5 min/lead).
+5. Prevented duplicate Slack dispatch with a claim-before-send ledger; eight concurrent requests sent exactly one message.
 
-## Word counts (for verification)
+6. Added session authentication with CSRF protection, roles, lockout, and actor-stamped audit events across every route.
+
+## Word counts
 
 | # | Words |
 |---|---|
-| 1 | 16 |
-| 2 | 15 |
-| 3 | 16 |
+| 1 | 14 |
+| 2 | 14 |
+| 3 | 15 |
 | 4 | 16 |
-| 5 | 16 |
+| 5 | 15 |
+| 6 | 15 |
 
 ## What these bullets deliberately do not claim
 
-- No "users", there are no real users.
-- No "increased revenue", the project doesn't ship revenue.
-- No "production", no deployment recipe exists.
-- No specific company-name reference for AI/Slack outputs that didn't come from the lead.
-- No "automated email sending", outreach is always a draft.
-- Time-saved is explicitly framed as `5 min/lead` (the formula), not as measured rep-time.
+- **No users, revenue or production:** there are no real users and nothing is deployed.
+- **No human-verified model quality:** the training references and the 69% come from **AI** review (Claude), not people, on a small test set (71 examples; 36 outreach). Say "AI-reviewed" and "blind AI review" when asked.
+- **No always-on model:** the fine-tuned model ran once, on a temporary GPU pod, for an acceptance test. The app runs in mock mode by default.
+- **No real Slack traffic:** every delivery in this project so far was mock (or a test double).
+- **No automated email sending:** outreach is always a reviewed draft.
 
-## Source numbers
+## Sources
 
-- **117 pytest tests**, `pytest -v` output after Phase 9 (Phase 8 ended at 116; Phase 9 added `test_metrics_unique_leads_pushed_dedupes_repeat_pushes`).
-- **Seven user pages**, `/`, `/upload`, `/batches`, `/batches/[batchId]`, `/leads/[leadId]`, `/metrics`, `/demo`. (Next.js's auto-generated `/_not-found` makes it 8 routes in the build output, but only 7 user-visible pages.)
-- **100-point**, categories cap at 95 in practice; the clamp is at 100. Either is honest.
-- **10-second timeout**, `SLACK_TIMEOUT_SECONDS = 10.0` in `backend/app/integrations/slack.py`.
-- **5 min/lead**, `MINUTES_SAVED_PER_PROCESSED_LEAD = 5` in `backend/app/services/metrics.py`.
+- **Bullet 1:** grounded generation with fact-reference validation (Phase 5); exact-draft, content-hash approvals (Phase 6); delivery ledger (Phase 11).
+- **Bullet 2:** `docs/upgrade/phase8-training-handoff.md` (419 training examples; the reviews were AI and 5 human decisions) and `docs/upgrade/phase9-evaluation-handoff.md` §12 (blind AI review: 49 of 71 = 69.0% acceptable as-is; base model 1 of 71).
+- **Bullet 3:** `docs/upgrade/phase10-integration-handoff.md` §9. One L4 pod, all 8 required criteria passed, and the pod deleted itself with its own key.
+- **Bullet 4:** `docs/upgrade/phase10-integration-handoff.md` §3. A SIGKILLed worker on a 300-lead job; a second worker finished it with exactly 300 outputs for 300 leads.
+- **Bullet 5:** `docs/upgrade/phase11-routing-metrics-handoff.md` §6. 8 simultaneous pushes on PostgreSQL produced exactly 1 send.
+- **Bullet 6:** `docs/upgrade/phase12-release-handoff.md`. A test walks every API route and asserts that anonymous requests are refused.

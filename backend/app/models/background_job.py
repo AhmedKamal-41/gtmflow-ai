@@ -66,6 +66,8 @@ class BackgroundJob(Base):
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Phase 12: who queued the job ("user:<name>"); NULL for jobs queued before.
+    created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

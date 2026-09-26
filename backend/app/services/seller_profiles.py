@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.actor import actor_label as current_actor_label
 from app.models import SellerProfile, SellerProfileActivation, WorkflowEvent
 from app.schemas.seller_profile import (
     SellerProfileActivate,
@@ -97,7 +98,7 @@ def save_seller_profile(
         version=current_version + 1,
         profile=profile,
         content_hash=content_hash,
-        editor_label=EDITOR_LABEL,
+        editor_label=current_actor_label(),
     )
     session.add(row)
     session.add(WorkflowEvent(
@@ -221,7 +222,7 @@ def activate_seller_profile(
         action="activate",
         reviewed_confirmation=True,
         demo_acknowledged=bool(request.acknowledge_demo),
-        actor_label=EDITOR_LABEL,
+        actor_label=current_actor_label(),
     )
     _record_activation(session, row, "seller_profile_activated")
     return _commit_activation(session, row, current_sequence, same)
@@ -253,7 +254,7 @@ def deactivate_seller_profile(
         action="deactivate",
         reviewed_confirmation=False,
         demo_acknowledged=False,
-        actor_label=EDITOR_LABEL,
+        actor_label=current_actor_label(),
     )
     _record_activation(session, row, "seller_profile_deactivated")
     return _commit_activation(session, row, current_sequence, same)

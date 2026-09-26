@@ -24,6 +24,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.actor import Actor, reset_actor, set_actor
 from app.jobs.handlers import HANDLERS, JobFatalError, TransientItemError
 from app.jobs.queue import Clock, _event, utcnow
 from app.models import Lead
@@ -94,7 +95,20 @@ def run_job(factory: sessionmaker[Session], job_id: UUID, worker_id: str, *, lea
             clock: Clock = utcnow, should_stop: Callable[[], bool] = lambda: False,
             item_limit: int | None = None) -> str:
     """Run a job this worker has claimed. Returns its final job status, or
-    LOST / RELEASED / PAUSED."""
+    LOST / RELEASED / PAUSED. Everything the job does is recorded with the
+    actor "job:<who queued it>" (Phase 12)."""
+    with factory() as session:
+        queued_by = session.get(BackgroundJob, job_id).created_by or "unknown"
+    token = set_actor(Actor(label=f"job:{queued_by}"[:64]))
+    try:
+        return _run_job(factory, job_id, worker_id, lease_seconds=lease_seconds, clock=clock,
+                        should_stop=should_stop, item_limit=item_limit)
+    finally:
+        reset_actor(token)
+
+
+def _run_job(factory: sessionmaker[Session], job_id: UUID, worker_id: str, *, lease_seconds: float,
+             clock: Clock, should_stop: Callable[[], bool], item_limit: int | None) -> str:
     handler = HANDLERS[_job_type(factory, job_id)]
     with factory() as session:
         job = session.get(BackgroundJob, job_id)

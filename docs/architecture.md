@@ -1,5 +1,8 @@
 # Architecture
 
+> **Status note (Phase 12):** the diagram and counts below describe the original design. Added since then: Alembic migrations, the PDL importer, company-fit scoring, grounded generation, review revisions and annotation, background jobs and a worker, the Slack delivery ledger, cohort metrics, and operator authentication (an app-wide access check in `app/api/auth.py`). See the README and `docs/upgrade/phase-status.md` for the current system.
+
+
 GTMFlow AI is a two-service portfolio app plus one database and two optional external integrations. Everything is mock-able so the demo runs without any external accounts.
 
 ## Top-level

@@ -10,6 +10,9 @@ os.environ["SLACK_WEBHOOK_URL"] = ""
 os.environ["AI_PROVIDER"] = "openai"  # Phase 10: never a developer's inference server
 os.environ["LORA_INFERENCE_BASE_URL"] = ""
 os.environ["LORA_INFERENCE_API_KEY"] = ""
+# Phase 12: the test client talks plain http, and hashing cost is kept low.
+os.environ["SESSION_COOKIE_SECURE"] = "false"
+os.environ["PASSWORD_HASH_N"] = "1024"
 
 # Defense in depth: even if a test builds a real client explicitly, no
 # socket may resolve or reach a non-loopback host during the test run.
@@ -126,8 +129,30 @@ def db_session(db_session_factory: sessionmaker[Session]) -> Iterator[Session]:
         session.close()
 
 
+TEST_PASSWORD = "correct-horse-battery-staple"
+
+
+def create_test_user(db_session_factory, username: str, role: str = "operator") -> None:
+    from app.services import auth as auth_service
+
+    with db_session_factory() as session:
+        auth_service.create_user(session, username, TEST_PASSWORD, role)
+        session.commit()
+
+
+def sign_in(test_client: TestClient, username: str, password: str = TEST_PASSWORD) -> dict:
+    """Log in; the session cookie stays in the client and the CSRF token is
+    sent on every later request, as the frontend does."""
+    response = test_client.post("/api/auth/login", json={"username": username, "password": password})
+    assert response.status_code == 200, response.text
+    test_client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
+    return response.json()
+
+
 @pytest.fixture()
-def client(db_session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
+def app_client(db_session_factory: sessionmaker[Session]) -> Iterator:
+    """Factory for clients bound to the test database: anonymous unless the
+    test signs in (Phase 12)."""
     def _override() -> Iterator[Session]:
         session = db_session_factory()
         try:
@@ -137,9 +162,23 @@ def client(db_session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_session] = _override
     try:
-        yield TestClient(app)
+        yield lambda: TestClient(app)
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture()
+def client(app_client, db_session_factory: sessionmaker[Session]) -> TestClient:
+    """A client signed in as an operator (every existing test acts as one)."""
+    create_test_user(db_session_factory, "test-operator")
+    test_client = app_client()
+    sign_in(test_client, "test-operator")
+    return test_client
+
+
+@pytest.fixture()
+def anon_client(app_client) -> TestClient:
+    return app_client()
 
 
 SYNTHETIC_SELLER_PROFILE = {

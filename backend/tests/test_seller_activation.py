@@ -139,7 +139,7 @@ def test_activation_and_its_audit_event_match(client, db_session):
     assert event.event_data["seller_profile_version"] == 1
     assert event.event_data["content_hash"] == v1["content_hash"]
     assert event.event_data["reviewed_confirmation"] is True
-    assert event.event_data["actor_label"] == "local-demo-unauthenticated"
+    assert event.event_data["actor_label"] == "user:test-operator"
 
 
 def test_concurrent_activation_race_is_reported_as_conflict(client, db_session_factory, monkeypatch):
