@@ -6,7 +6,7 @@ Date: 2026-09-26. No retraining, paid compute, paid API call, deployment, automa
 
 | Component | Status | Why not higher |
 |---|---|---|
-| `qwen3-4b-lora-v1` as an `AIClient` (`LocalLoRAClient`) | **Code ready; awaiting real-inference verification.** Tested against mocked and stub servers; a one-time GPU acceptance test is prepared (§8), not run. | The contract's "integrated" rung needs at least one real request served by the evaluated adapter in this environment. That is §8, which needs your approval. |
+| `qwen3-4b-lora-v1` as an `AIClient` (`LocalLoRAClient`) | **Integrated: real-inference verified on 2026-09-26** (§9). All 8 required acceptance criteria passed with the pinned base model and the Phase 8 adapter served on a temporary L4 pod. | No persistent inference server exists: the app runs in mock mode, and production serving and hosting remain a decision (§6). Exact output parity with Phase 9 was 7 of 20 (§9). |
 | The Phase 8 adapter itself | **Evaluated** (Phase 9, AI-evaluated) | Unchanged in this phase. |
 | Durable background jobs | **Done and verified:** tests on SQLite and Postgres, including a killed worker process; also run live over HTTP with a real worker process | Not load-tested beyond 300 items and 2 workers. |
 | Runtime quality checks (`runtime-checks-v1`) and approval acknowledgement | **Done and verified as code:** tests, regression coverage on the Phase 9 data the rules were tuned on, false-positive check on 100 untouched references, run live over HTTP | Detection of *new* problematic wording is untested (§4). |
@@ -113,19 +113,23 @@ All runs used mock AI, mock Slack, blanked keys and isolated data. At the time, 
 - selection through `get_ai_client`;
 - the whole HTTP path from the API to an OpenAI-compatible endpoint.
 
-**Not verified (needs a real inference server with the adapter):**
+**Verified with real inference on 2026-09-26 (§9), using `serve.py` on an L4:**
 
-- that a real server (vLLM or similar) loads the adapter and serves it under the configured name;
-- that its chat template and greedy decoding reproduce the Phase 9 outputs. GPU kernels may differ slightly between Hugging Face `generate` and vLLM;
-- real latency, memory and throughput;
-- that real outputs pass validation at the Phase 9 rate (197 of 197 parsed and valid there);
-- the actual rate of runtime flags on production data.
+- the server loads the pinned adapter (hashes checked) and serves it under `qwen3-4b-lora-v1`;
+- all 20 test cases and the 4 app-path requests produced valid outputs with the same Phase 9 categories;
+- latency one request at a time: p50 22.6 s, p95 28.0 s; peak GPU memory 8.2 GiB.
+
+**Still not verified:**
+
+- byte-level reproduction of Phase 9: 7 of 20 identical (the batch-of-8 versus single-request difference);
+- any other server (vLLM or similar) and its throughput under concurrent load;
+- the rate of runtime flags on production data. It differed from the Phase 9 outputs on 4 of 20 cases.
 
 ## 6. Remaining inference setup (to reach "integrated")
 
-1. **Run the prepared acceptance test (§8).** It needs your approval: paid GPU time, and the test inputs sent as prompts to your private pod.
-2. **If it passes,** the client's status can move to "integrated" for this environment. Choosing a production serving setup (for example vLLM with `--enable-lora`, or the Phase 10 `serve.py`) and its hosting cost remains a separate decision. No always-on server exists.
-3. **If it fails,** nothing changes in the app: mock stays the default, and the evidence is kept for diagnosis.
+1. **Done:** the acceptance test ran and passed (§9).
+2. **Still open:** a production serving setup (vLLM with `--enable-lora`, or `serve.py`, which is one request at a time at about 20–30 s per draft on an L4) and its hosting cost. No always-on server exists, and `backend/.env` stays in mock mode.
+3. **Before real use:** keep every outreach draft behind review. The runtime flags are computed on each served draft, and in §9 they differed from the Phase 9 outputs' flags on 4 of 20 cases.
 
 ## 7. Known limitations and open items
 
@@ -138,7 +142,7 @@ All runs used mock AI, mock Slack, blanked keys and isolated data. At the time, 
 - **Database recovery:** still open (Phase 9 handoff §8), and kept separate.
 - **Stop point:** Phase 11 (routing and metrics) has not started.
 
-## 8. Prepared GPU acceptance test (not run; awaiting approval)
+## 8. Prepared GPU acceptance test (run on 2026-09-26; results in §9)
 
 **Purpose:** one temporary pod serves the **pinned base model and the Phase 8 adapter**, and the app in this Codespace uses it through its real `LocalLoRAClient`. This is the missing "real request" for the integrated rung. It reuses the verified Phase 8/9 work:
 
@@ -250,5 +254,75 @@ The last recorded RunPod balance is $8.6924. The Phase 9 authorization does not 
 1. Authorize **$0.80** of RunPod spending for one run.
 2. Approve sending the 20 test inputs, as prompts, to the private pod.
 
-Model integration stays **"awaiting real-inference verification"** until this test passes.
+The test ran once, as authorized, and passed (§9).
+
+## 9. Acceptance test results (2026-09-26, real inference)
+
+**Authorization (yours):**
+
+- up to $0.80 of RunPod spend for one `phase10-accept` run;
+- one L4 with a $0.60/hr cap and a 75-minute lifetime;
+- transfer of bundle `4bde2e6a…`, plus the 20 test inputs and 4 app-path requests through the SSH tunnel.
+
+It excluded retraining, automatic paid retries, GPU substitution, real Slack sends and automatic approvals. All of these were respected. `backend/.env` stayed `USE_MOCK_AI=true` throughout; real LoRA mode applied only to the driver and its worker process, on the disposable `gtmflow_accept` database.
+
+**Free check:** API OK, no pods, $0/hr, SSH key present, bundle `4bde2e6a…` (commit `45bae42`, 39 members, no data files).
+
+**Run** (pod `62odewkhgu10z7`, 1× NVIDIA L4, Secure Cloud, $0.49/hr):
+
+| | |
+|---|---|
+| Timeline | Created 03:20:33Z. Safeguard checks passed 03:21:37Z. Bundle transferred (sha verified) and one-time token installed 03:21:43Z. Serving 03:22:55Z (model load 34.8 s). Acceptance 03:23:03–03:32:26Z (9 min 23 s). Stop 03:32:27Z. Copy-back verified 03:32:44Z. **The pod deleted itself with its own key** (the third proof) and removal was confirmed at 03:32:55Z. |
+| Pod lifetime | **12 min 22 s** (the estimate was 15–40 min) |
+| Copy-back | Archive `97c47ecd…` matched; 12 files matched `SHA256SUMS`; **the adapter hashes the server loaded match the pins**; the config sha matches the repository |
+| Server | 29 requests logged: 28 × 200 and 1 × 401 (the wrong-token check). Stopped by the stop file. Peak GPU memory 8.22 GiB allocated, 8.54 GiB reserved |
+| After | A separate API check listed no pods and $0/hr. The disposable acceptance database container was removed. The launcher exited 0. |
+
+**Acceptance criteria.** `acceptance.passed` is **true**, and every required criterion was checked individually:
+
+| Criterion | Required | Result |
+|---|---|---|
+| A1 all complete | yes | **pass:** 20 of 20, no error, no truncation |
+| A2 app validator | yes | **pass:** 20 of 20 |
+| A3 same Phase 9 categories | yes | **pass:** 20 of 20 |
+| B1 API generation with provenance | yes | **pass:** summary and outreach 200, `model_used=qwen3-4b-lora-v1`, pinned adapter revision. The outreach draft was flagged `commercial_opportunity_framing`. |
+| B2 background job | yes | **pass:** completed by a real worker process, 2 succeeded, 1 skipped |
+| B3 no review or push | yes | **pass:** 0 reviews, 0 pushes; all 4 saved outputs carry the pinned adapter revision |
+| C1 unserved model refused | yes | **pass:** refused before any generation |
+| C2 wrong token refused | yes | **pass:** 401, surfaced as a provider error |
+| A4 identical to Phase 9 | measured | **7 of 20** |
+| D latency | measured | see below |
+
+**Parity finding (A4).** Only 7 of 20 outputs are byte-identical to the stored Phase 9 outputs, fewer than the "high" expected in §8. Phase 9 decoded left-padded batches of 8, while the server decodes one unpadded request at a time; in bf16 that changes numerics, and greedy decoding then diverges.
+
+- The 13 differing outputs are close (ROUGE-L against the Phase 9 text 0.82–0.99), mostly in `seller_relevance`, subjects and call notes.
+- All 13 are valid, with the same Phase 9 categories.
+- **Runtime flags differ from the Phase 9 output's flags on 4 of 20** (all outreach): one draft gained `presumed_outreach_activity`, and three lost `commercial_opportunity_framing`.
+- So the Phase 9 blind-review rates describe the batched outputs, not exactly what the served model writes. Flags are computed on each actual draft, which is why review stays required.
+
+**Latency** (L4, one request at a time):
+
+- 20 test cases: p50 **22.6 s**, p95 **28.0 s**, range 18.9–30.1 s, mean 292 completion tokens;
+- through the API: summary and outreach for one lead in 48.1 s;
+- background job: 2 outreach drafts in 42.3 s.
+
+**Spending:**
+
+| | USD |
+|---|---|
+| RunPod balance before this run (at the free check) | 8.6684 |
+| After (settled at the post-run API check) | 8.5945 |
+| **This run** | **$0.0739** (launcher estimate $0.103; the balance may settle slightly lower) of the $0.80 authorized |
+
+The balance had already fallen from $8.6924 (recorded after Phase 9) to $8.6684 before this run was created, a later settlement of about $0.024 attributable to Phase 9. It is not part of this run.
+
+**Preserved:**
+
+- 114 earlier run and record files are byte-identical;
+- `events.jsonl` and `known_hosts` were only appended to (their original bytes intact);
+- the Phase 8 `state.json` is unchanged (`e60efa99…`);
+- this run's state is in `state-phase10-accept-v1.json`;
+- the results are git-ignored in `training/runs/phase10-accept-v1/`.
+
+**Readiness:** `qwen3-4b-lora-v1` through `LocalLoRAClient` is **integrated (real inference verified)** for this environment. Serving it persistently, and its cost, remain decisions (§6). Phase 11 has not started.
 
