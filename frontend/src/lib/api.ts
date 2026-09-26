@@ -11,6 +11,8 @@ import type {
   DemoRunResponse,
   FitProfile,
   IntegrationPush,
+  Job,
+  JobType,
   Lead,
   LeadBatch,
   LeadFitScore,
@@ -285,18 +287,46 @@ export function getPushes(
 // approving/rejecting, so a stale/out-of-date UI can't silently act on a
 // different draft than the one it's showing (docs/upgrade/audit.md C.2).
 // Phase 6: every review names the exact output AND the content hash shown.
+// Phase 10: a draft with runtime quality flags is approved only with
+// `acknowledgedFlags` listing exactly the flag codes that were shown.
 export function approveOutreach(
   leadId: string,
   aiOutputId: string,
   contentHash: string,
+  acknowledgedFlags: string[] = [],
 ): Promise<OutreachReviewResponse> {
   return request<OutreachReviewResponse>(
     `/api/leads/${leadId}/approve-outreach`,
     {
       method: "POST",
-      body: JSON.stringify({ ai_output_id: aiOutputId, content_hash: contentHash }),
+      body: JSON.stringify({
+        ai_output_id: aiOutputId,
+        content_hash: contentHash,
+        acknowledged_quality_flags: acknowledgedFlags,
+      }),
     },
   );
+}
+
+// ---- Phase 10: background jobs ------------------------------------------
+
+export function createBatchJob(
+  batchId: string,
+  jobType: JobType,
+  params: Record<string, boolean> = {},
+): Promise<Job> {
+  return request<Job>(`/api/batches/${batchId}/jobs`, {
+    method: "POST",
+    body: JSON.stringify({ job_type: jobType, params }),
+  });
+}
+
+export function listBatchJobs(batchId: string, limit = 10): Promise<Page<Job>> {
+  return request<Page<Job>>(`/api/jobs${buildQuery({ batch_id: batchId, limit })}`);
+}
+
+export function cancelJob(jobId: string): Promise<Job> {
+  return request<Job>(`/api/jobs/${jobId}/cancel`, { method: "POST" });
 }
 
 export function rejectOutreach(

@@ -101,6 +101,9 @@ export default function LeadDetailPage() {
   const [reviewState, setReviewState] = useState<ReviewState | undefined>(undefined);
   const [reviewStateError, setReviewStateError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
+  // Phase 10: the reviewer's acknowledgement of the current draft's quality
+  // flags, keyed by draft id so it never carries over to another draft.
+  const [flagsAckFor, setFlagsAckFor] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [editing, setEditing] = useState(false);
   const [editFields, setEditFields] = useState({ subject: "", email_body: "", call_note: "" });
@@ -330,6 +333,11 @@ export default function LeadDetailPage() {
   // navigation) or failed (Part A.2: "disable stale actions during
   // navigation or lookup failure").
   const canReviewOutreach = latestOutreach !== undefined && latestOutreach !== null;
+  const draftFlagCodes = Array.from(
+    new Set((latestOutreach?.quality_flags ?? []).map((flag) => flag.code)),
+  ).sort();
+  const flagsAcknowledged =
+    draftFlagCodes.length === 0 || (latestOutreach != null && flagsAckFor === latestOutreach.id);
   const canEditOutreach =
     canReviewOutreach && latestOutreach?.output_schema_version === "v2";
 
@@ -426,12 +434,30 @@ export default function LeadDetailPage() {
         </Button>
         {canReviewOutreach && latestOutreach && (
           <>
+            {draftFlagCodes.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-amber-900">
+                <input
+                  type="checkbox"
+                  aria-label="I reviewed the quality flags"
+                  checked={flagsAckFor === latestOutreach.id}
+                  onChange={(e) => setFlagsAckFor(e.target.checked ? latestOutreach.id : null)}
+                />
+                I reviewed the {draftFlagCodes.length} quality flag
+                {draftFlagCodes.length === 1 ? "" : "s"}
+              </label>
+            )}
             <Button
               variant="secondary"
               loading={busy === "Approve"}
+              disabled={!flagsAcknowledged}
               onClick={() =>
                 runAction("Approve", () =>
-                  approveOutreach(leadId, latestOutreach.id, latestOutreach.content_hash),
+                  approveOutreach(
+                    leadId,
+                    latestOutreach.id,
+                    latestOutreach.content_hash,
+                    flagsAcknowledged ? draftFlagCodes : [],
+                  ),
                 )
               }
             >

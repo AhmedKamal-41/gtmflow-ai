@@ -7,6 +7,9 @@ from collections.abc import Iterator
 os.environ["USE_MOCK_AI"] = "true"
 os.environ["OPENAI_API_KEY"] = ""
 os.environ["SLACK_WEBHOOK_URL"] = ""
+os.environ["AI_PROVIDER"] = "openai"  # Phase 10: never a developer's inference server
+os.environ["LORA_INFERENCE_BASE_URL"] = ""
+os.environ["LORA_INFERENCE_API_KEY"] = ""
 
 # Defense in depth: even if a test builds a real client explicitly, no
 # socket may resolve or reach a non-loopback host during the test run.

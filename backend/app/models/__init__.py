@@ -1,5 +1,6 @@
 from app.models.ai_output import AIOutput
 from app.models.ai_output_review import AIOutputReview
+from app.models.background_job import BackgroundJob, BackgroundJobItem
 from app.models.annotation import (
     AnnotationCandidate,
     CompanySplitAssignment,
@@ -21,6 +22,8 @@ __all__ = [
     "AIOutput",
     "AIOutputReview",
     "AnnotationCandidate",
+    "BackgroundJob",
+    "BackgroundJobItem",
     "CompanySplitAssignment",
     "CompanyIdentity",
     "ImportRun",

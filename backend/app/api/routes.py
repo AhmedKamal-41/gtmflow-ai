@@ -6,6 +6,7 @@ from app.api.batches import router as batches_router
 from app.api.demo import router as demo_router
 from app.api.fit_scoring import router as fit_scoring_router
 from app.api.health import router as health_router
+from app.api.jobs import router as jobs_router
 from app.api.leads import router as leads_router
 from app.api.metrics import router as metrics_router
 from app.api.outreach_review import router as outreach_review_router
@@ -26,3 +27,4 @@ router.include_router(metrics_router)
 router.include_router(demo_router)
 router.include_router(seller_profile_router)
 router.include_router(annotation_router)
+router.include_router(jobs_router)

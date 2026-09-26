@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.ai import quality_checks as _quality_checks
 from app.core.hashing import content_hash as _content_hash
 
 
@@ -58,6 +59,19 @@ class AIOutputRead(AIOutputBase):
     def content_hash(self) -> str:
         """Identity of the exact content shown; reviews must send it back."""
         return _content_hash(self.content)
+
+    # Phase 10: runtime quality checks (runtime-checks-v1), computed from the
+    # stored content and the input snapshot it was generated from. Flags ask
+    # for review; they never approve, reject or change anything.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def quality_checks_version(self) -> str:
+        return _quality_checks.CHECKS_VERSION
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def quality_flags(self) -> list[dict[str, Any]]:
+        return _quality_checks.check_output(self.output_type, self.content, self.input_snapshot)
 
 
 class AIOutputRevisionCreate(BaseModel):

@@ -71,6 +71,47 @@ Both return:
 { "status": "ok", "service": "gtmflow-ai-backend", "version": "0.1.0" }
 ```
 
+## Background jobs (Phase 10)
+
+Long batch operations can run as durable background jobs instead of inside
+the request. Queue them with `POST /api/batches/{batch_id}/jobs` (or the
+"Background jobs" panel on the batch page), then run at least one worker:
+
+```bash
+python -m app.jobs.worker            # runs until SIGINT/SIGTERM
+python -m app.jobs.worker --drain    # processes every claimable job, then exits
+```
+
+Job types: `fit_score`, `legacy_score`, `generate_summary`,
+`generate_outreach` (param `skip_existing`, default true) and `push_hot`
+(param `force`, default false; delivers only approved drafts).
+
+- **Progress:** `GET /api/jobs/{id}` (counts, `progress_pct`); items with
+  `GET /api/jobs/{id}/items`; list with `GET /api/jobs?batch_id=`.
+- **Cancel:** `POST /api/jobs/{id}/cancel`.
+- **Duplicates:** an identical job already queued or running is returned
+  instead of queued twice.
+- **Worker shutdown:** a stopped worker hands its job back at once. A killed
+  worker's job is taken over after its lease (60 s) expires.
+- **Retries:** transient provider errors are retried up to 3 times per item;
+  Slack deliveries are never retried automatically.
+
+The worker uses the same `.env` as the API. **If `.env` has
+`USE_MOCK_AI=false`, the worker makes real (possibly paid) model calls.**
+
+## AI providers
+
+`USE_MOCK_AI=true` (default) uses the deterministic mock. With
+`USE_MOCK_AI=false`, `AI_PROVIDER` selects:
+
+- `openai` (default): requires `OPENAI_API_KEY`.
+- `qwen3-4b-lora-v1`: requires `LORA_INFERENCE_BASE_URL`, pointing to an
+  OpenAI-compatible server that serves the Phase 8 adapter under that name.
+
+Generated drafts carry runtime quality flags (`runtime-checks-v1`).
+Approving a flagged outreach draft requires `acknowledged_quality_flags`
+listing exactly the flags shown.
+
 ## Run tests
 
 ```bash

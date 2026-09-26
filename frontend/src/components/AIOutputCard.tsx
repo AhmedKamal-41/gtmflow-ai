@@ -98,9 +98,35 @@ export function AIOutputCard({
             {JSON.stringify(output.content, null, 2)}
           </pre>
         )}
+        <QualityFlags output={output} />
         <Provenance output={output} grounded={grounded} />
       </div>
     </Card>
+  );
+}
+
+// Phase 10: runtime quality checks. Informational here; the lead page asks
+// the reviewer to acknowledge them before approving.
+function QualityFlags({ output }: { output: AIOutput }) {
+  const flags = output.quality_flags ?? [];
+  if (flags.length === 0) return null;
+  return (
+    <div
+      aria-label="Quality flags"
+      className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+    >
+      <div className="font-semibold">
+        Needs review: {flags.length} quality flag{flags.length === 1 ? "" : "s"} ({output.quality_checks_version})
+      </div>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+        {flags.map((flag, i) => (
+          <li key={`${flag.code}-${flag.field}-${i}`}>
+            <span className="font-mono">{flag.code}</span> in {flag.field}
+            {flag.match ? <> &mdash; &ldquo;{flag.match}&rdquo;</> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -137,6 +163,7 @@ function Provenance({ output, grounded }: { output: AIOutput; grounded: boolean 
             Prompt {output.prompt_version} · output schema {output.output_schema_version} · model{" "}
             {output.model_used}/{output.model_revision}
           </div>
+          {output.adapter_revision && <div>Adapter {output.adapter_revision.slice(0, 48)}…</div>}
           {output.input_hash && <div>Input hash {output.input_hash.slice(0, 12)}</div>}
         </>
       ) : (

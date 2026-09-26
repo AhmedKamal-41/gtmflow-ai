@@ -414,8 +414,9 @@ describe("approval target", () => {
     const action = decision === "approve" ? api.approveOutreach : api.rejectOutreach;
     // Phase 6: the exact content hash displayed is sent too, and a
     // rejection carries its required reason.
+    // Phase 10: an unflagged draft is approved with an empty acknowledgement.
     const args = decision === "approve"
-      ? ["lead-a", "lead-a-draft", "hash-lead-a-draft"]
+      ? ["lead-a", "lead-a-draft", "hash-lead-a-draft", []]
       : ["lead-a", "lead-a-draft", "hash-lead-a-draft", "Off-target"];
     const act_ = async () => {
       await act(async () =>

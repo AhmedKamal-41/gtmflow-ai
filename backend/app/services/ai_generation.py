@@ -26,6 +26,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.ai import quality_checks
 from app.ai.client import AIClient, get_ai_client
 from app.ai.grounding import (
     AIOutputValidationError,
@@ -34,7 +35,7 @@ from app.ai.grounding import (
     validate_outreach,
     validate_summary,
 )
-from app.ai.json_parser import AIJSONParseError
+from app.ai.json_parser import AIJSONParseError, AIOutputTruncated
 from app.ai.prompts import PROMPT_VERSION
 from app.models import AIOutput, Lead, WorkflowEvent
 from app.models.ai_output import ORIGIN_GENERATED, PURPOSE_OPERATIONAL
@@ -222,8 +223,9 @@ def _run(
         return validate_outreach(client.generate_outreach(ctx), ctx)
     except AIJSONParseError as e:
         # The parser's message is a JSON position/type error, not reply text.
+        code = "truncated_output" if isinstance(e, AIOutputTruncated) else "invalid_json"
         raise GenerationOutputInvalid(
-            ["invalid_json"], details=[{"code": "invalid_json", "message": str(e)[:200]}]
+            [code], details=[{"code": code, "message": str(e)[:200]}]
         ) from None
     except AIOutputValidationError as e:
         raise GenerationOutputInvalid(e.reason_codes, details=e.details) from None
@@ -258,6 +260,7 @@ def _generate(
         input_hash=input_hash,
         output_schema_version=OUTPUT_SCHEMA_VERSION,
         model_revision=client.model_revision,
+        adapter_revision=client.adapter_revision,
         seller_profile_id=seller.profile_id if seller else None,
         seller_profile_version=seller.version if seller else None,
         seller_profile_content_hash=seller.content_hash if seller else None,
@@ -266,6 +269,7 @@ def _generate(
     )
     session.add(output)
     session.flush()
+    flags = quality_checks.check_output(output_type, content, ctx)
     session.add(
         WorkflowEvent(
             lead_id=lead.id,
@@ -276,6 +280,9 @@ def _generate(
                 "purpose": purpose,
                 "model_used": client.name,
                 "model_revision": client.model_revision,
+                "adapter_revision": client.adapter_revision,
+                "quality_checks_version": quality_checks.CHECKS_VERSION,
+                "quality_flags": quality_checks.flag_codes(flags),
                 "prompt_version": PROMPT_VERSION,
                 "output_schema_version": OUTPUT_SCHEMA_VERSION,
                 "input_hash": input_hash,

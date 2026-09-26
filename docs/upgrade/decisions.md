@@ -281,12 +281,31 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 | Training formatting reuses `app.ai.prompts` (loaded by file path) and a new shared `JSON_SYSTEM_MESSAGE` constant used by the real client | Production-identical inputs. The text is unchanged. Training never loads backend settings or keys. |
 | Recommended run: 1× NVIDIA L4 24 GB (RunPod Secure Cloud, $0.49/hr, verified 2026-09-25); estimated $0.30–$0.50; suggested ceiling $3.00 with a 4-hour hard stop | Awaiting your approval. No paid compute has been used. Duration and cost are estimates, not measurements. |
 
+## Decisions made in Phase 10 (model integration and durable jobs, 2026-09-26)
+
+Full detail and verification evidence: `docs/upgrade/phase10-integration-handoff.md`.
+
+| Decision | Why |
+|---|---|
+| **No new dependency.** The LoRA client reuses the `openai` package (already required) as an HTTP client; the job system uses SQLAlchemy and the existing database. | Contract rule 9. Celery or Arq (named in `docs/architecture.md`) would need Redis, which breaks the Docker-free mock demo (rule 5). |
+| **The backend does not load model weights.** `LocalLoRAClient` (`app/ai/lora_client.py`) talks to an OpenAI-compatible inference server (for example vLLM with `--enable-lora`) that serves the pinned base model with the Phase 8 adapter under the name `qwen3-4b-lora-v1`. | Keeps torch and CUDA out of the API process and its requirements; serving is a deployment concern. The request matches the Phase 9 evaluation: same system message and `grounded-v2` builders, the model's own chat template, temperature 0, at most 1,024 new tokens. |
+| **Selection is explicit and fails closed.** `USE_MOCK_AI` (default `true`) always wins. With `USE_MOCK_AI=false`, the new `AI_PROVIDER` chooses `openai` (the default, so existing configurations are unchanged) or `qwen3-4b-lora-v1`. The LoRA URL is validated before any network call (http only to a local or private host), and the first call checks that the server lists the adapter. | Contract section 2: mock by default, real mode only by explicit configuration, validated before the network. |
+| **Adapter identity is recorded, not claimed as verified.** `AIOutput.adapter_revision` (an existing column, unused until now) records the pinned adapter sha256. The server cannot prove which file it loaded. | Rule 6: record what is known; the handoff says what remains unverified. |
+| **Durable jobs are database-backed:** `background_jobs` and `background_job_items` (migration `0010`), a lease per job, and per-item transactions with a fenced lease renewal. | Survives worker restarts on the database the app already has; works on Postgres and SQLite; items commit at most once. |
+| **Retries:** at most 3 attempts per item, and only for transient errors (provider or network). Invalid model output is not retried: the LoRA decodes greedily, so the same input would fail again. Slack deliveries are never retried automatically, since a retry could deliver twice. A job reclaimed more than 3 times fails as a crash loop. | "Bounded retries" without automatic paid or duplicate side effects. |
+| **The synchronous batch endpoints stay.** Jobs are added beside them (`POST /api/batches/{id}/jobs`). | Existing clients and tests keep working; small batches don't need a worker. |
+| **Runtime quality checks are separately versioned** (`runtime-checks-v1`, `app/ai/quality_checks.py`). `heldout-criteria-v1` and `app/evaluation/` are unchanged. | The frozen Phase 9 criteria, predictions and scores must stay reproducible. |
+| **Checks are computed from stored content plus its input snapshot**, and recorded on the generation event. No stored column, no backfill. | Pure and deterministic: old drafts get the same answer, and nothing is guessed. |
+| **Flags never approve or reject.** Approving a flagged draft requires `acknowledged_quality_flags` listing exactly the codes shown, recorded in the approval event. Rejecting and editing are unaffected. | "Flag problematic drafts for review" without automatic decisions, and without removing the human's ability to approve. |
+| The existing standalone demo's labeled auto-approval of its synthetic batch is unchanged. Its mock drafts carry no flags. | Pre-existing, mock-only behavior; out of scope. |
+| `apply_legacy_score` moved from the scoring router to `app/services/legacy_scoring.py`, with the behavior unchanged. | Contract section 2 layering: the job handlers must not import a router. |
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
 - ~~**Phase 3**: column mapping / streaming reads.~~ **Resolved**: implemented entirely with the Python standard library (`gzip`, `json`, `csv`) — no `pandas`/`pyarrow`/`ijson` needed, since the source turned out to be JSON Lines, not a giant JSON array or Parquet.
 - **Phase 8** *(resolved in preparation, 2026-09-25; see the Phase 8 decisions above)*: a LoRA/PEFT training stack (e.g., `peft`, `transformers`, `bitsandbytes` or equivalent) and a base model choice. None of this exists in `requirements.txt` today. Requires GPU access and the user's explicit go-ahead before any run (per contract rule 7) — this is compute spend, not a research decision to make unilaterally.
-- **Phase 10**: a background job system. `docs/architecture.md`'s roadmap already names Celery or Arq as candidates; no decision has been made yet.
+- **Phase 10**: a background job system. **Decided in Phase 10:** a database-backed job table with leases, and no new dependency (see "Decisions made in Phase 10" above).
 
 ## Unresolved questions for the user
 

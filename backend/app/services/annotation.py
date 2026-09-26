@@ -58,17 +58,16 @@ class AnnotationError(Exception):
 
 def configured_provider() -> dict[str, Any]:
     """Which provider generation would use, without contacting it."""
-    name = "mock" if settings.use_mock_ai else "openai"
+    name = "mock" if settings.use_mock_ai else settings.ai_provider
     try:
         client = get_ai_client()
     except AIConfigError as error:
         return {"configured_provider": name, "model_revision": None, "is_mock": False,
                 "available": False, "detail": str(error)}
-    detail = (
-        "Deterministic mock generator. Candidates are labeled mock through review and export."
-        if client.name == "mock"
-        else "Real provider. Each generation is a paid API call."
-    )
+    detail = {
+        "mock": "Deterministic mock generator. Candidates are labeled mock through review and export.",
+        "openai": "Real provider. Each generation is a paid API call.",
+    }.get(client.name, "Real model served by the configured inference server (Phase 8 LoRA adapter).")
     return {"configured_provider": client.name, "model_revision": client.model_revision,
             "is_mock": client.name == "mock", "available": True, "detail": detail}
 

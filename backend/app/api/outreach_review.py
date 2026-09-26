@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai import quality_checks
 from app.core.database import get_session
 from app.models import AIOutputReview, Lead
 from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
@@ -61,14 +62,32 @@ def _require_lead(session: Session, lead_id: UUID) -> Lead:
 
 
 def _review(session: Session, lead_id: UUID, output_id: UUID, displayed_hash: str,
-            decision: str, reason: str | None) -> OutreachReviewResponse:
+            decision: str, reason: str | None,
+            acknowledged_flags: list[str] | None = None) -> OutreachReviewResponse:
     lead = _require_lead(session, lead_id)
     try:
         output = resolve_reviewable_draft(session, lead, output_id, displayed_hash)
     except ReviewError as error:
         raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    acknowledged = None
+    if decision == DECISION_APPROVED:
+        # Phase 10: a flagged draft can still be approved, but only by a
+        # reviewer who acknowledges exactly the flags shown. Nothing here
+        # approves or rejects on its own.
+        codes = quality_checks.flag_codes(
+            quality_checks.check_output(output.output_type, output.content, output.input_snapshot)
+        )
+        if sorted(set(acknowledged_flags or [])) != codes:
+            raise HTTPException(status_code=409, detail=(
+                f"This draft has runtime quality flags ({quality_checks.CHECKS_VERSION}): "
+                f"{', '.join(codes) if codes else 'none'}. Review them and send "
+                "acknowledged_quality_flags listing exactly these codes to approve, "
+                "or edit or reject the draft."
+            ))
+        acknowledged = codes
     review, was_replay = apply_review(
-        session, lead=lead, output=output, decision=decision, reason=reason
+        session, lead=lead, output=output, decision=decision, reason=reason,
+        acknowledged_quality_flags=acknowledged,
     )
     session.commit()
     session.refresh(review)
@@ -93,7 +112,8 @@ def approve_outreach(
     request: ApproveOutreachRequest,
     session: Session = Depends(get_session),
 ) -> OutreachReviewResponse:
-    return _review(session, lead_id, request.ai_output_id, request.content_hash, DECISION_APPROVED, None)
+    return _review(session, lead_id, request.ai_output_id, request.content_hash, DECISION_APPROVED, None,
+                   request.acknowledged_quality_flags)
 
 
 @router.post(
@@ -157,6 +177,11 @@ def get_review_state(lead_id: UUID, session: Session = Depends(get_session)) -> 
         blocker_explanations={c: fit._GAP_EXPLANATIONS.get(c, c) for c in codes},
         latest_review=ReviewRead.model_validate(state.review) if state.review else None,
         source=_source_info(lead),
+        quality_checks_version=quality_checks.CHECKS_VERSION,
+        draft_quality_flags=(
+            quality_checks.check_output(state.draft.output_type, state.draft.content, state.draft.input_snapshot)
+            if state.draft else []
+        ),
     )
 
 

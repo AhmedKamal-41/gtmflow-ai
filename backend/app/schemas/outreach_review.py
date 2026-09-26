@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from uuid import UUID
-
 from datetime import datetime
+from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +24,9 @@ class ApproveOutreachRequest(BaseModel):
 
     ai_output_id: UUID
     content_hash: str = Field(min_length=64, max_length=64)
+    # Phase 10: when the draft has runtime quality flags, the codes shown to
+    # the reviewer (AIOutputRead.quality_flags). Must match them exactly.
+    acknowledged_quality_flags: list[str] = Field(default_factory=list, max_length=20)
 
 
 class RejectOutreachRequest(BaseModel):
@@ -90,3 +93,6 @@ class ReviewStateRead(BaseModel):
     blocker_explanations: dict[str, str]
     latest_review: ReviewRead | None
     source: SourceInfo
+    # Phase 10: the current draft's runtime quality flags (runtime-checks-v1).
+    quality_checks_version: str
+    draft_quality_flags: list[dict[str, Any]]

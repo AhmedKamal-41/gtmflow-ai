@@ -199,3 +199,38 @@ describe("review workspace", () => {
     expect(screen.queryByText(/The approval applies/)).not.toBeInTheDocument();
   });
 });
+
+describe("runtime quality flags (Phase 10)", () => {
+  const FLAGGED = {
+    ...DRAFT,
+    quality_checks_version: "runtime-checks-v1",
+    quality_flags: [
+      { code: "commercial_opportunity_framing", field: "subject", match: "Exploring Opportunities",
+        source: "phase9-blind-review", severity: "review" },
+      { code: "presumed_outreach_activity", field: "email_body", match: "your current outreach strategies",
+        source: "phase9-blind-review", severity: "review" },
+    ],
+  };
+
+  it("shows the flags and approves only after the reviewer acknowledges exactly them", async () => {
+    fake.state.draft = FLAGGED;
+    render(<LeadDetailPage />);
+    const flags = (await screen.findAllByLabelText("Quality flags"))[0];
+    expect(flags).toHaveTextContent("Needs review: 2 quality flags (runtime-checks-v1)");
+    expect(flags).toHaveTextContent("Exploring Opportunities");
+    const approve = screen.getByRole("button", { name: /approve outreach/i });
+    expect(approve).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("I reviewed the quality flags"));
+    expect(approve).toBeEnabled();
+    await act(async () => fireEvent.click(approve));
+    expect(api.approveOutreach).toHaveBeenLastCalledWith("lead-1", "draft-1", "drafthash-1",
+      ["commercial_opportunity_framing", "presumed_outreach_activity"]);
+  });
+
+  it("an unflagged draft needs no acknowledgement", async () => {
+    render(<LeadDetailPage />);
+    const approve = await screen.findByRole("button", { name: /approve outreach/i });
+    expect(screen.queryByLabelText("I reviewed the quality flags")).not.toBeInTheDocument();
+    expect(approve).toBeEnabled();
+  });
+});

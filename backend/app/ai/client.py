@@ -29,6 +29,9 @@ class AIClient(ABC):
     # this is the specific revision within that provider, e.g. a real model
     # string or a versioned mock-generator tag.
     model_revision: str = "unknown"
+    # Phase 10: the adapter applied on top of `model_revision`, or None
+    # (recorded in AIOutput.adapter_revision).
+    adapter_revision: str | None = None
     # Token usage the provider reported for the most recent call, or None
     # (the mock makes no call). Recorded on the generation's audit event so
     # paid usage is known exactly rather than estimated.
@@ -109,10 +112,32 @@ class OpenAIClient(AIClient):
         return parse_json_strict(self._call(build_outreach_prompt(ctx)))
 
 
+REAL_PROVIDERS = ("openai", "qwen3-4b-lora-v1")
+
+
 def get_ai_client() -> AIClient:
-    """Pick the right client based on USE_MOCK_AI. Called fresh per request."""
+    """Pick the client. Called fresh per request.
+
+    USE_MOCK_AI (default true) always wins. With USE_MOCK_AI=false,
+    AI_PROVIDER chooses the real provider: "openai" (the default, unchanged
+    behaviour) or "qwen3-4b-lora-v1" (Phase 10). Any other value fails
+    closed before a network call."""
     if settings.use_mock_ai:
         from app.ai.mock_client import MockAIClient
 
         return MockAIClient()
-    return OpenAIClient(api_key=settings.openai_api_key)
+    if settings.ai_provider == "openai":
+        return OpenAIClient(api_key=settings.openai_api_key)
+    if settings.ai_provider == "qwen3-4b-lora-v1":
+        from app.ai.lora_client import LocalLoRAClient
+
+        return LocalLoRAClient(
+            base_url=settings.lora_inference_base_url,
+            served_model=settings.lora_served_model,
+            api_key=settings.lora_inference_api_key,
+            timeout_seconds=settings.lora_timeout_seconds,
+        )
+    raise AIConfigError(
+        f"Unknown AI_PROVIDER '{settings.ai_provider}'. Use one of: {', '.join(REAL_PROVIDERS)} "
+        "(with USE_MOCK_AI=false), or set USE_MOCK_AI=true."
+    )

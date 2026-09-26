@@ -29,6 +29,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.hashing import content_hash  # noqa: F401 -- re-exported
+from app.ai import quality_checks
 from app.ai.grounding import (
     AIOutputValidationError,
     describe_details,
@@ -264,6 +265,7 @@ def apply_review(
     decision: str,
     reason: str | None = None,
     reviewer_label: str = REVIEWER_LABEL,
+    acknowledged_quality_flags: list[str] | None = None,
 ) -> tuple[AIOutputReview, bool]:
     """Record a decision on the exact draft (and content) displayed.
 
@@ -299,6 +301,9 @@ def apply_review(
             "origin": output.origin,
             "reviewer_label": reviewer_label,
             **({"reason": reason} if reason is not None else {}),
+            **({"acknowledged_quality_flags": acknowledged_quality_flags,
+                "quality_checks_version": quality_checks.CHECKS_VERSION}
+               if acknowledged_quality_flags is not None else {}),
         },
     ))
     # Visible to later checks in the same transaction (autoflush is off),

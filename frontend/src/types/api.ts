@@ -143,6 +143,45 @@ export type AIOutput = {
   purpose: string; // "operational" | "annotation"
   author_label: string | null;
   review_status: string | null; // pending | approved | rejected | superseded
+  // Phase 10: runtime quality checks (runtime-checks-v1). Flags ask for
+  // review; approving a flagged draft needs an explicit acknowledgement.
+  quality_checks_version?: string;
+  quality_flags?: QualityFlag[];
+};
+
+export type QualityFlag = {
+  code: string;
+  field: string;
+  match: string;
+  source: string;
+  severity: string;
+};
+
+// Phase 10: durable background jobs.
+export type JobType = "fit_score" | "legacy_score" | "generate_summary" | "generate_outreach" | "push_hot";
+
+export type Job = {
+  id: string;
+  job_type: JobType;
+  batch_id: string | null;
+  params: Record<string, unknown>;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  attempts: number;
+  max_attempts: number;
+  max_item_attempts: number;
+  total_items: number | null;
+  counts: Record<string, number>;
+  result: Record<string, unknown> | null;
+  last_error: string | null;
+  cancel_requested: boolean;
+  lease_expires_at: string | null;
+  heartbeat_at: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  deduplicated: boolean;
+  done_items: number;
+  progress_pct: number | null;
 };
 
 export type IntegrationPush = {
@@ -447,6 +486,8 @@ export type ReviewState = {
   blocker_explanations: Record<string, string>;
   latest_review: Review | null;
   source: SourceInfo;
+  quality_checks_version?: string;
+  draft_quality_flags?: QualityFlag[];
 };
 
 export type ReviewTiming = {

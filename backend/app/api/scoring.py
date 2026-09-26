@@ -13,43 +13,10 @@ from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
 from app.schemas.lead_score import BatchScoreSummary, LeadScoreResponse
 from app.schemas.pagination import Page
 from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
+from app.services.legacy_scoring import apply_legacy_score as _apply_score
 from app.services.pagination import pagination_params
 
 router = APIRouter(tags=["scoring"])
-
-
-def _apply_score(session: Session, lead: Lead) -> dict[str, Any]:
-    """Run the scorer, upsert LeadScore, mark the lead as scored.
-
-    matched_signals is merged into score_breakdown JSON for persistence;
-    the API response splits them back out at the top level.
-    """
-    result = score_lead(lead)
-    persisted_breakdown = {
-        **result["score_breakdown"],
-        "matched_signals": result["matched_signals"],
-    }
-    if lead.score is None:
-        lead.score = LeadScore(
-            lead_id=lead.id,
-            total_score=result["total_score"],
-            priority=result["priority"],
-            score_breakdown=persisted_breakdown,
-            reasoning=result["reasoning"],
-        )
-    else:
-        lead.score.total_score = result["total_score"]
-        lead.score.priority = result["priority"]
-        lead.score.score_breakdown = persisted_breakdown
-        lead.score.reasoning = result["reasoning"]
-    # A blocked disposition (do_not_contact / disqualified / unsubscribed) is
-    # not a workflow stage -- scoring must not overwrite it. Otherwise a
-    # lead's blocked status is silently lost the moment it's scored, and the
-    # push-time status check in services/integration_push.py would never see
-    # it (see docs/upgrade/audit.md D.2).
-    if lead.status not in DISQUALIFIED_STATUSES:
-        lead.status = "scored"
-    return result
 
 
 def _response_from_result(lead_id: UUID, result: dict[str, Any]) -> LeadScoreResponse:
