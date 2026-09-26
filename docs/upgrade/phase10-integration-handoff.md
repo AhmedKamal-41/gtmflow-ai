@@ -121,15 +121,15 @@ All runs used mock AI, mock Slack, blanked keys and isolated data. At the time, 
 
 **Still not verified:**
 
-- byte-level reproduction of Phase 9: 7 of 20 identical (the batch-of-8 versus single-request difference);
+- byte-level reproduction of Phase 9: 7 of 20 identical (batch-of-8 versus single-request numerics is the likely, unproven explanation);
 - any other server (vLLM or similar) and its throughput under concurrent load;
-- the rate of runtime flags on production data. It differed from the Phase 9 outputs on 4 of 20 cases.
+- the rate of runtime flags on production data. It differed from the Phase 9 outputs on 4 of the 20 cases (all four outreach, so 4 of 10 outreach).
 
 ## 6. Remaining inference setup (to reach "integrated")
 
 1. **Done:** the acceptance test ran and passed (§9).
 2. **Still open:** a production serving setup (vLLM with `--enable-lora`, or `serve.py`, which is one request at a time at about 20–30 s per draft on an L4) and its hosting cost. No always-on server exists, and `backend/.env` stays in mock mode.
-3. **Before real use:** keep every outreach draft behind review. The runtime flags are computed on each served draft, and in §9 they differed from the Phase 9 outputs' flags on 4 of 20 cases.
+3. **Before real use:** keep every outreach draft behind review. The runtime flags are computed on each served draft, and in §9 they differed from the Phase 9 outputs' flags on 4 of the 20 cases (all four outreach).
 
 ## 7. Known limitations and open items
 
@@ -293,11 +293,11 @@ It excluded retraining, automatic paid retries, GPU substitution, real Slack sen
 | A4 identical to Phase 9 | measured | **7 of 20** |
 | D latency | measured | see below |
 
-**Parity finding (A4).** Only 7 of 20 outputs are byte-identical to the stored Phase 9 outputs, fewer than the "high" expected in §8. Phase 9 decoded left-padded batches of 8, while the server decodes one unpadded request at a time; in bf16 that changes numerics, and greedy decoding then diverges.
+**Parity finding (A4).** Only 7 of 20 outputs are byte-identical to the stored Phase 9 outputs, fewer than the "high" expected in §8. **Likely explanation, not established:** Phase 9 decoded left-padded batches of 8, while the server decodes one unpadded request at a time, and in bf16 that can change numerics enough for greedy decoding to diverge. No controlled comparison (the same server with batched requests, or the Phase 9 script with batch size 1) was run, so the cause is not proven.
 
 - The 13 differing outputs are close (ROUGE-L against the Phase 9 text 0.82–0.99), mostly in `seller_relevance`, subjects and call notes.
 - All 13 are valid, with the same Phase 9 categories.
-- **Runtime flags differ from the Phase 9 output's flags on 4 of 20** (all outreach): one draft gained `presumed_outreach_activity`, and three lost `commercial_opportunity_framing`.
+- **Runtime flags differ from the Phase 9 output's flags on 4 of the 20 cases, all four among the 10 outreach cases** (4 of 10 outreach, 0 of 10 summaries): one draft gained `presumed_outreach_activity`, and three lost `commercial_opportunity_framing`.
 - So the Phase 9 blind-review rates describe the batched outputs, not exactly what the served model writes. Flags are computed on each actual draft, which is why review stays required.
 
 **Latency** (L4, one request at a time):
@@ -312,7 +312,7 @@ It excluded retraining, automatic paid retries, GPU substitution, real Slack sen
 |---|---|
 | RunPod balance before this run (at the free check) | 8.6684 |
 | After (settled at the post-run API check) | 8.5945 |
-| **This run** | **$0.0739** (launcher estimate $0.103; the balance may settle slightly lower) of the $0.80 authorized |
+| **This run: observed balance decrease** | **$0.0739** of the $0.80 authorized. This is not final billing: charges may still settle (the launcher's own estimate was $0.103). |
 
 The balance had already fallen from $8.6924 (recorded after Phase 9) to $8.6684 before this run was created, a later settlement of about $0.024 attributable to Phase 9. It is not part of this run.
 
