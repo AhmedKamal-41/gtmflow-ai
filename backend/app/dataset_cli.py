@@ -7,6 +7,11 @@ and create held-out annotation queues.
     DATABASE_URL=... python -m app.dataset_cli evaluate --dataset data/datasets/pilot-v1/eligible.jsonl \\
         --system source|mock --out data/datasets/pilot-v1/eval-<system>.json
     DATABASE_URL=... python -m app.dataset_cli create-eval-queues
+    python -m app.dataset_cli review-packet --dataset data/datasets/test-v1/eligible.jsonl \\
+        --predictions <run>/predictions/qwen3-4b-base.jsonl --predictions <run>/predictions/qwen3-4b-lora-v1.jsonl \\
+        --seed 20260925 --packet-out <dir>/packet.jsonl --key-out <sealed dir>/key.json
+    python -m app.dataset_cli review-aggregate --packet <dir>/packet.jsonl --key <sealed dir>/key.json \\
+        --decisions <dir>/decisions.jsonl --out <dir>/review-result.json
 
 Read-only except `create-eval-queues`, which adds queue rows. No model is
 called: `--system source` scores the stored generator outputs, and
@@ -269,6 +274,86 @@ def cmd_evaluate_predictions(args, session) -> int:
     return 0
 
 
+REVIEW_SYSTEMS = ("qwen3-4b-base", "qwen3-4b-lora-v1")
+
+
+def cmd_review_packet(args, session) -> int:
+    """Phase 9 blind review (protocol phase9-blind-review-v1): pool both Qwen
+    systems' structurally valid test-v1 eligible outputs, shuffle with a
+    fixed seed and write (a) the packet the reviewer reads -- review id, task,
+    input snapshot and output only -- and (b) the sealed key, kept apart and
+    opened only by review-aggregate. No scores or system names reach the
+    packet."""
+    rows = pilot.load_jsonl(args.dataset)
+    if not rows or any(r["split"] != "test" or r.get("uncertain") for r in rows):
+        print(json.dumps({"error": "the frozen review scope is test-v1 eligible only"}), file=sys.stderr)
+        return 1
+    for path in (args.packet_out, args.key_out):
+        if os.path.exists(path):
+            print(json.dumps({"error": f"{path} exists; refusing to overwrite"}), file=sys.stderr)
+            return 2
+    wanted = {r["example_id"] for r in rows}
+    preds: dict[str, dict[str, dict[str, Any]]] = {s: {} for s in REVIEW_SYSTEMS}
+    for path in args.predictions:
+        for rec in pilot.load_jsonl(path):
+            if rec.get("system") in preds and rec["example_id"] in wanted:
+                if rec["example_id"] in preds[rec["system"]]:
+                    print(json.dumps({"error": f"duplicate prediction {rec['system']} {rec['example_id']}"}), file=sys.stderr)
+                    return 1
+                preds[rec["system"]][rec["example_id"]] = rec
+    packet, sealed = phase9.build_review_packet(rows, preds, args.seed)
+    os.makedirs(os.path.dirname(os.path.abspath(args.packet_out)), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(args.key_out)), exist_ok=True)
+    packet_sha = _write_jsonl(args.packet_out, packet)
+    sealed.update({"packet_sha256": packet_sha, "dataset": args.dataset, "dataset_sha256": _sha(args.dataset),
+                   "predictions_sha256": {p: _sha(p) for p in args.predictions},
+                   "n_by_system": {s: len(rows) for s in REVIEW_SYSTEMS},
+                   "report_view_sha256": phase9.report_view_digest(),
+                   "rubric": phase9.REPORT_VIEW["ai_review"]["rubric"]})
+    with open(args.key_out, "w") as f:
+        json.dump(sealed, f, indent=2, sort_keys=True)
+    # Deliberately no system names or scores on stdout.
+    print(json.dumps({"packet": args.packet_out, "packet_sha256": packet_sha, "items": len(packet),
+                      "not_reviewable": len(sealed["not_reviewable"]), "key": args.key_out}, indent=2))
+    return 0
+
+
+def cmd_review_aggregate(args, session) -> int:
+    """Unblind only after every decision is recorded and valid; the packet
+    must be the one the key was sealed with."""
+    packet = pilot.load_jsonl(args.packet)
+    with open(args.key) as f:
+        sealed = json.load(f)
+    if _sha(args.packet) != sealed["packet_sha256"]:
+        print(json.dumps({"error": "packet does not match the sealed key"}), file=sys.stderr)
+        return 1
+    decisions = pilot.load_jsonl(args.decisions)
+    problems = phase9.validate_decisions(decisions, {i["review_id"] for i in packet})
+    if problems:
+        print(json.dumps({"error": "invalid decisions", "problems": problems[:50]}), file=sys.stderr)
+        return 1
+    task_of = {i["review_id"]: i["task"] for i in packet}
+    result = {
+        "protocol": sealed["protocol"], "rubric": sealed["rubric"], "seed": sealed["seed"],
+        "label": "AI-evaluated: blind AI review (not human-verified)",
+        "packet_sha256": sealed["packet_sha256"], "decisions_sha256": _sha(args.decisions),
+        "dataset_sha256": sealed["dataset_sha256"], "predictions_sha256": sealed["predictions_sha256"],
+        "by_system": phase9.aggregate_review(decisions, sealed, sealed["n_by_system"]),
+        "by_system_and_task": {
+            task: phase9.aggregate_review(
+                [d for d in decisions if task_of[d["review_id"]] == task], sealed,
+                {s: sum(1 for rid, k in sealed["key"].items() if k["system"] == s and task_of[rid] == task)
+                 for s in sealed["n_by_system"]})
+            for task in sorted(set(task_of.values()))},
+        "per_item": [{**d, **sealed["key"][d["review_id"]], "task": task_of[d["review_id"]]} for d in decisions],
+        "not_reviewable": sealed["not_reviewable"],
+    }
+    with open(args.out, "w") as f:
+        json.dump(result, f, indent=2, sort_keys=True)
+    print(json.dumps({k: result[k] for k in ("label", "by_system")}, indent=2))
+    return 0
+
+
 def cmd_eval_record(args, session) -> int:
     """Evaluation record for held-out queues: every candidate is accounted
     for -- generation attempts and failures (from the paid-run ledger),
@@ -358,6 +443,17 @@ def main(argv: list[str] | None = None) -> int:
     ep.add_argument("--predictions")
     ep.add_argument("--system-name")
     ep.add_argument("--out", required=True)
+    rp = sub.add_parser("review-packet")
+    rp.add_argument("--dataset", required=True)
+    rp.add_argument("--predictions", action="append", required=True)
+    rp.add_argument("--seed", type=int, required=True)
+    rp.add_argument("--packet-out", required=True)
+    rp.add_argument("--key-out", required=True)
+    ra = sub.add_parser("review-aggregate")
+    ra.add_argument("--packet", required=True)
+    ra.add_argument("--key", required=True)
+    ra.add_argument("--decisions", required=True)
+    ra.add_argument("--out", required=True)
     r = sub.add_parser("eval-record")
     r.add_argument("--queue", action="append", required=True)
     r.add_argument("--ledger", required=True)
@@ -370,7 +466,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return {"build": cmd_build, "check": cmd_check, "evaluate": cmd_evaluate,
                 "evaluate-predictions": cmd_evaluate_predictions,
-                "create-eval-queues": cmd_create_eval_queues, "eval-record": cmd_eval_record}[args.command](args, session)
+                "create-eval-queues": cmd_create_eval_queues, "eval-record": cmd_eval_record,
+                "review-packet": cmd_review_packet, "review-aggregate": cmd_review_aggregate}[args.command](args, session)
     except (splits.ManifestError, FileNotFoundError, KeyError) as error:
         session.rollback()
         print(json.dumps({"error": f"{type(error).__name__}: {error}"}), file=sys.stderr)

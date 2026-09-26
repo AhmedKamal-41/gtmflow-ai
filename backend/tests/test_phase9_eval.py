@@ -92,3 +92,47 @@ def test_blind_review_packet_hides_systems_and_counts_unreviewable_as_not_accept
     summary = phase9.aggregate_review(decisions, sealed, {"qwen3-4b-base": 4, "qwen3-4b-lora-v1": 4})
     assert summary["qwen3-4b-base"]["acceptable_as_is_rate"] == 0.75  # the missing output counts as not acceptable
     assert summary["qwen3-4b-lora-v1"]["acceptable_as_is_rate"] == 1.0
+
+
+def test_review_cli_keeps_the_key_sealed_and_unblinds_only_valid_complete_decisions(tmp_path, capsys):
+    from app import dataset_cli
+    rows = [dict(_row(f"e{i}", "outreach_email" if i % 2 else "company_summary"), split="test", uncertain=False)
+            for i in range(4)]
+    dataset = tmp_path / "eligible.jsonl"
+    dataset.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    preds = tmp_path / "preds.jsonl"
+    preds.write_text("".join(json.dumps({"system": s, "example_id": r["example_id"], **_pred(r["target"])}) + "\n"
+                             for s in ("qwen3-4b-base", "qwen3-4b-lora-v1") for r in rows))
+    packet, key, out = tmp_path / "review" / "packet.jsonl", tmp_path / "sealed" / "key.json", tmp_path / "result.json"
+    argv = ["review-packet", "--dataset", str(dataset), "--predictions", str(preds), "--seed", "7",
+            "--packet-out", str(packet), "--key-out", str(key)]
+    assert dataset_cli.main(argv) == 0
+    assert "qwen" not in packet.read_text() and "qwen" not in capsys.readouterr().out  # nothing identifying
+    assert "factual_support" not in packet.read_text()  # and no scores
+    assert dataset_cli.main(argv) == 2  # never overwrites a sealed packet
+    items = [json.loads(line) for line in packet.read_text().splitlines()]
+    decisions = tmp_path / "decisions.jsonl"
+    good = [{"review_id": i["review_id"], "factual_support": "supported", "missing_info_handling": "good",
+             "writing_quality": 4, "acceptable_as_is": True, "issues": []} for i in items]
+    agg = ["review-aggregate", "--packet", str(packet), "--key", str(key), "--decisions", str(decisions), "--out", str(out)]
+    decisions.write_text("".join(json.dumps(d) + "\n" for d in good[:-1]))  # one missing
+    assert dataset_cli.main(agg) == 1 and not out.exists()
+    decisions.write_text("".join(json.dumps(d) + "\n" for d in good))
+    original = packet.read_text()
+    tampered = original.replace('"task": "company_summary"', '"task": "outreach_email"', 1)
+    assert tampered != original
+    packet.write_text(tampered)  # content changed, every review id intact: only the sealed hash can catch it
+    assert dataset_cli.main(agg) == 1 and not out.exists()
+    packet.write_text(original)
+    assert dataset_cli.main(agg) == 0
+    result = json.loads(out.read_text())
+    assert result["label"].startswith("AI-evaluated") and "not human-verified" in result["label"]
+    assert {s: v["acceptable_as_is_rate"] for s, v in result["by_system"].items()} == \
+        {"qwen3-4b-base": 1.0, "qwen3-4b-lora-v1": 1.0}
+    assert {p["system"] for p in result["per_item"]} == {"qwen3-4b-base", "qwen3-4b-lora-v1"}
+    assert set(result["by_system_and_task"]) == {"company_summary", "outreach_email"}
+    assert sum(v["qwen3-4b-lora-v1"]["n_examples"] for v in result["by_system_and_task"].values()) == 4
+    held_out_scope = tmp_path / "flagged.jsonl"
+    held_out_scope.write_text(json.dumps(dict(rows[0], uncertain=True)) + "\n")
+    assert dataset_cli.main(["review-packet", "--dataset", str(held_out_scope), "--predictions", str(preds),
+                             "--seed", "7", "--packet-out", str(tmp_path / "p2"), "--key-out", str(tmp_path / "k2")]) == 1

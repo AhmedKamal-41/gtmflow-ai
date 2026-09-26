@@ -1,6 +1,6 @@
 # Phase 9 handoff: held-out comparison (launch preparation)
 
-Date: 2026-09-26. **Status: evaluated (AI-evaluated, automated metrics).** The authorized run completed and was verified (§11). The blind AI review of writing quality has **not** been done, so model selection is not final. Sections 1–10 are the launch preparation as written before the run.
+Date: 2026-09-26. **Status: Phase 9 complete. Evaluated (AI-evaluated): automated metrics (§11) and blind AI review (§12). Recommendation (§14): `qwen3-4b-lora-v1` over the base model; not ready to replace reviewed outreach without changes.** Nothing was integrated; Phase 10 has not started. Sections 1–10 are the launch preparation as written before the run.
 
 ## 1. Starting point
 
@@ -266,6 +266,120 @@ These are **AI-evaluated**: the reference targets are AI-reviewed and not human-
   - The rubric categories favour LoRA by a wide margin. Part of that is expected: the reference targets are gpt-4o-mini's outputs *after* AI review against the same rubric, and LoRA was trained on such reviewed targets, while `source_output` is the unreviewed original.
   - Word overlap favours gpt-4o-mini (token F1 0.636 vs 0.585), because the references are edits of its own text. Exact match of 0.31 means 31% of them were accepted unchanged.
   - Neither comparison measures writing quality beyond these automated checks.
-- **Not measured yet:** the blind AI review (`phase9-blind-review-v1`: writing quality, acceptable as-is). Its functions are tested, but no CLI drives them. It runs in the workspace with no paid calls, and it is required before a final model selection. There is no human verification.
+- **Blind AI review:** completed afterwards; see §12. There is no human verification.
 
 **Readiness:** the Phase 8 adapter is now **evaluated (AI-evaluated, automated metrics)**. It is **not selected or integrated**; application integration is Phase 10 and has not started.
+
+## 12. Blind AI review (`phase9-blind-review-v1`, 2026-09-26): AI-evaluated, not human-verified
+
+**New commands** (`backend/app/dataset_cli.py`, with a test). Neither calls a model; both work from files only.
+
+- `review-packet`:
+  - enforces the frozen scope (test-v1 eligible) and pools both Qwen systems' outputs through the unchanged `phase9.build_review_packet`;
+  - writes the **packet** (review id, task, input snapshot and output only; no system names, no scores) and, separately, the **sealed key**, which records the packet's sha256;
+  - refuses to overwrite either file, and prints nothing that identifies a system.
+- `review-aggregate`:
+  - refuses a packet that differs from the sealed hash;
+  - refuses incomplete, duplicate, unknown or invalid decisions (unchanged `validate_decisions`);
+  - only then unblinds, using the unchanged `aggregate_review`, and adds a by-task breakdown.
+- **Test:** covers the missing-decision and tampered-packet refusals, the no-overwrite rule, scope enforcement and unblinding. It was mutation-checked: with the hash check removed, the test fails.
+
+**Procedure:**
+
+1. Packet built with seed 20260925 (the frozen run seed): 142 items, 70 summaries and 72 outreach emails, 0 not reviewable. Packet sha256 `729aa854…`; key `1685e800…` (read-only).
+2. Reviewer: a **fresh Claude agent** in this Claude Code session, chosen by you. It had no conversation context, and its prompt named no systems or scores. It was given only `REVIEWER-INSTRUCTIONS.md` and the packet, split into eight sequential chunks. The instructions hold the frozen `ai-review-rubric-v1` text from the Phase 6 AI review report, the label scales, and Phase 6 pilot decisions as calibration. The agent reported opening nothing else and making no network calls.
+3. It recorded 142 decisions (`decisions.jsonl`, sha `7280caa2…`, now read-only). All were valid before unblinding.
+4. `review-aggregate` then unblinded them (result sha `95627749…`).
+
+No separately billed API call was made.
+
+**Results** (test-v1 eligible, n = 71 per system; the denominator is every example):
+
+| | qwen3-4b-base | **qwen3-4b-lora-v1** |
+|---|---|---|
+| **Acceptable as-is** | **1 / 71 (1.4%)** | **49 / 71 (69.0%)** |
+| Summaries acceptable (n = 35) | 0 | **35 (100%)** |
+| Outreach acceptable (n = 36) | 1 (2.8%) | **14 (38.9%)** |
+| Factual support: supported / partial / unsupported | 1 / 70 / 0 | 57 / 14 / 0 |
+| Missing-info handling: good / acceptable / poor | 1 / 69 / 1 | 57 / 14 / 0 |
+| Writing quality, mean of 1–5 (summaries / outreach) | 2.66 (2.94 / 2.39) | 3.69 (4.00 / 3.39) |
+
+**Issues the reviewer recorded:**
+
+- **Base:**
+  - summaries: `invented_need_hypothesis` in 35 of 35 and `invented_interest_hypothesis` in 27 (for example "may have unmet needs in lead generation"), plus `inferred_from_company_name` 5;
+  - outreach: `incomplete_demo_label` 28, `invented_need` 27, `missing_signature` 14, `asserted_relevance` 9, `perspective_confusion` 9 (for example, telling the recipient that approved leads go to "your internal Slack channel"), `unsupported_quality_claim` 9.
+- **LoRA:**
+  - summaries: one minor `vague_reference`;
+  - outreach: `invented_interest_hypothesis` 14, almost all the sentence "I would love to learn more about your current outreach strategies", which presumes an activity the record does not state; `commercial_framing_subject` 12, subjects like "Exploring Opportunities in Healthcare" and "potential collaboration" framing.
+  - No placeholder signatures, literal `\n`, misattributed websites or unsupported facts were found in either system.
+
+**Where LoRA's outreach faults come from.** They trace to its training targets. In `train-combined-v1`, **57 of 211** outreach targets contain an "Exploring Opportunities" subject and **52** contain "potential collaboration" wording. The minimal-edit training policy `ai-review-rubric-v2-train` kept these sentences. The frozen v1 rubric used for this review rejects them. The test references contain neither phrase.
+
+**Agreement with the automated metrics.**
+
+- Summaries: both methods agree that LoRA fixes invented hypotheses. Base summaries fail both.
+- Outreach: the reviewer is stricter than the frozen lints. Automated factual support is 35 of 36 for LoRA; the reviewer rates 22 of 36 as "supported", because the lints have no pattern for "your current outreach strategies" or opportunity framing.
+- The lints and the blind review measure different things; neither replaces the other.
+
+## 13. The shared test failure (`39fd8237…`, healthcare outreach): a lint false positive
+
+- **Rule:** `no_invented_phrasing` (`backend/app/evaluation/metrics.py`, `_INVENTED`). The pattern `speciali[sz]` is meant to catch invented claims such as "specializes in".
+- **Record:** the company's recorded name is **"allergy & immunology specialists, llc"** (medical practice, 1–10, Goodyear, Arizona).
+- **Offending text (the recorded company name, which the lint matches as "Specialis"):**
+  - base: "Based on your company profile — Allergy & Immunology **Specialis**ts, LLC in Goodyear, Arizona — we've scored a strong match using a versioned fit rubric."
+  - LoRA: "I noticed that Allergy & Immunology **Specialis**ts, LLC is a medical practice in Goodyear, Arizona. I would love to learn more about your practice."
+- **The frozen reference target fails the same lint** ("The supplied company record lists Allergy & Immunology **Specialis**ts, LLC as a medical practice…"), and so does gpt-4o-mini's stored output. This is the only company name in test-v1 that contains an `_INVENTED` pattern.
+- **Conclusion:** a false positive of the frozen lint that hits all three systems equally, not a factual error by either model. The frozen scores are **left unchanged** (factual support 0.986 for both Qwen systems).
+- **Side note, not part of the frozen result:** if the lint ignored the recorded company name, both would be 71 of 71 on factual support. A future criteria version could strip recorded names before this lint; that would be a new, versioned criteria id, never an edit of `heldout-criteria-v1`.
+
+## 14. Recommendation
+
+**Select `qwen3-4b-lora-v1` (Phase 8 epoch-3 adapter) over `qwen3-4b-base`.** Every held-out measure favours it or ties:
+
+- blind acceptable-as-is 69.0% vs 1.4%;
+- automated missing-info handling 1.000 vs 0.507, and automated writing 1.000 vs 0.167;
+- equal factual support 0.986;
+- about 38% shorter outputs and 32% less generation time (1,919 s vs 2,819 s).
+
+**Against gpt-4o-mini:**
+
+- The Phase 9 run generated nothing new for gpt-4o-mini, and the blind review scope (frozen) did not include it.
+- On the automated rubric categories, LoRA beats gpt-4o-mini's stored unreviewed outputs: factual support 0.986 vs 0.620, and missing-info handling 1.000 vs 0.577. gpt-4o-mini has the higher word overlap (token F1 0.636 vs 0.585), because the references are edits of its own outputs.
+- The Phase 6 AI review found 0 of 47 gpt-4o-mini pilot outreach emails acceptable as generated. That was a different sample under the same v1 rubric, so the evidence is indicative only, not a controlled comparison.
+
+**Suitable for:**
+
+- company summaries under human or AI review (35 of 35 acceptable as-is);
+- drafting demonstration outreach that is then reviewed.
+
+**Not yet suitable for:** unreviewed outreach. 22 of 36 outreach drafts would still need a correction, almost all to one of two phrasings that are easy to find.
+
+**Recommended before or at Phase 10** (not done here):
+
+- keep outreach behind the existing approval gate;
+- add lints for "current outreach strategies", "Exploring Opportunities" and "collaboration" framing, as a new criteria version;
+- for any future adapter, apply the v1 outreach standard to training targets that carry these phrases. That would need a new data version and a new training run; neither is authorized.
+
+**Limitations:**
+
+- Everything is **AI-evaluated**: the references and review decisions come from AI (Claude), and nothing is human-verified.
+- The test set is small: 71 eligible examples, only 36 of them outreach, so the outreach acceptance rate of 14 of 36 has a 95% interval of roughly ±16 points.
+- Only two segments (healthcare and real estate) and one seller profile (the demonstration profile).
+- The references follow the v1 rubric's template, so the word-overlap metrics favour that template and gpt-4o-mini's wording.
+- **Blinding is imperfect:** the reviewer did not know the systems or the scores, but the two systems' styles differ visibly (length, demo label), so items could be grouped by style.
+- One reviewer, and no second-rater agreement measured.
+- Greedy decoding only; latency was measured on an L4 in a batch, not in production.
+- One lint false positive (§13).
+
+## 15. Phase 9 results backup (private)
+
+| | |
+|---|---|
+| File | `/workspaces/gtmflow-restore/phase9-results-backup-20260926.tar.gz` (382,634 bytes, mode 600, outside the git repository) |
+| sha256 | `188cbb01f37f8488950a134512d8e1b35275ab979112c5592c7f148caabea2c8` (also in `phase9-results-backup-20260926.tar.gz.sha256`) |
+| Contents | `training/runs/phase9-eval-v1/` (plan, smoke, run with predictions and pod evidence, copied-back archive, scores, review packet, chunks, instructions, decisions, result, sealed key, RunPod report), plus the Phase 9 launcher records (`state-phase9-eval-v1.json`, `launch-phase9.out`, `self-delete-proof.json`, `events.jsonl`). No model weights, bundle, datasets or `.env`. |
+| Verified | Checksum OK. Extracted copy identical to the live results (52 files). Inner run `SHA256SUMS` OK. No configured credential value and no key-like pattern in any file. |
+| Download | In the Codespace's VS Code Explorer, right-click the file and choose **Download…**. Or, from your machine: `gh codespace cp -c <this-codespace> 'remote:/workspaces/gtmflow-restore/phase9-results-backup-20260926.tar.gz' .` (and the `.sha256` file), then run `sha256sum -c`. |
+
+The inputs in the review packet are PDL-derived company records (CC-BY-4.0). Keep the archive private.
