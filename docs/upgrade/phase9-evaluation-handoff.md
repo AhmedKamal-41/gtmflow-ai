@@ -1,8 +1,6 @@
 # Phase 9 handoff: held-out comparison (launch preparation)
 
-Date: 2026-09-26. **Status: code ready; needs compute.** Nothing has been generated. No GPU has been rented for Phase 9, and no paid API call has been made.
-
-Per the readiness ladder, the Phase 8 adapter is **trained, not evaluated**. It becomes **evaluated** only after this run's predictions are copied back, verified and scored.
+Date: 2026-09-26. **Status: evaluated (AI-evaluated, automated metrics).** The authorized run completed and was verified (§11). The blind AI review of writing quality has **not** been done, so model selection is not final. Sections 1–10 are the launch preparation as written before the run.
 
 ## 1. Starting point
 
@@ -182,3 +180,92 @@ A shell `timeout` does not stop RunPod billing, so the pod removes itself.
 2. **Data transfer:** send the inputs-only held-out files and the adapter to your private RunPod pod. No references, reviews, database or secrets are included.
 3. Whether to run the self-deletion proof first (recommended).
 4. The database recovery in §8.
+
+## 11. Authorized run (2026-09-26): completed and verified
+
+**Authorization (yours):**
+
+- up to **$1.50** of RunPod spend, compute and storage combined, for one self-deletion proof and one Phase 9 run;
+- one NVIDIA L4 with a $0.60/hr cap;
+- transfer of bundle `67f44dee…c4cc86`.
+
+It excluded retraining, paid retries, GPU substitution and paid AI-review calls. All of these conditions were respected.
+
+**Free check** (before the proof): API OK, no pods, balance $9.3869, $0/hr, SSH key present, bundle sha matched.
+
+**Self-deletion proof** (pod `dda4ezvch2s6a1`, L4, $0.49/hr): **proven.**
+
+- Created 00:32:28Z; SSH up 00:33:30Z; gone by 00:35:14Z. That fits the 120 s boot timer, which ran `t` with the pod-scoped key.
+- The launcher sent **0** delete requests for this pod, the Codespace watchdog never fired (its log is empty), and afterwards the API listed no gtmflow pods.
+- The account-key fallback was not involved.
+
+**Evaluation run** (pod `o6erbl8n4z2uhq`, 1× NVIDIA L4, driver 580.159.03 / CUDA 13.0, Secure Cloud, $0.49/hr):
+
+| | |
+|---|---|
+| Timeline | Created 00:35:36Z. Pre-transfer checks all passed at 00:36:40Z (watchdog armed, pod id, CLI config mode 600, GraphQL read of its own pod, terminate probes). Bundle transferred and sha verified 00:36:43Z. Job 00:36:44Z. Generation 00:37:42Z–01:56:57Z. Removal confirmed 01:57:33Z. |
+| Environment | 59 hash-locked packages, 0 mismatches; tests ran with the GPU hidden |
+| Provenance | Bundle commit `e68d25b`, bundle sha `67f44dee…`, generate exit 0 |
+| Validation gate (01:19:04Z) | **Passed.** Truncated 0.0 and empty 0.0 for both systems (n = 74) |
+| Passes | All 8 generated; none skipped; nothing truncated or empty. Base: validation 1,058 s + 388 s, test 987 s + 386 s, mean about 450–466 new tokens. LoRA: validation 712 s + 276 s, test 673 s + 258 s, mean about 290–295 new tokens. |
+| Peak GPU memory | 11.9 GiB allocated, 21.66 GiB reserved of 22.03 GiB |
+| Copy-back | Archive `6cea4dd6…` matched the pod's sha; 14 files matched `SHA256SUMS`; the prediction hashes (base `618e21b4…`, LoRA `cf43fa22…`), config, inputs and adapter all matched the pins |
+| Shutdown | After verified copy-back the pod **deleted itself with its own key** (`self_delete_proven`, second proof). Removal was confirmed through the API. A later independent check listed no pods and $0/hr. |
+| Artifacts (git-ignored) | `training/runs/phase9-eval-v1/`: `run/` (predictions, manifest, logs, `pod/` evidence), `phase9-eval-v1.tar.gz`, `runpod-report.json`, `scores/` |
+
+**Runtime estimate vs actual.** The pod ran for 1 h 22 min against the estimate of 25–60 min, because decoding was about 2–3× slower per step than assumed. The generation deadline was never reached.
+
+**Spend** (settled balance $9.3869 → **$8.6924**):
+
+| | USD |
+|---|---|
+| Self-deletion proof (launcher estimate) | 0.0226 |
+| Evaluation run (launcher estimate: 1.366 h × $0.49 + disk) | 0.679 |
+| **Total, from the balance change** | **$0.6945** of the $1.50 authorization |
+
+**Phase 8 records preserved.** 64 of the 66 snapshotted Phase 8 run and launcher files are byte-identical to the pre-launch snapshot, including `watchdog.log`, which is still empty. The other two were appended to only: `events.jsonl` (the new events) and `known_hosts` (one line, the Phase 9 pod's host key) (their original bytes are an intact prefix), and `state.json` still has sha `e60efa99…`. Phase 9 state is in `state-phase9-eval-v1.json`.
+
+### Results: `heldout-criteria-v1` via `phase9-report-v1`
+
+These are **AI-evaluated**: the reference targets are AI-reviewed and not human-verified. Scoring ran in the workspace (`DATABASE_URL=sqlite://`, no API calls). The criteria hash matches the frozen Phase 7 evaluation record. Every example is in every denominator. `gpt-4o-mini` means its stored, unreviewed outputs (`source_output`).
+
+**Test, eligible (n = 71: 35 summaries, 36 outreach)**
+
+| Category | gpt-4o-mini | qwen3-4b-base | **qwen3-4b-lora-v1** |
+|---|---|---|---|
+| Valid structure | 1.000 | 1.000 | 1.000 |
+| Factual support | 0.620 | 0.986 | **0.986** |
+| Missing-info handling | 0.577 | 0.507 | **1.000** |
+| Writing acceptability (automated, outreach only) | 0.000 | 0.167 | **1.000** |
+| Token F1 vs reference | **0.636** | 0.502 | 0.585 |
+| ROUGE-L vs reference | **0.566** | 0.365 | 0.471 |
+| Exact match | **0.310** | 0.000 | 0.000 |
+
+**By task, test eligible** (factual support / missing-info handling):
+
+- Summaries: gpt-4o-mini 1.00 / 0.91; base 1.00 / **0.00**; LoRA 1.00 / 1.00.
+- Outreach: gpt-4o-mini 0.25 / 0.25; base 0.97 / 1.00; LoRA 0.97 / 1.00.
+- The one factual-support failure for both Qwen systems is the same healthcare outreach example (`39fd8237…`, lint `no_invented_phrasing`). The base model's writing failures are mainly the missing demo label.
+
+**Test, flagged-uncertain (n = 26):**
+
+- LoRA: factual support 1.000, missing-info handling 1.000, writing 1.000, token F1 0.565.
+- Base: 1.000, 0.577, 0.143 and 0.480.
+- gpt-4o-mini: 0.615, 0.462, 0.000 and 0.601.
+
+**Validation, eligible (n = 74):**
+
+- LoRA: 1.000, 1.000, 1.000 and 0.587.
+- Base: 0.959, 0.514, 0.081 and 0.493.
+- gpt-4o-mini: 0.622, 0.473, 0.000 and 0.638.
+
+### Reading the results
+
+- **Base vs LoRA** is the controlled comparison: same weights, tokenizer, prompts, batches and greedy decoding. The adapter keeps factual support equal (0.986) and turns missing-info handling from 0.507 into 1.000. Most of that is summaries: the base model never passes `no_need_hypothesis`, while LoRA always does. The adapter also adds the required demo label, so writing acceptability goes from 0.167 to 1.000. Its outputs are about 38% shorter (mean about 290 vs 466 new tokens). All 197 outputs are distinct.
+- **LoRA vs gpt-4o-mini.**
+  - The rubric categories favour LoRA by a wide margin. Part of that is expected: the reference targets are gpt-4o-mini's outputs *after* AI review against the same rubric, and LoRA was trained on such reviewed targets, while `source_output` is the unreviewed original.
+  - Word overlap favours gpt-4o-mini (token F1 0.636 vs 0.585), because the references are edits of its own text. Exact match of 0.31 means 31% of them were accepted unchanged.
+  - Neither comparison measures writing quality beyond these automated checks.
+- **Not measured yet:** the blind AI review (`phase9-blind-review-v1`: writing quality, acceptable as-is). Its functions are tested, but no CLI drives them. It runs in the workspace with no paid calls, and it is required before a final model selection. There is no human verification.
+
+**Readiness:** the Phase 8 adapter is now **evaluated (AI-evaluated, automated metrics)**. It is **not selected or integrated**; application integration is Phase 10 and has not started.
