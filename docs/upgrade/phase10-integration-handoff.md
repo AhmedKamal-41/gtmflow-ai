@@ -9,7 +9,7 @@ Date: 2026-09-26. No retraining, paid compute, paid API call, deployment, automa
 | `qwen3-4b-lora-v1` as an `AIClient` (`LocalLoRAClient`) | **Code ready; tested against mocked and stub servers. Not integrated.** | The contract's "integrated" rung needs at least one real request served by the evaluated adapter in this environment. No inference server with the adapter has been run (it needs a GPU, see §6). |
 | The Phase 8 adapter itself | **Evaluated** (Phase 9, AI-evaluated) | Unchanged in this phase. |
 | Durable background jobs | **Done and verified:** tests on SQLite and Postgres, including a killed worker process; also run live over HTTP with a real worker process | Not load-tested beyond 300 items and 2 workers. |
-| Runtime quality checks (`runtime-checks-v1`) and approval acknowledgement | **Done and verified:** tests, agreement measured on Phase 9 data, run live over HTTP | The agreement figures are partly in-sample (§4). |
+| Runtime quality checks (`runtime-checks-v1`) and approval acknowledgement | **Done and verified as code:** tests, regression coverage on the Phase 9 data the rules were tuned on, false-positive check on 100 untouched references, run live over HTTP | Detection of *new* problematic wording is untested (§4). |
 
 ## 2. What was built
 
@@ -95,15 +95,15 @@ All runs used mock AI, mock Slack, blanked keys and isolated data. This Codespac
 | **LoRA provider over real HTTP** | the API with `USE_MOCK_AI=false`, `AI_PROVIDER=qwen3-4b-lora-v1`, `LORA_INFERENCE_BASE_URL` pointing at a local **stub** server (fixed reply; no model) | The request arrived as `model=qwen3-4b-lora-v1`, `temperature=0`, `max_tokens=1024`, with the shared system message. The saved output recorded the provider, base revision and adapter hash, and was flagged `commercial_opportunity_framing` and `presumed_outreach_activity`. Approval without acknowledgement: 409; with the exact acknowledgement: 200, recorded in the event. A server that lists only the base model: **503, and no generation request was sent**. |
 | Frozen Phase 9 material | `git diff HEAD -- backend/app/evaluation training/configs training/gtmflow_training`; Phase 9 `run/SHA256SUMS`; score file hashes | No diff; SHA256SUMS OK; scores `a3a9a4ae…`, `3c24b547…`, `c3dfbe35…` and the review `7280caa2…` / `95627749…` unchanged |
 
-## 4. How the runtime checks compare with the Phase 9 blind review
+## 4. What the Phase 9 data does and does not show about the runtime checks
 
-| Data | Result |
-|---|---|
-| LoRA test outputs (n = 71) | Flagged ⇔ rejected by the reviewer on **all 71**: 22 rejected flagged, 49 accepted clean |
-| Base test outputs (n = 71) | 67 of 70 rejected flagged. 3 rejected were not flagged (the faults were missing signatures and sender/recipient confusion, which have no check). The 1 accepted output was clean. |
-| Frozen references | **0 of 197** flagged (test 97, validation 100) |
+| Data | Role in building the rules | Result | What it establishes |
+|---|---|---|---|
+| Phase 9 test-v1 eligible outputs with blind-review decisions: LoRA (71) and base (71) | **Tuning data.** The rules were written from these findings, and two adjustments were made after inspecting them: call notes excluded from the framing check, and "unconfirmed whether…" hypotheses exempt. | LoRA: flags coincide with the reviewer's rejections on all 71 (22 rejected flagged, 49 accepted clean). Base: 67 of 70 rejected flagged; 3 missed (missing signatures and sender/recipient confusion have no check); the 1 accepted is clean. | **Regression coverage only.** It shows the rules still encode the documented problems on the examples they were tuned on. It is not evidence of accuracy on anything else. |
+| test-v1 references (97) | Also inspected during tuning: one flagged reference led to the "unconfirmed whether…" exemption. | 0 flagged | Regression coverage only. |
+| validation-v1 references (100) | Not used for tuning. | 0 flagged | **False positives on these 100 references only:** none of these acceptable texts is flagged. They share the v1 rubric's template wording, so this says little about other acceptable styles. |
 
-**Caveat:** two adjustments were made after looking at the test-set review: call notes are excluded from the framing check, and "unconfirmed whether…" hypotheses are exempt. The LoRA agreement is therefore **in-sample**. The validation references (0 of 100 flagged) are the out-of-sample evidence of no false flags on acceptable text. The checks are regular expressions, and a new phrasing of the same fault will not be caught.
+**Not established:** whether the checks detect *new* problematic wording. No unseen, independently labeled problematic outputs have been checked. The checks are regular expressions, so a rephrased version of a documented fault will be missed unless it matches a pattern. The GPU acceptance test (§8) produces fresh outputs from the real model, but they are near-reproductions of the Phase 9 test outputs, so they add parity evidence, not detection evidence.
 
 ## 5. What is tested versus what remains unverified
 
