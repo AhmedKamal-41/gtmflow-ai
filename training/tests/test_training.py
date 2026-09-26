@@ -416,3 +416,67 @@ def test_each_profile_keeps_its_own_state_and_unfinished_runs_block_new_ones(tmp
     args = type("A", (), {"confirm_paid_compute": True, "bundle_sha256": "x", "profile": "phase8-train",
                           "allow_rtx4090": False})()
     assert L.cmd_run(args) == 2
+
+
+# ------------------------------------------------------ Phase 10 acceptance
+
+def test_phase10_accept_bundle_allowlist_carries_no_data_and_matches_the_pod_script():
+    import re
+
+    L = _launcher()
+    job = (Path(__file__).resolve().parents[1] / "scripts" / "runpod" / "pod_serve_job.sh").read_text()
+    assert f'PHASE10_ALLOWED = r"{L.PHASE10_ALLOWED}"' in job and f'PHASE10_FORBIDDEN = r"{L.PHASE10_FORBIDDEN}"' in job
+    ok = lambda n: bool(re.match(L.PHASE10_ALLOWED, n)) and not re.search(L.PHASE10_FORBIDDEN, n, re.I)
+    for name in ("BUNDLE_COMMIT", "training/gtmflow_training/serve.py", "training/configs/phase9-eval-v1.json",
+                 "backend/app/ai/prompts.py",
+                 "training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/adapter_model.safetensors",
+                 "training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/adapter_config.json"):
+        assert ok(name), name
+    for name in ("training/runs/phase9-eval-inputs/test-eligible.jsonl", "backend/data/datasets/test-v1/eligible.jsonl",
+                 "training/runs/phase9-eval-v1/run/predictions/qwen3-4b-lora-v1.jsonl", "backend/.env",
+                 "backend/app/core/config.py", "training/runs/phase8-qwen3-4b-lora-v1/train/tokenizer/tokenizer.json",
+                 "training/runs/runpod/state.json", "training/tests/fixtures/sample.jsonl"):
+        assert not ok(name), name
+    prof = L.PROFILES["phase10-accept"]
+    assert prof["max_cost_per_hr"] * prof["hard_limit_seconds"] / 3600 <= 0.75
+    assert prof["state_file"] not in (L.PROFILES["phase8-train"]["state_file"], L.PROFILES["phase9-eval"]["state_file"])
+
+
+def test_serving_status_runs_the_acceptance_once_then_requests_a_stop(tmp_path, monkeypatch):
+    L = _launcher()
+    monkeypatch.setattr(L, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(L, "EVENTS", tmp_path / "events.jsonl")
+    monkeypatch.setattr(L, "P", L.PROFILES["phase10-accept"])
+    monkeypatch.setattr(L.time, "sleep", lambda s: None)
+    statuses = iter(["running:load", "serving", "serving", "running:package", "done"])
+    commands = []
+
+    def fake_ssh(state, command, timeout=300, check=True, input_text=None):
+        commands.append(command)
+        out = f"{next(statuses)}\n---\n" if command.startswith("cat /workspace/job/status") else ""
+        return type("R", (), {"returncode": 0, "stdout": out, "stderr": ""})()
+
+    runs = []
+    monkeypatch.setattr(L, "ssh", fake_ssh)
+    monkeypatch.setattr(L, "run_acceptance", lambda state: runs.append(1) or {"passed": True, "exit_code": 0})
+    state = {"pod_id": "p", "hard_limit_at": L.now() + 3600}
+    assert L.poll(state) == "done"
+    assert runs == [1] and state["acceptance"]["passed"] is True
+    assert commands.count("touch /workspace/job/stop") == 1
+
+
+def test_serve_accepts_only_greedy_bounded_requests_for_the_served_model():
+    from gtmflow_training import serve as S
+
+    class FakeGen:
+        def complete(self, messages, max_tokens):
+            return {"text": '{"reply": "REPLY-MARKER-456"}', "finish": "eos", "prompt_tokens": 10, "new_tokens": 4, "seconds": 0.1}
+
+    msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "PROMPT-MARKER-123"}]
+    base = {"model": "qwen3-4b-lora-v1", "messages": msgs, "temperature": 0, "max_tokens": 1024}
+    status, body, stats = S.handle_chat(FakeGen(), base)
+    assert status == 200 and body["choices"][0]["finish_reason"] == "stop" and body["usage"]["completion_tokens"] == 4
+    assert "PROMPT-MARKER" not in json.dumps(stats) and "REPLY-MARKER" not in json.dumps(stats)  # no text in the log
+    for change, code in (({"model": "Qwen/Qwen3-4B-Instruct-2507"}, 404), ({"temperature": 0.7}, 400), ({"n": 2}, 400),
+                         ({"max_tokens": 4096}, 400), ({"messages": [{"role": "tool", "content": "x"}]}, 400)):
+        assert S.handle_chat(FakeGen(), {**base, **change})[0] == code, change

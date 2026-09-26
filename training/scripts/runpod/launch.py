@@ -7,8 +7,11 @@
     python3 training/scripts/runpod/launch.py terminate       # emergency: remove this run's pod now
     python3 training/scripts/runpod/launch.py prove-self-delete --confirm-paid-compute   # ~2-4 min pod, no data
 
-Profiles (--profile): phase8-train (default; the Phase 8 training run) and
-phase9-eval (Phase 9 generation: 2 h hard lifetime, $0.60/hr price cap).
+Profiles (--profile): phase8-train (default; the Phase 8 training run),
+phase9-eval (Phase 9 generation: 2 h hard lifetime, $0.60/hr price cap) and
+phase10-accept (Phase 10 acceptance: the adapter served on the pod, the app
+tested from this workspace through an SSH tunnel; 75 min hard lifetime,
+$0.60/hr price cap; the bundle holds no data).
 
 The RunPod API key is read from $RUNPOD_API_KEY, else the RUNPOD_API_KEY line of
 backend/.env (only that line is parsed; the file must be git-ignored), else
@@ -42,6 +45,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import subprocess
 import sys
@@ -62,6 +66,11 @@ SSH_KEY = Path.home() / ".ssh" / "gtmflow_runpod_ed25519"
 KEY_FILE = Path.home() / ".config" / "gtmflow" / "runpod_api_key"
 ENV_FILE = REPO / "backend" / ".env"
 _KEY: str | None = None
+_SERVE_TOKEN: str | None = None  # phase10-accept only; memory only
+# The acceptance driver's app database: a disposable local Postgres (see
+# docs/upgrade/phase10-integration-handoff.md §8); never the project database.
+ACCEPT_DATABASE_URL = os.environ.get(
+    "GTMFLOW_ACCEPT_DATABASE_URL", "postgresql+psycopg://postgres:acceptonly@127.0.0.1:55498/gtmflow_accept")
 REST = "https://rest.runpod.io/v1"
 GRAPHQL = "https://api.runpod.io/graphql"
 USER_AGENT = "gtmflow-phase8-launcher/1.0 (+python-urllib)"  # the default urllib agent is blocked (Cloudflare 1010)
@@ -95,6 +104,15 @@ PHASE9_ALLOWED = (r"^(BUNDLE_COMMIT|backend/|backend/app/|backend/app/ai/|backen
                   r"training/runs/phase8-qwen3-4b-lora-v1/|training/runs/phase8-qwen3-4b-lora-v1/train/|"
                   r"training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/(adapter_config\.json|adapter_model\.safetensors)?)$")
 PHASE9_FORBIDDEN = r"(\.env($|/)|\.db$|\.sqlite|backend/data/|ai_reviews|/eligible\.jsonl$|flagged-uncertain)"
+# Phase 10 acceptance: code, prompts and the two pinned adapter files only. No
+# data file of any kind: the test inputs travel as request prompts through the
+# SSH tunnel and are never written to the pod's disk.
+PHASE10_ALLOWED = (r"^(BUNDLE_COMMIT|backend/|backend/app/|backend/app/ai/|backend/app/ai/prompts\.py|"
+                   r"training/(?!runs/).*|training/runs/|"
+                   r"training/runs/phase8-qwen3-4b-lora-v1/|training/runs/phase8-qwen3-4b-lora-v1/train/|"
+                   r"training/runs/phase8-qwen3-4b-lora-v1/train/best_adapter/(adapter_config\.json|adapter_model\.safetensors)?)$")
+PHASE10_FORBIDDEN = r"(\.env($|/)|\.db$|\.sqlite|backend/data/|\.jsonl$|ai_reviews|datasets|phase9-eval-inputs)"
+TUNNEL_PORT = 18000  # workspace side of the SSH tunnel to the pod's 127.0.0.1:8000
 
 PROFILES = {
     "phase8-train": {
@@ -114,6 +132,16 @@ PROFILES = {
         "grace_seconds": 30 * 60, "copy_back_reserve_seconds": 20 * 60,
         "max_cost_per_hr": 0.60, "allowed": PHASE9_ALLOWED, "forbidden": PHASE9_FORBIDDEN,
         "config": "phase9-eval-v1.json", "state_file": "state-phase9-eval-v1.json",
+    },
+    "phase10-accept": {
+        "run_name": "phase10-accept-v1", "local_run": TRAINING / "runs" / "phase10-accept-v1" / "run",
+        "bundle": TRAINING / "runs" / "gtmflow-phase10-accept-bundle.tar.gz", "pod_job": HERE / "pod_serve_job.sh",
+        "remote_archive": "/workspace/phase10-accept-v1.tar.gz", "pod_name_prefix": "gtmflow-phase10-",
+        "hard_limit_seconds": 75 * 60, "claim_limit_seconds": 30 * 60,
+        "grace_seconds": 20 * 60, "copy_back_reserve_seconds": 10 * 60,
+        "max_cost_per_hr": 0.60, "allowed": PHASE10_ALLOWED, "forbidden": PHASE10_FORBIDDEN,
+        "config": "phase9-eval-v1.json", "state_file": "state-phase10-accept-v1.json",
+        "poll_seconds": 15, "serve_token": True,
     },
 }
 P: dict = PROFILES["phase8-train"]  # set from --profile (or the saved state) in main()
@@ -327,9 +355,10 @@ def ssh_base(state: dict) -> list[str]:
             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=4", "-o", "BatchMode=yes"]
 
 
-def ssh(state: dict, command: str, timeout: int = 300, check: bool = True) -> subprocess.CompletedProcess:
+def ssh(state: dict, command: str, timeout: int = 300, check: bool = True,
+        input_text: str | None = None) -> subprocess.CompletedProcess:
     cmd = ["ssh", *ssh_base(state), "-p", str(state["ssh_port"]), f"root@{state['ssh_host']}", command]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=input_text)
     if check and proc.returncode != 0:
         raise RuntimeError(f"ssh `{command[:80]}` exit {proc.returncode}: {proc.stderr.strip()[-400:]}")
     return proc
@@ -498,6 +527,13 @@ def upload_and_start(state: dict) -> None:
     if remote_sha != state["bundle"]["sha256"]:
         raise RuntimeError(f"bundle checksum on pod {remote_sha} != local {state['bundle']['sha256']}")
     event("bundle_transferred", sha256=remote_sha)
+    if P.get("serve_token"):
+        # One-time bearer token for the pod's server: sent on stdin, kept in
+        # this process's memory only, never logged or saved to state.
+        global _SERVE_TOKEN
+        _SERVE_TOKEN = secrets.token_urlsafe(32)
+        ssh(state, "umask 077 && cat > /workspace/job/serve_token", input_text=_SERVE_TOKEN)
+        event("serve_token_installed")
     train_deadline = state["hard_limit_at"] - P["copy_back_reserve_seconds"]
     state["train_deadline_unix"] = train_deadline
     save_state(state)
@@ -526,12 +562,61 @@ def poll(state: dict) -> str:
             if status == "done" or status.startswith("failed"):
                 event("job_finished", status=status)
                 return status
+            if status == "serving" and P.get("serve_token") and not state.get("acceptance"):
+                state["acceptance"] = run_acceptance(state)
+                save_state(state)
+                ssh(state, "touch /workspace/job/stop", timeout=60, check=False)
+                event("serve_stop_requested")
         except (RuntimeError, subprocess.TimeoutExpired) as err:
             failures += 1
             event("poll_error", consecutive=failures, error=str(err)[:200])
             if get_pod(state["pod_id"]) is None:
                 return "pod_gone"
-        time.sleep(60)
+        time.sleep(P.get("poll_seconds", 60))
+
+
+def run_acceptance(state: dict) -> dict:
+    """Phase 10: while the pod serves, run the app's acceptance test from this
+    workspace through an SSH tunnel (127.0.0.1:TUNNEL_PORT -> pod 127.0.0.1:8000).
+    The driver's own exit code decides pass/fail; the tunnel is always closed."""
+    tunnel = subprocess.Popen(
+        ["ssh", *ssh_base(state), "-p", str(state["ssh_port"]), "-N", "-o", "ExitOnForwardFailure=yes",
+         "-L", f"127.0.0.1:{TUNNEL_PORT}:127.0.0.1:8000", f"root@{state['ssh_host']}"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    result: dict = {"started_at": iso()}
+    try:
+        for _ in range(30):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{TUNNEL_PORT}/healthz", timeout=5):
+                    break
+            except (urllib.error.URLError, OSError):
+                time.sleep(2)
+        else:
+            raise RuntimeError("SSH tunnel to the pod's server did not come up")
+        event("acceptance_started", tunnel_port=TUNNEL_PORT)
+        out_dir = TRAINING / "runs" / P["run_name"] / "acceptance"
+        env = {**os.environ, "LORA_INFERENCE_API_KEY": _SERVE_TOKEN or ""}
+        timeout = max(60, int(state["hard_limit_at"] - P["copy_back_reserve_seconds"] - now() - 120))
+        proc = subprocess.run(
+            [str(REPO / "backend" / ".venv" / "bin" / "python"), str(REPO / "backend" / "scripts" / "phase10_acceptance.py"),
+             "--base-url", f"http://127.0.0.1:{TUNNEL_PORT}/v1", "--out", str(out_dir),
+             "--database-url", ACCEPT_DATABASE_URL, "--real-inference"],
+            cwd=REPO / "backend", env=env, capture_output=True, text=True, timeout=timeout)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "driver.log").write_text(
+            scrub(proc.stdout[-20000:] + "\n--- stderr ---\n" + proc.stderr[-20000:]))
+        result.update(exit_code=proc.returncode, passed=proc.returncode == 0, out_dir=str(out_dir))
+    except Exception as err:  # noqa: BLE001 -- recorded; the pod is stopped either way
+        result.update(passed=False, error=f"{type(err).__name__}: {err}"[:300])
+    finally:
+        tunnel.terminate()
+        try:
+            tunnel.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            tunnel.kill()
+    result["finished_at"] = iso()
+    event("acceptance_finished", **{k: v for k, v in result.items() if k != "out_dir"})
+    return result
 
 
 def fetch_and_verify(state: dict, status: str) -> dict:
@@ -550,7 +635,8 @@ def fetch_and_verify(state: dict, status: str) -> dict:
     remote_sha = ssh(state, f"cat {remote_archive}.sha256").stdout.strip()
     archive = local_dir / Path(remote_archive).name
     scp(state, remote(state, remote_archive), str(archive))
-    verify = verify_eval_archive if P is PROFILES["phase9-eval"] else verify_archive
+    verify = {id(PROFILES["phase9-eval"]): verify_eval_archive,
+              id(PROFILES["phase10-accept"]): verify_accept_archive}.get(id(P), verify_archive)
     result = verify(archive, remote_sha, P["local_run"])
     result["status"] = status
     event("artifacts_verified", **result)
@@ -638,6 +724,30 @@ def verify_eval_archive(archive: Path, expected_sha: str, dest: Path) -> dict:
             "predictions_ok": preds_ok, "config_matches_repo": config_ok, "inputs_match_pins": inputs_ok,
             "adapter_matches_pins": adapter_ok, "stopped": manifest.get("stopped"),
             "passes": manifest.get("passes"), "local_path": str(dest)}
+
+
+def verify_accept_archive(archive: Path, expected_sha: str, dest: Path) -> dict:
+    """Phase 10 copy-back: archive checksum, every file against the pod-side
+    SHA256SUMS, and the adapter the server loaded against the pinned hashes."""
+    local_sha = sha256(archive)
+    if local_sha != expected_sha:
+        raise RuntimeError(f"archive checksum mismatch: local {local_sha} expected {expected_sha}")
+    if dest.exists():
+        raise RuntimeError(f"{dest} already exists; refusing to overwrite")
+    dest.mkdir(parents=True)
+    with tarfile.open(archive) as tar:
+        tar.extractall(dest, filter="data")
+    sums = (dest / "SHA256SUMS").read_text().splitlines()
+    mismatches = [name for digest, name in (line.split(maxsplit=1) for line in sums)
+                  if sha256(dest / name.removeprefix("./")) != digest]
+    pinned = json.loads((TRAINING / "configs" / PROFILES["phase10-accept"]["config"]).read_text())
+    served = json.loads((dest / "serve" / "serve-manifest.json").read_text())
+    adapter_ok = served.get("adapter_sha256") == pinned["adapter"]["sha256"]
+    config_ok = served.get("config_sha256") == sha256(TRAINING / "configs" / PROFILES["phase10-accept"]["config"])
+    return {"verified": not mismatches and adapter_ok and config_ok, "archive_sha256": local_sha,
+            "files_checked": len(sums), "mismatches": mismatches, "adapter_matches_pins": adapter_ok,
+            "config_matches_repo": config_ok, "requests_logged": served.get("requests_logged"),
+            "gpu_memory": served.get("gpu_memory"), "local_path": str(dest)}
 
 
 # -------------------------------------------------------------- commands
