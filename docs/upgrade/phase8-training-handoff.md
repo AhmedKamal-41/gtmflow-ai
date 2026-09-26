@@ -2,6 +2,8 @@
 
 Date: 2026-09-25. **Status: trained (v1 adapter). Not evaluated.** One real training run completed on 2026-09-25 (§10). Evaluation on the test set is Phase 9 and has not started.
 
+> **Update 2026-09-26:** Phase 9 is prepared and awaiting budget approval; see `phase9-evaluation-handoff.md`. The project moved to a new Codespace. The run records below keep their original `/workspaces/gtmflow-phase5` paths, and the artifacts now live at the same relative paths under `/workspaces/gtmflow-ai`.
+
 Per the readiness ladder: the runner is **code ready**, verified with tests and CPU smoke runs on a tiny random model. Once you have reviewed the approach, it moves to **needs compute**. It becomes **trained** only after a real run on the pinned data produces an adapter, with the run's command, machine, wall time and artifact location recorded.
 
 ## 1. Starting point
