@@ -538,8 +538,10 @@ export async function getSession(): Promise<SessionInfo> {
 export async function logout(): Promise<void> {
   try {
     await request<void>("/api/auth/logout", { method: "POST" });
-  } finally {
-    setCsrfToken(null);
+  } catch (error) {
+    // A revoked/expired session is already signed out. A network/CSRF
+    // failure is not: retain the token so the operator can retry.
+    if (!(error instanceof APIError && error.status === 401)) throw error;
   }
+  setCsrfToken(null);
 }
-

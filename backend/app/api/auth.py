@@ -10,13 +10,14 @@ recorded in labels and on every WorkflowEvent (app/core/actor.py).
 from __future__ import annotations
 
 import hmac
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.actor import Actor, set_actor
+from app.core.actor import Actor, reset_actor, set_actor
 from app.core.config import settings
 from app.core.database import get_session
 from app.models.auth import ROLE_OPERATOR
@@ -44,8 +45,9 @@ class SessionInfo(BaseModel):
     csrf_token: str
 
 
-async def authenticate(request: Request, session: Session = Depends(get_session)) -> None:
+async def authenticate(request: Request, session: Session = Depends(get_session)) -> AsyncIterator[None]:
     if request.url.path in PUBLIC_PATHS or request.method == "OPTIONS":
+        yield
         return
     token = request.cookies.get(COOKIE_NAME)
     resolved = await run_in_threadpool(auth_service.resolve, session, token)
@@ -61,7 +63,11 @@ async def authenticate(request: Request, session: Session = Depends(get_session)
     request.state.auth = resolved
     # Set here, in the request's own context: the endpoint (run in a thread
     # pool) inherits a copy of it.
-    set_actor(Actor(label=f"user:{resolved.username}", user_id=resolved.user_id, role=resolved.role))
+    context = set_actor(Actor(label=f"user:{resolved.username}", user_id=resolved.user_id, role=resolved.role))
+    try:
+        yield
+    finally:
+        reset_actor(context)
 
 
 def _set_cookie(response: Response, token: str) -> None:
@@ -77,6 +83,15 @@ def _info(resolved: auth_service.ResolvedSession) -> SessionInfo:
 @router.post("/login", response_model=SessionInfo)
 def login(body: LoginRequest, request: Request, response: Response,
           session: Session = Depends(get_session)) -> SessionInfo:
+    # Login has no existing session token. Requiring JSON prevents simple
+    # cross-site form/fetch requests; an explicit Origin check also rejects
+    # hostile browser origins before any account state is changed.
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+        raise HTTPException(status_code=415, detail="Sign-in requires application/json.")
+    origin = request.headers.get("origin")
+    own_origin = f"{request.url.scheme}://{request.url.netloc}"
+    if origin is not None and origin not in (*settings.allowed_origins, own_origin):
+        raise HTTPException(status_code=403, detail="Sign-in origin is not allowed.")
     try:
         user, token, row = auth_service.login(
             session, body.username, body.password,
@@ -84,6 +99,9 @@ def login(body: LoginRequest, request: Request, response: Response,
             user_agent=request.headers.get("user-agent"),
             previous_token=request.cookies.get(COOKIE_NAME),
         )
+    except auth_service.LoginThrottled:
+        raise HTTPException(status_code=429, detail="Too many sign-in attempts. Try again later.",
+                            headers={"Retry-After": str(auth_service.LOGIN_WINDOW_SECONDS)}) from None
     except auth_service.LoginFailed:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=auth_service.GENERIC_LOGIN_ERROR) from None
     _set_cookie(response, token)

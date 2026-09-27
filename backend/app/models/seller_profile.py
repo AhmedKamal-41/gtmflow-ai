@@ -38,8 +38,8 @@ class SellerProfileActivation(Base):
     ``seller_profile_id`` NULL records a deactivation. Saving a new draft
     never writes here, so a draft cannot silently become active.
     ``reviewed_confirmation`` records the operator's explicit statement at
-    activation time; the app has no authentication, so it is not a verified
-    identity (``actor_label`` says so).
+    activation time. New ``actor_label`` values come from the authenticated
+    session; historical labels retain their original meaning.
     """
 
     __tablename__ = "seller_profile_activations"

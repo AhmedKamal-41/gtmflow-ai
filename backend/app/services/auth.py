@@ -22,21 +22,33 @@ import base64
 import hashlib
 import hmac
 import secrets
+from threading import BoundedSemaphore
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import case, delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.auth import ROLES, User, UserSession
+from app.core.actor import Actor, reset_actor, set_actor
+from app.models.auth import ROLES, LoginThrottle, User, UserSession
+from app.models.workflow_event import WorkflowEvent
 
 MIN_PASSWORD_LENGTH = 12
+MAX_PASSWORD_LENGTH = 256
 MAX_FAILED_LOGINS = 5
 LOCKOUT_MINUTES = 15
+LOGIN_WINDOW_SECONDS = 300
+MAX_PEER_ATTEMPTS = 30
 LAST_SEEN_WRITE_SECONDS = 60
 GENERIC_LOGIN_ERROR = "Invalid username or password."
 _DUMMY_HASH: str | None = None
+# scrypt N=2^15, r=8, p=3 is OWASP's 32 MiB option. Bound simultaneous
+# hashing within each process as well as the shared login request rate.
+PASSWORD_HASH_P = 3
+_HASH_SLOTS = BoundedSemaphore(2)
 
 
 def _now() -> datetime:
@@ -52,8 +64,10 @@ def _aware(value: datetime | None) -> datetime | None:
 def hash_password(password: str, n: int | None = None) -> str:
     n = n or settings.password_hash_n
     salt = secrets.token_bytes(16)
-    digest = hashlib.scrypt(password.encode(), salt=salt, n=n, r=8, p=1, dklen=32, maxmem=256 * 1024 * 1024)
-    return "scrypt${}${}${}${}${}".format(n, 8, 1, base64.b64encode(salt).decode(), base64.b64encode(digest).decode())
+    with _HASH_SLOTS:
+        digest = hashlib.scrypt(password.encode(), salt=salt, n=n, r=8, p=PASSWORD_HASH_P,
+                                dklen=32, maxmem=256 * 1024 * 1024)
+    return "scrypt${}${}${}${}${}".format(n, 8, PASSWORD_HASH_P, base64.b64encode(salt).decode(), base64.b64encode(digest).decode())
 
 
 def verify_password(password: str, stored: str) -> bool:
@@ -62,8 +76,9 @@ def verify_password(password: str, stored: str) -> bool:
         if scheme != "scrypt":
             return False
         expected = base64.b64decode(digest)
-        actual = hashlib.scrypt(password.encode(), salt=base64.b64decode(salt), n=int(n), r=int(r), p=int(p),
-                                dklen=len(expected), maxmem=256 * 1024 * 1024)
+        with _HASH_SLOTS:
+            actual = hashlib.scrypt(password.encode(), salt=base64.b64decode(salt), n=int(n), r=int(r), p=int(p),
+                                    dklen=len(expected), maxmem=256 * 1024 * 1024)
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(actual, expected)
@@ -72,6 +87,8 @@ def verify_password(password: str, stored: str) -> bool:
 def validate_new_password(password: str) -> None:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if len(password) > MAX_PASSWORD_LENGTH:
+        raise ValueError(f"Password must be at most {MAX_PASSWORD_LENGTH} characters.")
 
 
 def normalize_username(username: str) -> str:
@@ -79,6 +96,11 @@ def normalize_username(username: str) -> str:
 
 
 # ------------------------------------------------------------ users (CLI)
+
+def _event(session: Session, event_type: str, user_id, **data) -> None:
+    session.add(WorkflowEvent(event_type=event_type,
+                              event_data={"target_user_id": str(user_id), **data}))
+
 
 def create_user(session: Session, username: str, password: str, role: str) -> User:
     name = normalize_username(username)
@@ -93,13 +115,16 @@ def create_user(session: Session, username: str, password: str, role: str) -> Us
                 failed_login_count=0, password_changed_at=_now())
     session.add(user)
     session.flush()
+    _event(session, "auth_user_created", user.id, role=role)
     return user
 
 
 def revoke_user_sessions(session: Session, user_id) -> int:
     result = session.execute(update(UserSession).where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
                              .values(revoked_at=_now()).execution_options(synchronize_session=False))
-    return result.rowcount or 0
+    count = result.rowcount or 0
+    _event(session, "auth_sessions_revoked", user_id, count=count)
+    return count
 
 
 def set_password(session: Session, user: User, password: str) -> None:
@@ -108,12 +133,14 @@ def set_password(session: Session, user: User, password: str) -> None:
     user.password_changed_at = _now()
     user.failed_login_count, user.locked_until = 0, None
     revoke_user_sessions(session, user.id)
+    _event(session, "auth_password_changed", user.id)
 
 
 def set_active(session: Session, user: User, active: bool) -> None:
     user.is_active = active
     if not active:
         revoke_user_sessions(session, user.id)
+    _event(session, "auth_user_enabled" if active else "auth_user_disabled", user.id)
 
 
 # ------------------------------------------------------------ login / sessions
@@ -130,11 +157,48 @@ class LoginFailed(Exception):
     pass
 
 
+class LoginThrottled(Exception):
+    pass
+
+
+def _limit_peer(session: Session, client_ip: str | None) -> None:
+    """Count attempts atomically before hashing, across API processes.
+
+    The peer comes from the ASGI connection, never a header read here.
+    Only explicitly trusted reverse proxies may set forwarded addresses.
+    PostgreSQL and SQLite are the app's supported databases.
+    """
+    now = _now()
+    cutoff = now - timedelta(seconds=LOGIN_WINDOW_SECONDS)
+    session.execute(delete(LoginThrottle).where(LoginThrottle.window_started_at < cutoff))
+    insert = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
+    table = LoginThrottle.__table__
+    statement = insert(table).values(key=token_hash(client_ip or "unknown"), window_started_at=now, attempts=1)
+    expired = table.c.window_started_at < cutoff
+    statement = statement.on_conflict_do_update(
+        index_elements=[table.c.key],
+        set_={"attempts": case((expired, 1), else_=table.c.attempts + 1),
+              "window_started_at": case((expired, now), else_=table.c.window_started_at)},
+    ).returning(table.c.attempts)
+    attempts = session.execute(statement).scalar_one()
+    session.commit()
+    if attempts > MAX_PEER_ATTEMPTS:
+        raise LoginThrottled()
+
+
 def login(session: Session, username: str, password: str, *, client_ip: str | None,
           user_agent: str | None, previous_token: str | None = None) -> tuple[User, str, UserSession]:
     global _DUMMY_HASH
-    user = session.scalar(select(User).where(User.username == normalize_username(username)))
+    _limit_peer(session, client_ip)
+    # Acquire a database write lock before checking/incrementing the counter.
+    # SELECT then increment lost failures when parallel requests raced. The
+    # no-op UPDATE serializes on both PostgreSQL and SQLite (FOR UPDATE is
+    # ignored by SQLite). Account-management writes use the same row lock.
+    user = session.scalar(update(User).where(User.username == normalize_username(username))
+                          .values(username=User.username).returning(User)
+                          .execution_options(populate_existing=True))
     if user is None:
+        session.rollback()
         if _DUMMY_HASH is None:
             _DUMMY_HASH = hash_password("dummy-password-for-timing")
         verify_password(password, _DUMMY_HASH)
@@ -148,8 +212,14 @@ def login(session: Session, username: str, password: str, *, client_ip: str | No
             if user.failed_login_count >= MAX_FAILED_LOGINS:
                 user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
                 user.failed_login_count = 0
+                _event(session, "auth_account_locked", user.id)
         session.commit()
         raise LoginFailed()
+    # Upgrade hashes from the initial Phase 12 cost without breaking old
+    # accounts. Only a successfully verified password is ever rehashed.
+    parts = user.password_hash.split("$")
+    if int(parts[1]) < settings.password_hash_n or (int(parts[1]) == settings.password_hash_n and int(parts[3]) < PASSWORD_HASH_P):
+        user.password_hash = hash_password(password)
     if previous_token:
         session.execute(update(UserSession).where(UserSession.token_hash == token_hash(previous_token),
                                                   UserSession.revoked_at.is_(None))
@@ -160,7 +230,12 @@ def login(session: Session, username: str, password: str, *, client_ip: str | No
                       expires_at=now + timedelta(hours=settings.session_absolute_hours),
                       client_ip=(client_ip or "")[:64] or None, user_agent=(user_agent or "")[:200] or None)
     session.add(row)
-    session.commit()
+    actor_token = set_actor(Actor(label=f"user:{user.username}", user_id=str(user.id), role=user.role))
+    try:
+        _event(session, "auth_login", user.id)
+        session.commit()
+    finally:
+        reset_actor(actor_token)
     return user, token, row
 
 
@@ -199,7 +274,10 @@ def resolve(session: Session, token: str | None) -> ResolvedSession | None:
 
 def logout(session: Session, token: str | None) -> None:
     if token:
-        session.execute(update(UserSession).where(UserSession.token_hash == token_hash(token),
+        user_id = session.scalar(update(UserSession).where(UserSession.token_hash == token_hash(token),
                                                   UserSession.revoked_at.is_(None))
-                        .values(revoked_at=_now()).execution_options(synchronize_session=False))
+                        .values(revoked_at=_now()).returning(UserSession.user_id)
+                        .execution_options(synchronize_session=False))
+        if user_id is not None:
+            _event(session, "auth_logout", user_id)
         session.commit()

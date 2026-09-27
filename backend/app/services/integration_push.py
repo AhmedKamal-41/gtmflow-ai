@@ -22,6 +22,8 @@ It then focuses on:
 
 from __future__ import annotations
 
+from app.core.actor import actor_label
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -310,7 +312,7 @@ def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = Fal
         lead_id=lead.id, integration_type=SLACK, payload=_payload(session, lead, draft),
         status=PUSH_PENDING, delivery_key=f"slack:{draft.id}:{content_hash}:{attempt}",
         approved_output_id=draft.id, approved_content_hash=content_hash, attempt=attempt,
-        delivery_mode=mode, claimed_by=actor[:128], claimed_at=_now(),
+        delivery_mode=mode, claimed_by=actor_label(), claimed_at=_now(),
     )
     try:
         with session.begin_nested():
@@ -350,6 +352,7 @@ def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = Fal
         "attempt": attempt,
         "delivery_mode": mode,
         "redeliver": redeliver,
+        "action_source": actor,
     }
     if recorded.rowcount != 1:
         # Our claim was declared unknown while we were sending (we exceeded

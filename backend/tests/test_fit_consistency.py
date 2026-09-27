@@ -339,7 +339,7 @@ def test_scoring_audit_records_do_not_inflate_operational_metrics(
     assert all(event.event_data["profile_id"] == fit.PROFILE_ID for event in events)
     skipped = client.post(f"/api/batches/{batch.id}/fit-score").json()
     assert skipped["skipped_unchanged"] == 1
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 2
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 2
     metrics = client.get("/api/metrics/dashboard").json()
     assert metrics["fit_scored_leads"] == 1
     assert metrics["total_leads_processed"] == 0
@@ -372,7 +372,7 @@ def test_batch_commit_failure_counts_failed_rows_and_continues(
     assert (run["attempted"], run["newly_scored"], run["failed"]) == (3, 1, 2)
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(LeadFitScore)) == 1
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 1
     retry = client.post(f"/api/batches/{batch.id}/fit-score").json()
     assert (retry["newly_scored"], retry["skipped_unchanged"], retry["failed"]) == (2, 1, 0)
 

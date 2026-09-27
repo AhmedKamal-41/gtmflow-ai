@@ -8,11 +8,11 @@ a training-annotation candidate); its content is what was displayed; and no
 newer draft supersedes it. An identical repeat is an idempotent no-op; a
 changed decision (approve -> reject) is its own row and event.
 
-approval_rate can still exceed 100% on approve -> reject -> approve; the
-metric redesign is Phase 11 scope (docs/upgrade/decisions.md).
+Phase 11 metrics count each operational draft by its latest review, so a
+changed decision cannot inflate approval_rate past 100%.
 
-Reviewer identity is the fixed, honestly unauthenticated label
-``local-demo-unauthenticated``; request bodies can't supply a name.
+Reviewer identity comes from the authenticated session (Phase 12);
+request bodies cannot supply a reviewer name.
 """
 
 from __future__ import annotations

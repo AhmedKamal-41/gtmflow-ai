@@ -10,9 +10,17 @@ os.environ["SLACK_WEBHOOK_URL"] = ""
 os.environ["AI_PROVIDER"] = "openai"  # Phase 10: never a developer's inference server
 os.environ["LORA_INFERENCE_BASE_URL"] = ""
 os.environ["LORA_INFERENCE_API_KEY"] = ""
+# Raw health clients and file-only dataset CLI tests also construct the
+# session dependency. Do not rely on a developer's .env being present.
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # Phase 12: the test client talks plain http, and hashing cost is kept low.
 os.environ["SESSION_COOKIE_SECURE"] = "false"
 os.environ["PASSWORD_HASH_N"] = "1024"
+# Workstation proxy settings must not divert the transport-guard test or
+# loopback HTTP checks. No test uses an external proxy or alternate API.
+for _proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+    os.environ.pop(_proxy, None)
+os.environ["OPENAI_BASE_URL"] = "https://api.openai.com/v1"
 
 # Defense in depth: even if a test builds a real client explicitly, no
 # socket may resolve or reach a non-loopback host during the test run.

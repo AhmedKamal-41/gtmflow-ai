@@ -17,7 +17,7 @@ class ApproveOutreachRequest(BaseModel):
 
     Phase 6: ``content_hash`` is the hash of the exact content displayed
     (``AIOutputRead.content_hash``). Extra fields -- e.g. a posted reviewer
-    name -- are rejected: identity is the fixed unauthenticated label.
+    name -- are rejected: identity comes from the authenticated server-side session.
     """
 
     model_config = ConfigDict(extra="forbid")

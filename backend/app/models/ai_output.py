@@ -93,7 +93,7 @@ class AIOutput(Base):
     # (origin="human_edited", parent_output_id -> the row it revises) that
     # copies the parent's input/seller/prompt provenance; the model response
     # itself is never overwritten. `author_label` is the honest,
-    # unauthenticated operator label for human revisions (NULL for model
+    # server-assigned operator label for human revisions (NULL for model
     # output).
     purpose: Mapped[str] = mapped_column(
         String(16), nullable=False, default=PURPOSE_OPERATIONAL,

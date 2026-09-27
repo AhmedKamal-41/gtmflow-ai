@@ -23,7 +23,7 @@ function isActive(pathname: string, href: string): boolean {
 
 export function AppHeader() {
   const pathname = usePathname() ?? "/";
-  const { session, signOut } = useAuth();
+  const { session, signOut, signOutError } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur">
@@ -75,6 +75,7 @@ export function AppHeader() {
           </div>
         )}
       </div>
+      {signOutError && <p role="alert" className="px-4 pb-2 text-sm text-red-700">{signOutError}</p>}
     </header>
   );
 }

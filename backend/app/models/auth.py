@@ -57,3 +57,16 @@ class UserSession(Base):
     user_agent: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     user: Mapped[User] = relationship("User", back_populates="sessions")
+
+
+class LoginThrottle(Base):
+    """Shared across API processes; the key hashes the connection's peer IP.
+
+    No username or supplied credentials are retained. Expired entries are
+    removed during later attempts, so this is not a permanent visitor log.
+    """
+    __tablename__ = "login_throttles"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False)

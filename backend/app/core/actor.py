@@ -45,9 +45,14 @@ def actor_label() -> str:
 def _stamp(mapper: Any, connection: Any, target: Any) -> None:
     actor = current_actor()
     data = dict(target.event_data or {})
-    data.setdefault("actor", actor.label)
+    # Older delivery call sites use "actor" for the dispatch path. Keep
+    # that useful context, but the authenticated identity is authoritative.
+    if data.get("actor") and data["actor"] != actor.label:
+        data.setdefault("action_source", data["actor"])
+    data["actor"] = actor.label
+    data.pop("actor_user_id", None)
     if actor.user_id is not None:
-        data.setdefault("actor_user_id", actor.user_id)
+        data["actor_user_id"] = actor.user_id
     target.event_data = data
 
 

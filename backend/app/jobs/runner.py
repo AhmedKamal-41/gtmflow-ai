@@ -8,12 +8,11 @@ nothing, the transaction is rolled back and this worker stops -- so an
 item's database effect is committed at most once. Items committed before a
 crash stay done; the next worker continues with the pending ones.
 
-Limitation: an external side effect that is not part of the transaction (a
-real Slack delivery) cannot be rolled back by the fence. Push items are
-never retried automatically, and the lease (default 60 s) is far longer
-than the Slack timeout, but a worker stalled past its lease in the middle of
-a delivery could still deliver once more after takeover (Phase 11 owns push
-idempotency, audit D.3).
+External effects cannot be rolled back with a database transaction. Phase 11
+therefore persists a unique delivery claim before Slack dispatch. A takeover
+cannot repeat that claim; an uncertain outcome requires operator resolution.
+Push items are never retried automatically. This is at-most-once dispatch per
+claim, not exactly-once delivery by the external webhook.
 """
 from __future__ import annotations
 
@@ -98,8 +97,10 @@ def run_job(factory: sessionmaker[Session], job_id: UUID, worker_id: str, *, lea
     LOST / RELEASED / PAUSED. Everything the job does is recorded with the
     actor "job:<who queued it>" (Phase 12)."""
     with factory() as session:
-        queued_by = session.get(BackgroundJob, job_id).created_by or "unknown"
-    token = set_actor(Actor(label=f"job:{queued_by}"[:64]))
+        job = session.get(BackgroundJob, job_id)
+        queued_by = job.created_by or "unknown"
+        user_id = str(job.created_by_user_id) if job.created_by_user_id else None
+    token = set_actor(Actor(label=f"job:{queued_by}"[:64], user_id=user_id))
     try:
         return _run_job(factory, job_id, worker_id, lease_seconds=lease_seconds, clock=clock,
                         should_stop=should_stop, item_limit=item_limit)

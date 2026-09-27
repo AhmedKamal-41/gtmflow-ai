@@ -20,7 +20,7 @@ import sys
 
 from sqlalchemy import select
 
-from app.core.actor import Actor, set_actor
+from app.core.actor import Actor, reset_actor, set_actor
 from app.core.database import get_sessionmaker
 from app.models.auth import ROLES, User
 from app.services import auth as auth_service
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name).add_argument("username")
     sub.add_parser("list")
     args = parser.parse_args(argv)
-    set_actor(Actor(label="cli:auth"))
+    actor_token = set_actor(Actor(label="cli:auth"))
     session = get_sessionmaker()()
     try:
         if args.command == "list":
@@ -80,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         session.close()
+        reset_actor(actor_token)
 
 
 if __name__ == "__main__":

@@ -332,6 +332,27 @@ Full detail: `docs/upgrade/phase12-release-handoff.md`.
 | **Dependencies:** applied `npm audit fix` (no `--force`), which took Next.js 15.5.19 → 15.5.26 and sharp 0.34.5 → 0.35.4 in the lockfile only. Did **not** force Next.js 16 or override Next's pinned PostCSS; did **not** change the training locks. | "Do not blindly force upgrades." The remaining findings, and why they are low impact here, are in the handoff. |
 | **Flaky frontend test:** kept every assertion and gave the CPU-heavy test a 20 s limit. | It was CPU-bound (about 3.1 s alone, 6.4 s under deliberate contention), not timing-dependent. |
 
+## Phase 12 follow-up verification (2026-09-27)
+
+The initial Phase 12 implementation was already on the recovery branch at
+`93b6c41`. This follow-up preserves it and the completed Phase 10/11 work.
+
+| Decision | Reason and evidence |
+|---|---|
+| Serialize account login updates and use a database-backed peer throttle (30 attempts / 5 minutes). | Parallel requests must not lose failed attempts. Shared state covers multiple API processes and unknown usernames. The peer comes from the connection; only configured, trusted proxies may supply forwarded addresses. |
+| Require JSON and an allowed browser Origin at login; bound login bodies; prevent password reflection. | Login has no preexisting CSRF token. A 16 KiB limit and generic errors reduce abuse; API responses are private/no-store. |
+| Keep scrypt, using N=32768, r=8, p=3; upgrade older hashes after successful verification. | OWASP's 32 MiB option, with two concurrent hash slots per process. CLI and API enforce the same 12–256 character bound. No dependency added. |
+| Auth-protect API documentation explicitly. | FastAPI's built-in documentation routes bypass application dependencies. Explicit routes inherit the access check. |
+| Add nullable job creator UUID and authoritative actor stamping (migration 0013). | Worker events retain the authenticated user ID. Existing jobs/history are not backfilled or rewritten. Delivery claims retain the operator and store dispatch path as context. |
+| Audit account changes, login/logout and account lockout. | Security-sensitive changes now have server-side actor records; passwords and raw session tokens never enter audit data. |
+| Keep the browser signed in if logout cannot be confirmed; discard stale session responses and reject backslash redirects. | A network error must not falsely imply session revocation, and a delayed response must not resurrect stale UI state. |
+| Pin the audited backend environment with hashes; override Next's PostCSS to 8.5.28. | Compatible major-8 security update verified by complete frontend tests, typecheck and build. No Next major upgrade and no training-lock changes; detailed remaining impact in `docs/dependency-security.md`. This supersedes the initial decision below to leave PostCSS unresolved. |
+| Verify with a repeatable synthetic release harness and isolated PostgreSQL 16 in CI. | The local executor cannot run PostgreSQL. The public repository's standard GitHub runner uses a disposable service, no production credentials, no artifact uploads and no deployment. Python 3.12 / Node 24 match the release environment. |
+
+The per-peer throttle supersedes the initial Phase 12 decision to leave all
+IP limiting to a proxy. Deployment still needs trusted-proxy configuration,
+TLS, and global resource limits. Reference: [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+
 ## Dependencies later phases will need
 
 - ~~**Phase 2**: a migration tool.~~ **Resolved**: Alembic, installed (see table above).
@@ -339,28 +360,18 @@ Full detail: `docs/upgrade/phase12-release-handoff.md`.
 - **Phase 8** *(resolved in preparation, 2026-09-25; see the Phase 8 decisions above)*: a LoRA/PEFT training stack (e.g., `peft`, `transformers`, `bitsandbytes` or equivalent) and a base model choice. None of this exists in `requirements.txt` today. Requires GPU access and the user's explicit go-ahead before any run (per contract rule 7) — this is compute spend, not a research decision to make unilaterally.
 - **Phase 10**: a background job system. **Decided in Phase 10:** a database-backed job table with leases, and no new dependency (see "Decisions made in Phase 10" above).
 
-## Unresolved questions for the user
+## Remaining decisions (current after Phase 12)
 
-Resolved since Phase 2 (moved out of this list): PDL curation criteria (fixed rules supplied and implemented, zero shortfall), blocked-status-survives-review regression (found and fixed), approval_rate fix status (corrected to "partial"). Resolved in Phase 4: scoring model redesign scope (implemented as `demo-us-sectors-v1`, see phase4-scoring-handoff.md — point allocations and band thresholds were specified in the Phase 4 brief itself, not left to be improvised).
+1. Deployment platform, TLS, trusted proxy settings, secret storage, database backups and restore drill; no deployment has started.
+2. Production seller/service profile and sourcing. The demonstration profile was explicitly used in the evaluated workflow; it does not represent a real offer.
+3. Persistent model hosting and cost, if desired. The temporary GPU acceptance test is complete; current app operation is mock by default.
+4. Human verification of model results and uncertain training candidates. Existing evaluation remains explicitly AI-evaluated.
+5. Recovery of the original development database remains separate (Phase 9 handoff §8).
+6. Company matching/merge policy for a future second PDL snapshot.
 
-Still open, listed in the order they'll come up:
-
-1. **The seller/service profile content (Phase 5's remaining input).** The mechanism is complete: drafts, explicit activation, grounded generation and provenance, with migrations applied to the real database. No real profile exists, so `no_seller_profile_configured` still fires on all 5,000 real leads. Still needed from the user:
-   - seller company and product names, value proposition, and target customers (segments, geography, size ranges, roles);
-   - capabilities, sourced proof points, and exclusions;
-   - who reviews and activates the revision;
-   - a contact source if outbound email is the goal.
-
-   Alternatively, an explicit decision to use the labeled GTMFlow demonstration profile. See `phase5-generation-handoff.md` §8. Whether the size criterion should become active is a separate versioned-rubric decision.
-2. **Training data for Phases 6–9.** The annotation workflow now exists (Phase 6). The frozen split manifest `company-groups-v1` and the 100-candidate `pilot-v1` queue are on the real database, with 0 reviewed. Still open:
-   - who reviews, and over what time frame;
-   - which candidate provider: labeled mock or a paid real model (needs go-ahead);
-   - whether to activate the GTMFlow demonstration profile for outreach candidates.
-
-   See `phase6-review-handoff.md` §8.
-3. **Concurrent-push idempotency mechanism for Phase 11** (D.3) — a DB-level unique constraint / row lock vs. an application-level idempotency key vs. a queue-based dedup once Phase 10's background jobs exist. Not decided; explicitly deferred per the user's instruction to keep delivery reliability in Phase 11.
-4. **Company-identity resolution/merge strategy for a future second PDL snapshot.** Phase 3 imported exactly one snapshot, so no two `Lead` rows have ever needed to be resolved to the same `CompanyIdentity`. The matching strategy (fuzzy name match? domain + locality heuristic? manual review queue?) is still undesigned — flagging now since it wasn't yet a live question with only one snapshot in the database, but will be the moment a second PDL pull happens.
-5. **Whether `outreach_rejected` should become a real hard routing-eligibility exclusion**, not just a v2 readiness gap. Verified in Phase 4 that the current Slack-push pipeline does not treat it as a hard block (`BLOCKED_STATUSES` excludes it); left unchanged since modifying that enforcement was out of Phase 4's scope, but flagging since the Phase 4 brief's own wording assumed it already was one.
+Delivery idempotency was completed in Phase 11. Current delivery requires an
+applicable exact-draft approval, so a latest rejection cannot authorize a push.
+The earlier phase-specific discussion above is historical, not an open gate.
 
 ## Schema relationships added in Phase 2 (Part C + D)
 

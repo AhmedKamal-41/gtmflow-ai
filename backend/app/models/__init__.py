@@ -1,6 +1,6 @@
 from app.models.ai_output import AIOutput
 from app.models.ai_output_review import AIOutputReview
-from app.models.auth import User, UserSession
+from app.models.auth import LoginThrottle, User, UserSession
 from app.models.background_job import BackgroundJob, BackgroundJobItem
 from app.models.annotation import (
     AnnotationCandidate,
@@ -33,6 +33,7 @@ __all__ = [
     "LeadBatch",
     "LeadFitScore",
     "LeadScore",
+    "LoginThrottle",
     "SourceSnapshot",
     "SellerProfile",
     "SellerProfileActivation",
@@ -48,4 +49,3 @@ __all__ = [
 from app.core.actor import install_event_hook as _install_event_hook  # noqa: E402
 
 _install_event_hook()
-

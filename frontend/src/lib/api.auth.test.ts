@@ -56,4 +56,18 @@ describe("session-aware requests", () => {
     await api.runDemo().catch(() => undefined);
     expect(header(calls[calls.length - 1], "X-CSRF-Token")).toBeUndefined();
   });
+
+  it("retains the token when sign-out fails, but clears it for an expired session", async () => {
+    await api.login("ada", "pw");
+    nextStatus = 503;
+    await expect(api.logout()).rejects.toBeInstanceOf(api.APIError);
+    nextStatus = 200;
+    await api.runDemo();
+    expect(header(calls[calls.length - 1], "X-CSRF-Token")).toBe("csrf-123");
+    nextStatus = 401;
+    await api.logout();
+    nextStatus = 200;
+    await api.runDemo();
+    expect(header(calls[calls.length - 1], "X-CSRF-Token")).toBeUndefined();
+  });
 });

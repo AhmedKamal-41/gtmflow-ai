@@ -131,13 +131,14 @@ def test_logout_revokes_and_login_rotates_the_session(app_client, db_session_fac
     sign_in(first, "lena")
     old_cookie = first.cookies.get(COOKIE_NAME)
     sign_in(first, "lena")  # logging in again rotates: the old token is dead
+    live_cookie = first.cookies.get(COOKIE_NAME)
     stale = app_client()
     stale.cookies.set(COOKIE_NAME, old_cookie)
     assert stale.get("/api/auth/session").status_code == 401
     assert first.get("/api/auth/session").json()["username"] == "lena"
     assert first.post("/api/auth/logout").status_code == 204
     replay = app_client()
-    replay.cookies.set(COOKIE_NAME, old_cookie)
+    replay.cookies.set(COOKIE_NAME, live_cookie)
     assert first.get("/api/auth/session").status_code == 401 and replay.get("/api/leads").status_code == 401
 
 
@@ -215,6 +216,7 @@ def test_authenticated_actors_are_recorded_server_side(client, db_session, db_se
     done = db_session.scalar(select(WorkflowEvent).where(WorkflowEvent.event_type == "job_completed"))
     generated = db_session.scalar(select(WorkflowEvent).where(WorkflowEvent.event_type == "ai_summary_generated"))
     assert done.event_data["actor"] == generated.event_data["actor"] == "job:user:test-operator"
+    assert done.event_data["actor_user_id"] == generated.event_data["actor_user_id"] == str(operator.id)
 
 
 def test_the_cli_creates_accounts_without_echoing_passwords(db_engine, monkeypatch, capsys):

@@ -35,15 +35,12 @@ class AIOutputReview(Base):
     rather than guessing via "latest output" or timestamp proximity.
 
     ``review_kind`` keeps day-to-day operational approve/reject (this phase)
-    structurally distinct from the future training-annotation workflow
-    (Phase 6/7) -- both will live in this table, but must never be conflated
+    structurally distinct from training annotation (Phase 6/7) -- both live in this table, but must never be conflated
     when exporting training examples.
 
-    ``reviewer_label`` is an honest, non-authenticated label. This
-    application has no auth (see docs/upgrade/audit.md F.1); every review
-    created through the current UI is stamped with a fixed constant
-    (`"local-demo-unauthenticated"`) rather than a browser-supplied name
-    dressed up as an identity.
+    ``reviewer_label`` is assigned server-side from the authenticated actor
+    (Phase 12). Historical unauthenticated labels and the explicitly labeled
+    synthetic demo decisions are preserved; clients cannot supply an identity.
     """
 
     __tablename__ = "ai_output_reviews"

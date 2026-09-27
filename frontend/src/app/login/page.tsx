@@ -13,7 +13,9 @@ import { APIError, login } from "@/lib/api";
 
 function safeNext(value: string | null): string {
   // Only same-site paths: never redirect to another origin after sign-in.
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  if (!value || !value.startsWith("/") || value.startsWith("//") || /[\\\u0000-\u0020]/.test(value)) return "/";
+  const target = new URL(value, window.location.origin);
+  return target.origin === window.location.origin ? target.pathname + target.search + target.hash : "/";
 }
 
 function LoginForm() {

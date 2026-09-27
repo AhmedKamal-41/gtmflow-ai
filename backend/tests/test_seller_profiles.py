@@ -68,7 +68,7 @@ def test_same_save_can_retry_without_new_version_or_event(client, db_session):
     assert unchanged.status_code == 200
     assert unchanged.json() == first
     assert db_session.scalar(select(func.count()).select_from(SellerProfile)) == 1
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 1
 
 
 def test_stale_tab_cannot_replace_newer_content(client):
@@ -101,7 +101,7 @@ def test_invalid_profile_is_rejected_before_any_write(client, db_session, change
     request["profile"].update(change)
     assert client.post("/api/seller-profile", json=request).status_code == 422
     assert db_session.scalar(select(func.count()).select_from(SellerProfile)) == 0
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 0
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 0
 
 
 def test_unsupported_claims_can_be_left_empty_and_whitespace_is_normalized(client):
@@ -126,7 +126,7 @@ def test_audit_failure_rolls_back_the_profile_too(client, db_engine, db_session)
     finally:
         event.remove(db_engine, "before_cursor_execute", fail_event)
     assert db_session.scalar(select(func.count()).select_from(SellerProfile)) == 0
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 0
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 0
     assert client.post("/api/seller-profile", json=payload()).status_code == 201
 
 
