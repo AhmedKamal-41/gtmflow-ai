@@ -10,7 +10,7 @@ Six bullets, 17 words or fewer each. Every number traces to a recorded result (s
 
 4. Built a database-backed job queue with leases and bounded retries; recovered a killed worker without duplicates.
 
-5. Prevented duplicate Slack dispatch with a claim-before-send ledger; eight concurrent requests sent exactly one message.
+5. Built a Slack delivery ledger with unique claims; eight concurrent mock pushes produced one dispatch.
 
 6. Added session authentication with CSRF protection, roles, lockout, and actor-stamped audit events across every route.
 
@@ -41,3 +41,5 @@ Six bullets, 17 words or fewer each. Every number traces to a recorded result (s
 - **Bullet 4:** `docs/upgrade/phase10-integration-handoff.md` §3. A SIGKILLed worker on a 300-lead job; a second worker finished it with exactly 300 outputs for 300 leads.
 - **Bullet 5:** `docs/upgrade/phase11-routing-metrics-handoff.md` §6. 8 simultaneous pushes on PostgreSQL produced exactly 1 send.
 - **Bullet 6:** `docs/upgrade/phase12-release-handoff.md`. A test walks every API route and asserts that anonymous requests are refused.
+
+Release verification: [Phase 12 CI](https://github.com/AhmedKamal-41/gtmflow-ai/actions/runs/36293369509) passed the complete suites, migrations and synthetic mock workflow. This is release evidence, not deployment or real customer impact.

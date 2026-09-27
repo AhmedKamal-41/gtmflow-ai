@@ -1,117 +1,65 @@
-# AI workflow
+# AI workflow and evidence
 
-> **Status note (Phase 12):** this document describes the original pre-upgrade AI design (the `"Inference: …"` prefixes, the ungrounded prompts). Since Phase 5, generation is **grounded**: record facts with ids, an activated seller profile, stated unknowns, and output that must cite existing fact, capability and claim ids (`backend/app/ai/grounding.py`). Phase 10 added the `qwen3-4b-lora-v1` provider and runtime quality checks. Current detail: `docs/upgrade/phase5-generation-handoff.md` and `docs/upgrade/phase10-integration-handoff.md`.
+The app uses deterministic **mock AI by default**. `USE_MOCK_AI=true` overrides
+provider selection. Real generation needs explicit configuration; this document
+does not authorize paid calls or model hosting.
 
+## Generation and review
 
-Two output types, two clients (mock + real), one orchestration service. The full flow is mock-by-default so the demo runs without a key.
+1. Build a context of record facts with IDs, provenance, explicit unknowns and
+   the versioned fit score (not evidence of interest).
+2. Outreach requires an explicitly activated seller revision, with allowed
+   capabilities and sourced claims. A demonstration profile is labeled.
+3. Ask the selected AIClient for structured output with fact/claim references.
+4. Validate structure, reference membership and completeness before saving
+   output and provider/prompt/seller provenance. Invalid output is refused.
+5. Apply `runtime-checks-v1` for known unsupported or weak phrasing. These
+   patterns do not establish complete factual or writing correctness.
+6. A signed-in operator reviews the exact draft/content hash. Current flags
+   require acknowledgement. Edits create revisions needing their own approval.
+   Generation and background jobs never approve drafts.
+7. Delivery rechecks draft, record, seller and approval eligibility. Only the
+   separately labeled synthetic demo creates demo approvals.
 
-## Output types
+API and job generation reuse these services. Providers share the same approval
+rules. Slack is separate; real email sending is not implemented.
 
-| `AIOutput.output_type` | Content shape |
+## Providers
+
+| Provider | Current evidence |
 |---|---|
-| `company_summary` | `{company_summary, detected_pain_points, fit_reasoning, evidence, inferences, confidence}` |
-| `outreach_email` | `{subject, email_body, personalization_points, call_note, confidence}` |
+| Mock | Complete signed-in workflow verified on synthetic data without external calls. |
+| OpenAI | Implemented, opt-in, paid. Earlier dataset generation used it; Phase 12 makes no calls and needs no key. |
+| `qwen3-4b-lora-v1` | Client checks availability and rejects truncation. Phase 10 verified the pinned model/adapter on one temporary GPU. No persistent host exists. Output provenance records a configured adapter hash; the acceptance run independently checked the loaded files. |
 
-Both are persisted as JSON in the `AIOutput.content` column.
+## AI-evaluated model results
 
-## The two clients
+Phase 8 trained Qwen3-4B with LoRA on 419 reviewed examples and selected by
+validation loss. Phase 9 compared base and adapter under identical settings
+and frozen criteria. One blind **AI** reviewer accepted 49/71 LoRA outputs
+(69%) versus 1/71 base: summaries 35/35, outreach 14/36. References and review
+judgments are AI-derived, not human quality certification. Coverage is limited
+to two segments and one seller profile.
 
-`backend/app/ai/client.py` defines `AIClient` (ABC) with two methods: `generate_company_summary(ctx)` and `generate_outreach(ctx)`.
+The adapter inherited objectionable outreach phrasing from training data.
+Runtime rules matching the review examples used to tune them is regression
+coverage. Zero flags on 100 untouched validation references checks false
+positives on those references only; detection of unseen bad wording is untested.
 
-### MockAIClient (default)
+Phase 10's temporary inference acceptance passed all eight required criteria.
+Only 7/20 texts matched Phase 9 exactly; batching/numerics is a likely, unproven
+explanation. Four of ten outreach cases changed runtime flags, so the earlier
+review rate cannot be assumed for serving. Outreach still needs review. L4
+latency was 22.6 seconds median, 28 seconds p95, one request at a time.
 
-- Pure function of the lead context dict. Same input → same output, always.
-- No imports of `openai`. No network. No timestamps in content.
-- Summary composes evidence from real fields; inferences are explicitly prefixed `"Inference: …"` so a reader cannot mistake hypothesis for fact.
-- Outreach pulls the latest persisted summary's pain points into the context when available, so the call note is grounded in what the summary already committed to.
+Frozen scores, references, artifacts and training locks are unchanged in Phase
+12. The company-name lint false positive remains documented under the original
+criteria; runtime checks have their own version. No retraining ran.
 
-### OpenAIClient (real mode)
+## Evidence
 
-- Constructed only when `settings.use_mock_ai` is `false`.
-- Validates `api_key` at construction time, empty key raises `AIConfigError` *before* any network call.
-- `openai` SDK is **lazy-imported** inside `_call(...)`. Missing package surfaces a clean install instruction, not an obscure `ImportError`.
-- Calls `chat.completions.create(model=..., response_format={"type": "json_object"})`.
-- Result is run through `parse_json_strict` (tolerates ```json fences``` but rejects non-object JSON).
-
-## Factory + settings
-
-`get_ai_client()` reads `settings.use_mock_ai` per request. No state is cached, so flipping the env var mid-process takes effect on the next call.
-
-```python
-def get_ai_client() -> AIClient:
-    if settings.use_mock_ai:
-        from app.ai.mock_client import MockAIClient
-        return MockAIClient()
-    return OpenAIClient(api_key=settings.openai_api_key)
-```
-
-## Prompts (real mode only)
-
-`backend/app/ai/prompts.py` exposes `build_summary_prompt(ctx)` and `build_outreach_prompt(ctx)`. Both inline `SYSTEM_RULES`, which is the anti-hallucination contract:
-
-> You are a careful B2B sales analyst. Use ONLY the lead data the user provides. Never invent facts, statistics, customer names, tool stacks, or product details. Separate evidence (facts present in the data) from inferences (hypotheses). Never claim this company uses any specific tool unless explicitly provided. Never pretend an email was sent. Output STRICT JSON only, no preamble, no commentary, no markdown fences.
-
-The prompt then attaches the lead context as `json.dumps(ctx, sort_keys=True)` plus the exact target JSON schema. Sorting the keys means small reorderings in the context dict do not produce different prompts.
-
-## Guardrail test
-
-`backend/tests/test_ai_generation.py::test_prompt_guardrails_present_in_system_rules` pins four phrases in `SYSTEM_RULES`:
-
-| Anti-pattern guarded against | Required phrase |
-|---|---|
-| Hallucinating beyond the input | `"only" + "data"` |
-| Inventing facts | `"never invent"` or `"do not invent"` |
-| Mixing evidence with inference | `"evidence" + "inference"` |
-| Free-form prose | `"strict json"` |
-
-If any of these drift out of `SYSTEM_RULES`, the test fails immediately.
-
-## Evidence vs inference
-
-The mock summary's `evidence` list quotes literal lead fields:
-
-```json
-"evidence": [
-  "industry: Housing",
-  "contact_title: VP Operations",
-  "cleaned_data.notes: high tenant maintenance request volume and leasing tour scheduling delays",
-  "deterministic_score: 94/100 (Hot)"
-]
-```
-
-The `inferences` list is always prefixed:
-
-```json
-"inferences": [
-  "Inference: may benefit from automated tenant-facing maintenance and leasing-scheduling workflows.",
-  "Inference: operations-focused persona is usually receptive to workflow-automation pitches."
-]
-```
-
-The frontend `AIOutputCard` renders them as two separate sections so the distinction stays visible.
-
-## What never happens
-
-- No real email is ever sent. "Outreach" is always a draft persisted in `AIOutput`.
-- No `"Sent"` or `"Reached"` claims in any prompt or mock output.
-- No fake statistics ("we saved X% of teams Y minutes…").
-- No fake customer names.
-- No claim that this prospect uses any specific tool unless that fact was in the input.
-
-## Service orchestration
-
-`backend/app/services/ai_generation.py`:
-
-- `_build_lead_context(lead)`, composes the dict handed to the AI client. Strictly fields the backend already has. The persisted deterministic score is included so the AI client can ground its fit reasoning.
-- `_latest_summary_content(...)`, used by the outreach generator to inject the latest persisted summary into context.
-- `generate_summary_for_lead(...)` / `generate_outreach_for_lead(...)`, persist the result + emit a `WorkflowEvent` (`ai_summary_generated` / `outreach_generated`) tagged with `confidence` for auditing.
-
-## How to enable real mode
-
-```bash
-# in backend/.env
-USE_MOCK_AI=false
-OPENAI_API_KEY=sk-…
-```
-
-…then `pip install openai` if not already present (`openai>=1.0` is in `requirements.txt`). Tests stay in mock mode unconditionally, they never call OpenAI.
+- [Training](upgrade/phase8-training-handoff.md)
+- [Evaluation and blind review](upgrade/phase9-evaluation-handoff.md)
+- [Temporary GPU integration](upgrade/phase10-integration-handoff.md)
+- [Dependency findings and audit limits](dependency-security.md)
+- [Release checks and deployment blockers](upgrade/phase12-release-handoff.md)

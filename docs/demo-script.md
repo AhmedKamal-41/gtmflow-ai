@@ -8,7 +8,7 @@ Audience: a recruiter or hiring manager with 5–7 minutes.
 
 Open http://localhost:3000. You are sent to **/login**. Sign in with the account you created with `python -m app.auth_cli create-user`.
 
-> **What to say:** "Every API route requires a signed-in operator, enforced on the backend, not just hidden in the UI. Accounts come from an admin CLI; there's no public sign-up, because this is a single-team tool. Each approval and delivery records who did it."
+> **What to say:** "Every data route requires a signed-in user; actions require an operator, enforced on the backend, not just hidden in the UI. Accounts come from an admin CLI; there's no public sign-up, because this is a single-team tool. Each approval and delivery records who did it."
 
 ## 2. Run the demo batch
 
@@ -24,9 +24,9 @@ Outreach needs an explicitly activated seller profile. On **/seller-profile**:
 2. Under the saved version, tick both confirmations ("I reviewed version 1…" and "…is a demonstration profile, not a real offer").
 3. Activate it.
 
-Then upload `sample_data/leads_sample.csv` on **/upload** and open the batch. In **Background jobs**, click **Fit-score all leads** and **Generate outreach drafts**. The worker you started (`python -m app.jobs.worker`) picks them up; the panel shows progress and counts.
+Then upload `sample_data/leads_sample.csv` on **/upload** and open the batch. In **Background jobs**, run **Legacy-score all leads** (to produce the Hot/Warm/Cold bands), **Fit-score all leads**, and **Generate outreach drafts**. The worker you started (`python -m app.jobs.worker`) picks them up; the panel shows progress and counts.
 
-> **What to say:** "Long batch work runs in a worker, not in the web request. Jobs survive a worker crash: another worker resumes from where it stopped, and nothing is done twice."
+> **What to say:** "Long batch work runs in a worker, not in the web request. Jobs survive a worker crash: another worker resumes unfinished items. Completed database effects are not repeated; uncertain external deliveries need an operator decision."
 
 ## 4. Open a Hot lead
 
@@ -65,3 +65,7 @@ Show `docs/upgrade/phase9-evaluation-handoff.md` and `phase10-integration-handof
 > **What to say:** "I fine-tuned Qwen3-4B with LoRA on 419 AI-reviewed examples for about 60 cents of GPU time. On held-out data, a blind AI review rated 69% of its drafts acceptable as-is, against 1% for the base model. Summaries were fine; outreach was the weak spot, and I traced its two main faults to phrasing kept in the training data. All of that is AI-evaluated, not human-verified. Then I ran the app's own client against the real model once, on a temporary GPU pod that deleted itself, and all acceptance checks passed. There's no always-on model server; the app runs on the mock by default."
 
 > **Closing line:** "The loop is ingest → score → grounded draft → human approval → safe delivery → honest metrics, with every step audited and every claim tied to evidence in the repo."
+
+## Reproducible portfolio evidence
+
+The [Phase 12 release run](https://github.com/AhmedKamal-41/gtmflow-ai/actions/runs/36293369509) verifies 521 backend tests on isolated PostgreSQL, 107 frontend tests, typecheck/build and 84 live mock checks. It makes no real sends and uses no production database. Show this alongside the dated Phase 9/10 handoffs; historical screenshots alone do not demonstrate the current sign-in or routing behavior.

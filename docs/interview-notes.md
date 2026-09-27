@@ -4,11 +4,11 @@ Pre-written answers at four lengths. Every number traces to `docs/upgrade/` (see
 
 ## 20-second pitch
 
-> GTMFlow is a lead-to-outreach tool for one sales team. It imports and scores companies, drafts outreach grounded only in the company record, requires a signed-in person to approve the exact draft, and routes approved Hot leads to Slack without ever double-sending. I also fine-tuned a small open model for the drafting step and evaluated it against a baseline. That evaluation was done by AI review, not people. The app runs in mock mode by default and isn't deployed.
+> GTMFlow is a lead-to-outreach tool for one sales team. It imports and scores companies, drafts outreach grounded only in the company record, requires a signed-in person to approve the exact draft, and routes approved Hot leads to Slack with a claim-before-send delivery ledger. I also fine-tuned a small open model for the drafting step and evaluated it against a baseline. That evaluation was done by AI review, not people. The app runs in mock mode by default and isn't deployed.
 
 ## 60-second pitch
 
-> The backend is FastAPI, SQLAlchemy and PostgreSQL with 12 Alembic migrations; the frontend is Next.js and TypeScript.
+> The backend is FastAPI, SQLAlchemy and PostgreSQL with 13 Alembic migrations; the frontend is Next.js and TypeScript.
 >
 > - **Generation:** the model gets a context of record facts and an activated seller profile, and must cite the ids of everything it uses. The server rejects any draft that cites something outside the context, so an invalid draft is never saved.
 > - **Review:** a person approves the exact content hash they saw. Runtime checks flag known bad phrasings and require an explicit acknowledgement.
@@ -36,7 +36,7 @@ Pre-written answers at four lengths. Every number traces to `docs/upgrade/` (see
 
 **Access control (Phase 12)**
 - **Deny by default:** an app-wide dependency protects every route except health checks and login.
-- **Sessions and passwords:** scrypt passwords, sessions stored only as hashes, and HttpOnly, SameSite=Lax, Secure cookies. Idle and absolute expiry, rotation at login, revocation on logout and on user changes, and account lockout.
+- **Sessions and passwords:** scrypt passwords, sessions stored only as hashes, and HttpOnly, SameSite=Lax, Secure cookies. Idle and absolute expiry, rotation at login, revocation on logout and on user changes, atomic account lockout, and shared peer throttling.
 - **CSRF:** a token derived from the session and required on every state change. Viewers are read-only.
 - **Audit:** a SQLAlchemy hook stamps the actor on every audit event, including work done by the background worker.
 
@@ -48,7 +48,7 @@ Pre-written answers at four lengths. Every number traces to `docs/upgrade/` (see
 
 > Revenue teams lose time deciding which leads matter, writing something specific to each, and getting the good ones to the right rep. GTMFlow makes that one workflow, with two things I'd insist on in a real team.
 >
-> First, trust: a draft can only use facts from the record, a person approves exactly what gets sent, and the system never double-posts to Slack.
+> First, trust: a draft can only use facts from the record, a person approves exactly what gets sent, and the ledger prevents automatic repeat dispatch; uncertain outcomes need an explicit operator decision.
 >
 > Second, honest measurement: the approval rate counts each draft once, mock and real activity are separated, and time saved is labeled as an estimate.
 >
@@ -60,10 +60,12 @@ Pre-written answers at four lengths. Every number traces to `docs/upgrade/` (see
 |---|---|
 | AI workflow automation | Grounded generation across three providers (mock, OpenAI, fine-tuned Qwen), runtime quality checks, background jobs |
 | APIs and webhooks | About 57 API operations; a Slack webhook with a delivery ledger and explicit handling of uncertain outcomes |
-| Python | FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic; PyTorch, PEFT and transformers for the model work |
+| Python | FastAPI, SQLAlchemy 2.x, Pydantic v2, Alembic; PyTorch, PEFT and transformers for the model work |
 | JavaScript / TypeScript | Next.js 15 App Router, strict TypeScript, Vitest and Testing Library suites |
-| SQL / PostgreSQL | 12 migrations; unique constraints and conditional updates for concurrency; window functions for "latest review" metrics |
+| SQL / PostgreSQL | 13 migrations; unique constraints and conditional updates for concurrency; window functions for "latest review" metrics |
 | Scoring / prioritization | Deterministic legacy score plus a versioned company-fit score with evidence coverage |
 | Adoption / ROI tracking | Cohort-based approval metrics, delivery outcomes, mock-versus-real breakdowns, an explicit time-saved estimate |
 | Non-technical usability | One-click review, flag acknowledgement, "It arrived / It did not arrive" resolution, plain-language dashboard notes |
 | Working in ambiguity | 12 documented phases, each ending with evidence and an honest readiness level (`docs/upgrade/phase-status.md`) |
+
+Current release evidence: [isolated PostgreSQL CI run](https://github.com/AhmedKamal-41/gtmflow-ai/actions/runs/36293369509), 521 backend tests, 107 frontend tests and 84 live mock checks. Exact commands and limitations are in the Phase 12 handoff.

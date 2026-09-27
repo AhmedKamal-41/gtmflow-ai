@@ -1,107 +1,78 @@
-# GTMFlow AI, Frontend
+# GTMFlow frontend
 
-Next.js 15 + TypeScript + Tailwind dashboard for the GTMFlow AI platform.
-Internal-tool styling behind operator sign-in (`/login`; sessions are enforced by the backend). It mirrors the backend endpoints.
+Next.js 15, TypeScript and Tailwind. Use **Node 24** (verified locally with
+24.19.0); the current test dependencies require a recent Node runtime.
 
-## Auth (Phase 12)
+## Local mock startup
 
-`AuthProvider` (`src/components/AuthProvider.tsx`) resolves the session on load and sends signed-out visitors to `/login?next=…` (same-site paths only). `lib/api.ts` sends cookies with every request, adds `X-CSRF-Token` to state-changing requests, and reports 401 responses. For local development, run the dev server as a proxy so the browser talks to one origin:
-
-```bash
-API_PROXY_TARGET=http://localhost:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
-```
-
-## Prerequisites
-
-- Node.js 20+ (Node 22 recommended)
-- Backend API reachable at the URL in `.env.local` (see `../backend/README.md` to start the API)
-
-## Setup
+Start the database, API, operator account and worker using the
+[release startup commands](../docs/upgrade/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode).
+Then, from this directory:
 
 ```bash
-cd frontend
-cp .env.example .env.local
-npm install
+npm ci
+API_PROXY_TARGET=http://127.0.0.1:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
 ```
 
-`.env.local` only needs one variable; the default is fine if the backend runs locally:
+Open http://localhost:3000 and sign in. The browser uses relative `/api` URLs;
+Next proxies them to the loopback backend. For a Codespace, keep ports private
+and add its exact HTTPS frontend origin to backend `ALLOWED_ORIGINS`. Do not
+overwrite existing environment files.
 
-```
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
-
-## Scripts
+For a production build served locally (not a deployment):
 
 ```bash
-npm run dev         # local dev server on http://localhost:3000
-npm run build       # production build (also runs Next's lint+type check)
-npm run start       # serve the production build
-npm run typecheck   # tsc --noEmit (matches the CI check)
+API_PROXY_TARGET=http://127.0.0.1:8000 NEXT_PUBLIC_API_BASE_URL= NEXT_TELEMETRY_DISABLED=1 npm run build
+npm run start
 ```
+
+Both the proxy target and public API setting are read at build time; rebuild
+when changing them. `frontend/.env.example` shows the same-origin defaults.
+
+## Access and errors
+
+`AuthProvider` resolves the session and redirects signed-out visitors to
+`/login`. Return paths stay on this origin; backslashes/control characters are
+rejected. `lib/api.ts` sends cookies and a CSRF header on writes. The backend
+independently enforces authentication, roles and every approval gate.
+
+Sign-out clears the UI only after revocation is confirmed (or the server says
+the session expired). A failed request keeps the session visible and shows a
+retry message. Delayed responses cannot restore stale state. Viewers can read
+but receive 403 on actions; there is no public registration.
 
 ## Pages
 
 | Route | Purpose |
 |---|---|
-| `/` | Home, workflow overview, stack badges, CTA to Upload |
-| `/upload` | CSV upload form with row-level error feedback |
-| `/batches` | List of every uploaded batch, newest first |
-| `/batches/[batchId]` | Batch detail with leads table, Score batch, Push all Hot leads |
-| `/leads/[leadId]` | Lead workspace, details, score breakdown, AI summary, outreach, push history, approve/reject buttons |
-| `/metrics` | Adoption + ROI dashboard (lead pipeline, outreach review, push delivery, estimated time saved) |
-| `/demo` | Step-by-step walkthrough of the end-to-end flow |
+| `/login` | Operator/viewer sign-in |
+| `/` | Workflow overview |
+| `/upload` | Bounded CSV upload with validation feedback |
+| `/batches`, `/batches/[batchId]` | Leads, scoring and background job controls |
+| `/leads/[leadId]` | Grounded drafts, exact-draft review, flag acknowledgement, delivery history and outcome resolution |
+| `/seller-profile` | Versioned seller profile and explicit activation |
+| `/annotation` | Training annotation workbench |
+| `/metrics` | Cohort approval, delivery outcomes and mock-versus-real breakdown |
+| `/demo` | Labeled synthetic demonstration |
 
-## Demo workflow
+Follow the [current demo walkthrough](../docs/demo-script.md), including seller
+activation before outreach generation. The worker must be running for jobs.
 
-1. Upload `sample_data/leads_sample.csv` at `/upload`.
-2. On the resulting batch page, click **Score batch**.
-3. Open the Cascade Modular Homes Hot lead.
-4. Click **Generate summary**, then **Generate outreach**.
-5. Click **Approve outreach** (or **Reject outreach** to capture a reason via `window.prompt`).
-6. Click **Push to Slack** (mock by default).
-7. Open `/metrics` and read the numbers.
-
-Same checklist lives at `/demo`. The 11-step interview version is at [`../docs/demo-script.md`](../docs/demo-script.md).
-
-## Backend dependency
-
-The frontend talks to the FastAPI service over HTTP. Start the backend first:
+## Verification
 
 ```bash
-cd ../backend
-uvicorn app.main:app --reload --port 8000
+npm test
+npm run typecheck
+npm run build
+npm audit
 ```
 
-See `../backend/README.md` for `init_db`, Slack webhook config, and mock vs real AI mode. The frontend has no notion of those modes, it just calls the API and renders the responses.
+The CPU-heavy history-pagination test retains all assertions and has a
+20-second limit. The PostCSS override stays within major 8; see the
+[dependency review](../docs/dependency-security.md). The release workflow also
+exercises this production frontend's API proxy with a worker and isolated
+PostgreSQL. Current results are in the release handoff.
 
-## Screenshots
-
-> Drop PNGs into `../docs/screenshots/` to populate these. Files referenced below are placeholders; the build does not depend on them.
-
-- `../docs/screenshots/home.png`, landing page with workflow steps
-- `../docs/screenshots/upload.png`, CSV upload form + success card
-- `../docs/screenshots/batch-detail.png`, leads table with priority badges + Score / Push buttons
-- `../docs/screenshots/lead-detail.png`, score breakdown + AI outputs + approve/reject + push history
-- `../docs/screenshots/metrics.png`, `/metrics` dashboard
-
-## Layout
-
-```
-src/
-├── app/                 # Next.js App Router pages and layouts
-├── components/          # shared UI primitives (Button, Card, badges, tables…)
-├── lib/                 # typed fetch wrappers over the FastAPI backend
-└── types/               # TypeScript mirrors of the backend response shapes
-```
-
-## Error handling
-
-Errors from the backend are surfaced verbatim from `detail` where available, with the raw HTTP status as fallback. 404 responses on `/score`, `/ai-outputs`, and `/pushes` are interpreted as "no data yet" rather than treated as errors, the UI shows a plain "Not scored yet", "No AI outputs yet", or "Not pushed yet" message. `ScoreBreakdown` defends against missing / `NaN` category values so a malformed backend response never renders a `NaN`-width bar.
-
-## CI
-
-`.github/workflows/frontend.yml` runs `npm ci` + `npm run typecheck` + `npm run build` on every push and PR that touches `frontend/`.
-
-## Not implemented yet
-
-No self-service registration or multi-tenancy (by design), no real email send, no HubSpot / Salesforce / Google Sheets / Zapier, no deployment. Time-saved is a portfolio estimate (5 minutes per processed lead), not real revenue impact.
+The screenshots in `docs/screenshots/` are historical captures. Mock operation
+is distinct from AI-evaluated model results and the completed temporary GPU
+acceptance run; no persistent model host or deployment exists.

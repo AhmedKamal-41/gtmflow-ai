@@ -18,7 +18,7 @@ Four levels of evidence, never merged:
 
 | Level | What it covers | Where it is recorded |
 |---|---|---|
-| **Mock operation (default)** | The whole app (import, scoring, generation, review, jobs, Slack routing, metrics, sign-in) runs with the deterministic mock AI and the mock Slack webhook. This is what the demo shows. Verified end to end on 2026-09-26 through the production frontend build and a real worker (27 of 27 checks). | `docs/upgrade/phase12-release-handoff.md` |
+| **Mock operation (default)** | The whole app (import, scoring, generation, review, jobs, Slack routing, metrics, sign-in) runs with the deterministic mock AI and the mock Slack webhook. This is what the demo shows. Verified on 2026-09-27: 84 release checks through the production frontend, API and worker on isolated PostgreSQL; 521 backend and 107 frontend tests pass. | `docs/upgrade/phase12-release-handoff.md` |
 | **AI-evaluated model results** | `qwen3-4b-lora-v1`: Qwen3-4B-Instruct-2507 with a LoRA adapter trained on 419 **AI-reviewed** examples. Held-out test (71 examples, AI-derived references): factual support 0.986, missing-info handling 1.000, automated writing checks 1.000. Blind **AI** review: 69% acceptable as-is (summaries 35 of 35, outreach 14 of 36), versus 1 of 71 for the base model. **No human verification.** | `docs/upgrade/phase9-evaluation-handoff.md` |
 | **Verified temporary GPU integration** | On 2026-09-26 the app's own client was run against the pinned base model and adapter on **one temporary** L4 pod. All 8 required acceptance criteria passed; median 22.6 s per request; the pod was removed. There is **no persistent inference server**. | `docs/upgrade/phase10-integration-handoff.md` §9 |
 | **Awaiting deployment** | No hosting and no public URL. No always-on model server. Real Slack delivery and real OpenAI generation are implemented but not configured (OpenAI calls are paid). Database recovery of the original development data is a separate open task. | Release blockers: `docs/upgrade/phase12-release-handoff.md` |
@@ -38,55 +38,24 @@ Four levels of evidence, never merged:
 
 | Layer | Choice |
 |---|---|
-| Backend | FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic (12 migrations), Python 3.12 |
+| Backend | FastAPI, SQLAlchemy 2.x, Pydantic v2, Alembic (13 migrations), Python 3.12 |
 | Database | PostgreSQL 16 (tests also run on in-memory SQLite) |
 | Auth | Server-side sessions (HttpOnly cookie, hashed tokens), scrypt passwords, CSRF token, operator/viewer roles |
 | AI | Mock client (default); OpenAI; `qwen3-4b-lora-v1` through an OpenAI-compatible server |
-| Model work | PyTorch, transformers, PEFT (hash-locked); RunPod GPU runs with self-deleting pods |
+| Model work | PyTorch, transformers, PEFT (version-pinned training environment); RunPod GPU runs with self-deleting pods |
 | Jobs | Database-backed queue with leases (no Redis) |
 | Integrations | Slack incoming webhook via `httpx` |
 | Frontend | Next.js 15 (App Router), TypeScript, Tailwind, Vitest and Testing Library |
 
 ## Architecture
 
-```
-┌─────────────────────────┐        HTTP / JSON         ┌───────────────────────────────────────────┐
-│  Next.js dashboard      │ ─────────────────────────▶ │  FastAPI service                          │
-│  (TypeScript + Tailwind)│                            │                                           │
-│                         │ ◀───────────────────────── │  ┌────────────────────────────────────┐   │
-│  /, /upload, /batches,  │                            │  │ scoring/lead_scoring.py            │   │
-│  /batches/[id],         │                            │  │ deterministic 100-point model      │   │
-│  /leads/[id],           │                            │  └────────────────────────────────────┘   │
-│  /metrics, /demo        │                            │  ┌────────────────────────────────────┐   │
-└─────────────────────────┘                            │  │ ai/  (mock or real OpenAI client)  │   │
-                                                       │  └────────────────────────────────────┘   │
-                                                       │  ┌────────────────────────────────────┐   │
-                                                       │  │ integrations/slack.py  (httpx)     │   │
-                                                       │  └────────────────────────────────────┘   │
-                                                       │  ┌────────────────────────────────────┐   │
-                                                       │  │ services/metrics.py                │   │
-                                                       │  │ adoption + ROI counters            │   │
-                                                       │  └────────────────────────────────────┘   │
-                                                       │  ┌────────────────────────────────────┐   │
-                                                       │  │ SQLAlchemy models                  │   │
-                                                       │  │ Lead / LeadBatch / LeadScore /     │   │
-                                                       │  │ AIOutput / IntegrationPush /       │   │
-                                                       │  │ WorkflowEvent                      │   │
-                                                       │  └─────────────────┬──────────────────┘   │
-                                                       └────────────────────┼──────────────────────┘
-                                                                            │
-                                                                            ▼
-                                                                ┌──────────────────────┐
-                                                                │  PostgreSQL          │
-                                                                └──────────────────────┘
-                                                                            │
-                                                                            ▼ (optional, real mode)
-                                                                ┌──────────────────────┐
-                                                                │  OpenAI API          │
-                                                                ├──────────────────────┤
-                                                                │  Slack webhook       │
-                                                                └──────────────────────┘
-```
+The browser signs in through Next's same-origin API proxy. FastAPI enforces
+sessions, roles and CSRF before services read or change data. PostgreSQL holds
+audit history, approvals, durable jobs and delivery claims. A separate worker
+runs authorized jobs using the same service-level gates. AI and Slack remain
+mock unless explicitly configured otherwise.
+
+Current component boundaries: [`docs/architecture.md`](docs/architecture.md).
 
 ## Features
 
@@ -154,37 +123,61 @@ Full script: [`docs/demo-script.md`](docs/demo-script.md). In short: sign in, op
 
 ## Setup (local, mock mode)
 
-Requirements: Python 3.12, Node 22+, Docker (for Postgres).
+Requirements: Python **3.12**, Node **24**, and Docker for the fresh PostgreSQL
+example below. These commands use a separate demo database and explicit mock
+overrides; they never overwrite an existing `.env`. Start from the repository
+root. Detailed Codespaces, account-maintenance and Docker-free SQLite options
+are in the [Phase 12 startup guide](docs/upgrade/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode).
+
+**Terminal 1 — new demo database and API:**
 
 ```bash
-# 1. Database (local development only)
-docker run -d --name gtmflow-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=gtmflow \
-  -p 5432:5432 postgres:16
-
-# 2. Backend
+docker run -d --name gtmflow-phase12-demo-pg -e POSTGRES_PASSWORD=local-demo-only -e POSTGRES_DB=gtmflow_phase12_demo -p 127.0.0.1:55432:5432 postgres:16
+timeout 30 sh -c 'until docker exec gtmflow-phase12-demo-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done'
 cd backend
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env                    # USE_MOCK_AI=true, no keys, mock Slack
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements-lock.txt
+export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:55432/gtmflow_phase12_demo
+export USE_MOCK_AI=true OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
+export SESSION_COOKIE_SECURE=false ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 .venv/bin/alembic upgrade head
-.venv/bin/python -m app.auth_cli create-user admin     # prompts for a password (12+ characters)
-.venv/bin/uvicorn app.main:app --port 8000
-
-# 3. Background worker (second terminal, from backend/)
-.venv/bin/python -m app.jobs.worker
-
-# 4. Frontend (third terminal): the dev server proxies /api to the backend
-cd frontend
-npm ci
-API_PROXY_TARGET=http://localhost:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
-# open http://localhost:3000 and sign in
+.venv/bin/python -m app.auth_cli create-user admin
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 ```
 
-Notes:
+`create-user` prompts for a 12–256 character password without echoing it. On a
+minimal Codespace without `venv` support, `uv venv .venv --python 3.12 --seed`
+can create the same environment before the locked install. On later starts,
+reuse the database/container and account; do not recreate or reset them.
 
-- **Session cookie:** it is `Secure` by default. Browsers treat `http://localhost` as secure. If yours rejects the cookie on plain http, set `SESSION_COOKIE_SECURE=false` for local development only.
-- **Viewer accounts:** read-only. Create one with `python -m app.auth_cli create-user <name> --role viewer`.
-- **Other account commands:** `set-password`, `disable`, `enable`, `revoke-sessions`, `list`.
-- **Existing database:** if yours was created before Phase 2, see `backend/README.md` ("Database initialization") before migrating. Back up first.
+**Terminal 2 — worker, from the repository root:**
+
+```bash
+cd backend
+export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:55432/gtmflow_phase12_demo
+export USE_MOCK_AI=true OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
+.venv/bin/python -m app.jobs.worker
+```
+
+**Terminal 3 — frontend, from the repository root:**
+
+```bash
+cd frontend
+npm ci
+API_PROXY_TARGET=http://127.0.0.1:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
+```
+
+Open http://localhost:3000, sign in, and follow [`docs/demo-script.md`](docs/demo-script.md).
+For a production build served locally, replace the last command with:
+
+```bash
+API_PROXY_TARGET=http://127.0.0.1:8000 NEXT_PUBLIC_API_BASE_URL= NEXT_TELEMETRY_DISABLED=1 npm run build
+npm run start
+```
+
+The example uses non-Secure cookies only for local HTTP. Use Secure cookies
+and the exact allowed frontend origin over HTTPS. Existing databases need a
+verified backup and deliberate migration; database recovery is separate.
 
 ## Environment variables
 
@@ -196,12 +189,12 @@ Notes:
 | `SLACK_WEBHOOK_URL` | (empty) | Empty means mock delivery (nothing leaves the app). Never logged or returned. |
 | `SESSION_COOKIE_SECURE` | `true` | `false` only for plain-http development. |
 | `SESSION_IDLE_MINUTES` / `SESSION_ABSOLUTE_HOURS` | `60` / `12` | Session idle timeout and absolute lifetime. |
-| `ALLOWED_ORIGINS` | localhost:3000 | CORS allowlist (credentials allowed only for these origins). |
-| `NEXT_PUBLIC_API_BASE_URL` (frontend) | `http://localhost:8000` | Set it empty, with `API_PROXY_TARGET`, to proxy `/api` through Next. |
+| `ALLOWED_ORIGINS` | localhost:3000 | Browser-origin allowlist for credentialed CORS and login. |
+| `NEXT_PUBLIC_API_BASE_URL` (frontend) | relative `/api` in the startup commands | Use an empty value plus `API_PROXY_TARGET=http://127.0.0.1:8000`; both are read during build. |
 
 ## API overview
 
-All routes except `/health`, `/api/health` and `POST /api/auth/login` require a session. State-changing requests also need the `X-CSRF-Token` header (from the login response or `GET /api/auth/session`) and the `operator` role.
+All routes except `/health`, `/api/health` and `POST /api/auth/login` require a session. State-changing requests also need the `X-CSRF-Token` header (from the login response or `GET /api/auth/session`) and the `operator` role (viewers may log themselves out). `/docs`, `/redoc` and `/openapi.json` also require authentication.
 
 ```
 POST /api/auth/login | POST /api/auth/logout | GET /api/auth/session
@@ -255,22 +248,30 @@ Approval is counted over distinct operational outreach drafts, by each draft's l
 
 ## Testing
 
+From the repository root after installing the locked dependencies:
+
 ```bash
-cd backend && DATABASE_URL=sqlite:// .venv/bin/python -m pytest -q          # add TEST_DATABASE_URL=<disposable postgres> for Postgres
-cd frontend && npx vitest run && npm run typecheck && npm run build
-cd training && .venv/bin/python -m pytest -q                               # CPU only; never trains
+(cd backend && .venv/bin/python -m pytest -q)
+(cd frontend && npm test && npm run typecheck && npm run build)
 ```
 
-Current results are in the Phase 12 handoff.
+The [release workflow](.github/workflows/release.yml) also runs the complete
+backend suite on an isolated PostgreSQL 16 service, migration preservation and
+a production-frontend/API/worker mock flow. [Verified run](https://github.com/AhmedKamal-41/gtmflow-ai/actions/runs/36293369509):
+**516 passed + 5 skipped on SQLite; 521 passed on PostgreSQL; 107 frontend tests;
+84 live release checks; typecheck/build passed.** Tests block external network
+calls. Never point `TEST_DATABASE_URL` at a database whose contents matter.
+
+Exact results and reproducible commands: [Phase 12 handoff](docs/upgrade/phase12-release-handoff.md).
 
 ## Known limitations
 
 - **Not deployed:** no hosting, TLS termination or public URL, and no persistent model server.
 - **Model quality is AI-evaluated only:** references and reviews come from AI; nothing is human-verified; the test set is small (71 examples, 36 outreach).
 - **Real integrations are not configured:** Slack delivery is mock unless a webhook is set; OpenAI is paid and opt-in.
-- **Single workspace:** no multi-tenancy or registration by design. There is no per-IP throttling in the app (lockout is per account); put that at a reverse proxy.
+- **Single workspace:** no multi-tenancy or registration by design. Login has shared peer throttling and account lockout. Deployment still needs trusted proxy and global resource-limit configuration.
 - **Time saved is an estimate,** not measured.
-- **Open dependency findings:** documented in the Phase 12 handoff (the PostCSS copy bundled in Next.js 15; setuptools in the training locks).
+- **Open dependency findings:** [training setuptools findings and torch audit coverage gaps](docs/dependency-security.md). Frontend and locked backend audits report 0 findings as of 2026-09-27.
 
 ## Documentation
 

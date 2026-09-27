@@ -4,19 +4,21 @@ FastAPI + Python service for the GTMFlow AI platform.
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12 (verified runtime)
 - PostgreSQL 15+ (the test suite uses in-memory SQLite, no Postgres needed for `pytest`)
 - Docker (optional, only for the one-liner local Postgres below)
 
 ## Setup
 
+For a fresh isolated mock demo, use the [exact release startup commands](../docs/upgrade/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode). They force mock integrations in both API and worker without changing an existing environment file. The commands below describe the general backend setup; inspect configuration before starting a working database.
+
 ```bash
 cd backend
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate          # macOS / Linux
 # .venv\Scripts\activate           # Windows PowerShell
-pip install -r requirements.txt
-cp .env.example .env
+pip install --require-hashes -r requirements-lock.txt
+test -f .env || cp .env.example .env
 ```
 
 ## Local Postgres (optional, via Docker)
@@ -24,7 +26,7 @@ cp .env.example .env
 ```bash
 docker run --name gtmflow-postgres \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=gtmflow \
-  -p 5432:5432 -d postgres:16
+  -p 127.0.0.1:5432:5432 -d postgres:16
 ```
 
 Then point `.env` at it:
@@ -50,14 +52,14 @@ alembic upgrade head
 
 `verify_baseline_schema.py` checks the target database's actual schema against what `0001_baseline` expects before stamping anything, and refuses (with a clear diff) if it doesn't match. See that script's docstring and `docs/upgrade/decisions.md` for the full rationale.
 
-Migrations are never run automatically by the app process (see `app/main.py`, which only wires CORS) -- always an explicit command, never something a web worker triggers on boot.
+Migrations are never run automatically by the app process (see `app/main.py`, which wires routes, access control and HTTP protections) -- always an explicit command, never something a web worker triggers on boot.
 
 `python -m app.core.init_db` still exists for quick local/throwaway bring-up without Alembic (e.g. a scratch SQLite file), but is not the path for anything you intend to keep or deploy.
 
 ## Operator accounts (Phase 12)
 
 Every route except `/health`, `/api/health` and `POST /api/auth/login` needs
-a signed-in operator. There is no registration endpoint; accounts are made
+a signed-in operator or viewer. State changes require an operator (except a viewer logging out). `/docs`, `/redoc` and `/openapi.json` are protected too. There is no registration endpoint; accounts are made
 with the CLI (the password is prompted twice and never echoed; for scripted
 setup it can come from `GTMFLOW_NEW_PASSWORD`):
 
@@ -76,17 +78,22 @@ python -m app.auth_cli list
 - **CSRF:** send that token as `X-CSRF-Token` on every POST, PUT, PATCH and
   DELETE. `GET /api/auth/session` returns it again for a live session.
   `POST /api/auth/logout` revokes the session.
-- **Limits:** passwords need 12 or more characters. 5 wrong passwords in a
-  row lock the account for 15 minutes. Sessions expire after
+- **Limits:** passwords need 12–256 characters; scrypt defaults to N=32768, r=8, p=3.
+  Five consecutive failures lock the account for 15 minutes, including under
+  parallel requests. A shared peer limit allows 30 attempts per five minutes. Sessions expire after
   `SESSION_IDLE_MINUTES` of inactivity or `SESSION_ABSOLUTE_HOURS` in total.
 - **Recorded actors:** reviews, revisions, seller activations and delivery
   resolutions record `user:<name>`; background work records
-  `job:user:<name>`; every audit event carries `actor`. Rows from before
+  `job:user:<name>`; every audit event carries `actor`, and user/job events carry a stable `actor_user_id`. Security changes and login/logout are audited too. Rows from before
   Phase 12 keep their original `local-demo-unauthenticated` label.
 
-With curl, keep a cookie jar and pass the token:
+Login requires JSON and, for browser requests, an allowed Origin. Login bodies
+are bounded and passwords are never reflected in validation errors. With curl,
+keep a private cookie jar, avoid putting a real password into shell history,
+and pass the returned CSRF token:
 
 ```bash
+umask 077
 curl -c jar -H 'Content-Type: application/json' -d '{"username":"admin","password":"…"}' \
   http://localhost:8000/api/auth/login                   # note csrf_token in the response
 curl -b jar -H "X-CSRF-Token: $TOKEN" -X POST http://localhost:8000/api/demo/run
@@ -99,7 +106,7 @@ curl -b jar -H "X-CSRF-Token: $TOKEN" -X POST http://localhost:8000/api/demo/run
 ## Run the API
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+SESSION_COOKIE_SECURE=false uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 ```
 
 Health endpoints:
@@ -290,9 +297,13 @@ app/
 ├── datasets/, pdl/ # dataset building and the PDL importer
 ├── integrations/   # Slack payload builder + sender
 └── auth_cli.py     # operator account CLI
-alembic/versions/   # 12 migrations (0001 … 0012_operator_auth)
+alembic/versions/   # 13 migrations (0001 … 0013_auth_hardening)
 tests/              # pytest suite
 ```
+
+## Release verification
+
+The complete gate is `.github/workflows/release.yml`: Python 3.12, Node 24, a fresh PostgreSQL 16 service, both complete backend suites, frontend tests/typecheck/build, and `scripts/verify_release.py --with-frontend`. The harness requires an empty loopback PostgreSQL database named `gtmflow_phase12_*`; without a URL it uses temporary SQLite and explicitly skips migration verification. Historical migrations require PostgreSQL. Current results and audit coverage: [Phase 12 handoff](../docs/upgrade/phase12-release-handoff.md), [dependency review](../docs/dependency-security.md).
 
 ## Not implemented
 
