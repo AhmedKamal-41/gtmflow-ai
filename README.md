@@ -10,8 +10,9 @@ person to approve the exact draft, and routes approved Hot leads to Slack throug
 that cannot double-send. Every state change is audited, and the dashboard reports adoption without
 mixing mock and real activity.
 
-The drafting step can use a mock generator, OpenAI, or **`qwen3-4b-lora-v1`**: a Qwen3-4B model
-fine-tuned with LoRA for this project and evaluated against its base model.
+Drafts are written by **`qwen3-4b-lora-v1`**, a Qwen3-4B model fine-tuned with LoRA for this project
+and evaluated against its base model. When its model server isn't connected, the app says so and
+uses a labeled demo generator, so the whole workflow still runs.
 
 FastAPI backend · PostgreSQL with Alembic · database-backed job worker · Next.js 15 frontend ·
 PyTorch + PEFT for the model work · Slack incoming webhooks.
@@ -26,8 +27,8 @@ PyTorch + PEFT for the model work · Slack incoming webhooks.
 ![Slack](https://img.shields.io/badge/Slack-webhooks-4A154B?logo=slack&logoColor=white)
 [![Release verification](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml)
 
-**Runs entirely in mock mode by default:** no API keys are needed and no message leaves the app.
-It is not deployed; see [Local setup](#local-setup) to run it in a few minutes.
+**Runs locally without keys or a GPU:** Slack is mocked and drafts fall back to the demo generator
+until the fine-tuned model's server is connected. It is not deployed; see [Local setup](#local-setup).
 
 <p align="center">
   <a href="docs/screenshots/home.png">
@@ -91,8 +92,9 @@ by an emailed code) or continue as a guest, when the server enables those option
   versioned company-fit score with evidence coverage and an explicit "insufficient evidence" band.
 - **Grounded AI drafts:** a summary and an outreach email per lead, citing record facts and seller
   capabilities by id, with the unknowns stated rather than guessed.
-- **Three interchangeable generators:** a deterministic mock (the default), OpenAI, and the
-  fine-tuned `qwen3-4b-lora-v1` through an OpenAI-compatible server.
+- **The fine-tuned model drafts:** `qwen3-4b-lora-v1` through an OpenAI-compatible server, with a
+  live status indicator. If the server is offline, drafts come from a labeled demo generator and are
+  recorded as such. OpenAI is also supported.
 - **Exact-draft approval:** approve, reject, or edit into a new immutable revision. Runtime quality
   checks flag known problem phrasings, and approving a flagged draft requires an explicit
   acknowledgement.
@@ -104,7 +106,9 @@ by an emailed code) or continue as a guest, when the server enables those option
   outcomes and operator resolution.
 - **Honest metrics:** approval counted once per draft by its latest review, delivery outcomes, mock
   versus real breakdowns, and time saved labeled as an estimate.
-- **One-click demo:** `/demo` seeds a sample batch and runs the whole workflow in mock mode.
+- **Built around a rep's day:** **Today** shows what needs attention, **Leads** ranks every lead by
+  priority and workflow stage, and each lead page puts the draft, the review and sending in one place.
+  New users can **try with sample data**, which imports 10 companies the normal way.
 - **Three ways in:** sign in, create an account confirmed with an emailed 6-digit code, or press
   **Continue as guest** to use the app immediately. Sign-up and guest access are server settings,
   off by default.
@@ -149,11 +153,13 @@ by an emailed code) or continue as a guest, when the server enables those option
   and adapter revision, input hash and seller-profile revision, so any draft can be traced to the
   exact inputs that produced it.
 
-- **Mock first, fail closed.** `USE_MOCK_AI=true` always wins. Real providers refuse to start
-  without their configuration, before any network call is made, and an empty `SLACK_WEBHOOK_URL`
-  routes to a mock webhook. The webhook URL is never logged or returned by the API.
+- **Honest model fallback.** With `LORA_FALLBACK_TO_MOCK=true`, each generation first checks that the
+  fine-tuned model's server answers (3-second probe, cached 30 seconds). If it doesn't, the draft comes
+  from the demo generator and is recorded as mock, so metrics never count it as real; a request that
+  fails mid-way is never silently retried on another model. Without the fallback, real providers fail
+  closed. An empty `SLACK_WEBHOOK_URL` routes to a mock webhook, and the URL is never logged or returned.
 
-- **Explicit, verified migrations.** Thirteen Alembic migrations, never run automatically on boot.
+- **Explicit, verified migrations.** Fourteen Alembic migrations, never run automatically on boot.
   A baseline verifier refuses to stamp a database whose live schema does not match, and the release
   harness checks that the migrations preserve existing data and audit columns.
 
@@ -167,7 +173,7 @@ by an emailed code) or continue as a guest, when the server enables those option
 ```mermaid
 flowchart TB
     UI["Browser<br/>Next.js 15 pages"] -->|"session cookie<br/>+ X-CSRF-Token"| Proxy["Next.js server<br/>same-origin /api proxy"]
-    Proxy --> API["FastAPI<br/>auth · CSRF · roles<br/>62 operations"]
+    Proxy --> API["FastAPI<br/>auth · CSRF · roles<br/>64 operations"]
 
     API <-->|"data, audit events,<br/>job queue"| PG[("PostgreSQL 16")]
     PG <-->|"leased jobs,<br/>item results"| Worker["Job worker<br/>app.jobs.worker"]
@@ -320,7 +326,7 @@ Backend:
 |---|---|---|
 | Language | Python 3.12 | Backend and training code |
 | Web framework | FastAPI 0.141 | API, dependency-injected auth, OpenAPI docs |
-| ORM / migrations | SQLAlchemy 2.1, Alembic 1.20 | Data access and 13 explicit, versioned migrations |
+| ORM / migrations | SQLAlchemy 2.1, Alembic 1.20 | Data access and 14 explicit, versioned migrations |
 | Validation | Pydantic 2.13, pydantic-settings | Request and response schemas, typed configuration |
 | Database driver | psycopg 3 | PostgreSQL access |
 | HTTP client | httpx | Slack webhooks, OpenAI-compatible inference |
@@ -375,8 +381,9 @@ Only mechanisms present in the code are listed here.
   5 wrong guesses, and can be re-sent after 60 seconds. Responses are identical whether or not an
   address already has an account, and sign-up can be limited to approved email domains.
 - **Guest access.** Each guest gets a fresh account with no password and a 2-hour session. Guests
-  can change data only while the server is mock-only (mock AI, no Slack webhook), so a guest can
-  never trigger a real message or a paid API call.
+  can change data only while the server is guest-safe (no Slack webhook, and drafts come from the demo
+  generator or the self-hosted fine-tuned model), so a guest can never trigger a real message or a
+  paid, per-request API call.
 - **Brute-force limits.** Five consecutive failures lock an account for 15 minutes. A
   database-backed limiter allows 30 attempts per client per 5 minutes across all API processes,
   and an unknown username takes as long as a wrong password.
@@ -384,7 +391,7 @@ Only mechanisms present in the code are listed here.
   Origin-checked, limited to 16 KiB and throttled per client (in separate buckets), with one
   generic error message for every sign-in failure.
 - **Roles.** `operator` can change data; `viewer` is read-only; `guest` acts as an operator only
-  on a mock-only server.
+  on a guest-safe server.
 - **Audit.** Every `WorkflowEvent` records its actor, including events written by the worker.
 - **Secrets.** Configuration comes from the environment. `.env` files are git-ignored, and the
   Slack webhook URL is never logged or returned.
@@ -467,7 +474,7 @@ email "ready", only an internal Slack handoff.
 |---|---|---|
 | Backend | `backend/tests/` | Scoring, ingestion, grounding validation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, auth, migrations |
 | PostgreSQL | same suite with `TEST_DATABASE_URL` | Real concurrency (simultaneous pushes, lease races), process-kill recovery, migration preservation |
-| Frontend | `frontend/src/**/*.test.ts(x)` | Lead, batch, metrics, seller-profile and annotation pages; the API client (CSRF, 401 handling); auth provider, jobs panel, push history |
+| Frontend | `frontend/src/**/*.test.ts(x)` | Today, Leads, Imports, Settings, sidebar, lead, import, metrics and seller-profile pages; the API client (CSRF, 401 handling); auth provider, jobs panel, push history |
 | Training | `training/tests/` | Weighted objective, split guards, adapter hash checks, launcher secret handling, serving limits |
 | Release harness | `backend/scripts/verify_release.py` | 96 live checks: production frontend, API, worker, sign-up and guest access on a fresh database |
 
@@ -493,8 +500,8 @@ Never point `TEST_DATABASE_URL` at a database whose contents matter.
 
 ## API reference
 
-62 operations. Every route except the health checks and the public account endpoints below needs a
-session; state changes also need `X-CSRF-Token` and the `operator` role (or `guest` on a mock-only
+64 operations. Every route except the health checks and the public account endpoints below needs a
+session; state changes also need `X-CSRF-Token` and the `operator` role (or `guest` on a guest-safe
 server).
 
 | Method | Path | Description |
@@ -525,8 +532,10 @@ server).
 | `GET` | `/api/jobs`, `/api/jobs/{id}`, `/api/jobs/{id}/items` | Job progress and item results |
 | `POST` | `/api/jobs/{id}/cancel` | Cancel a job |
 | `GET`, `POST` | `/api/seller-profile`, `…/activate`, `…/deactivate` | Versioned seller profiles |
+| `GET` | `/api/inbox` | Every lead with its priority and workflow stage, Hot first; filter by `stage`, `priority`, `q` |
+| `GET` | `/api/ai/status` | Which model drafts right now and whether the fine-tuned model's server is reachable |
 | `GET` | `/api/metrics/dashboard` | Adoption, delivery and mock-versus-real metrics |
-| `POST` | `/api/demo/run` | Seed and run the full demo workflow |
+| `POST` | `/api/demo/run` | Seed and run the full demo workflow (used by the release checks) |
 
 Full schemas are at `/docs` once signed in. Curl examples are in [`backend/README.md`](backend/README.md).
 
@@ -550,8 +559,9 @@ cd backend
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements-lock.txt
 export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:55432/gtmflow_demo
-export USE_MOCK_AI=true OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
+export OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
 export SESSION_COOKIE_SECURE=false ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+export USE_MOCK_AI=false AI_PROVIDER=qwen3-4b-lora-v1 LORA_FALLBACK_TO_MOCK=true   # prefer the fine-tuned model
 export SELF_SIGNUP_ENABLED=true GUEST_ACCESS_ENABLED=true   # sign-up codes print in this terminal
 .venv/bin/alembic upgrade head
 .venv/bin/python -m app.auth_cli create-user admin     # optional: an operator account (prompts for a password)
@@ -563,7 +573,8 @@ export SELF_SIGNUP_ENABLED=true GUEST_ACCESS_ENABLED=true   # sign-up codes prin
 ```bash
 cd backend
 export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:55432/gtmflow_demo
-export USE_MOCK_AI=true OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
+export OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
+export USE_MOCK_AI=false AI_PROVIDER=qwen3-4b-lora-v1 LORA_FALLBACK_TO_MOCK=true
 .venv/bin/python -m app.jobs.worker
 ```
 
@@ -576,8 +587,9 @@ API_PROXY_TARGET=http://127.0.0.1:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
 ```
 
 Open http://localhost:3000 and either **Continue as guest**, create an account (the 6-digit code
-appears in terminal 1, because no email is sent locally), or sign in. Then press **Run the full
-demo** on `/demo`. The
+appears in terminal 1, because no email is sent locally), or sign in. On **Today**, press **Try with
+sample data**. With no model server running, drafts come from the demo generator; set
+`LORA_INFERENCE_BASE_URL` to a running model server to draft with the fine-tuned model. The
 [demo script](docs/demo-script.md) walks through the rest. Codespaces, SQLite-only and account
 maintenance options are in the
 [startup guide](docs/engineering-log/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode).
@@ -597,6 +609,7 @@ Backend (`backend/.env.example` documents each one):
 | `OPENAI_API_KEY` | empty | Only for `AI_PROVIDER=openai` (paid) |
 | `LORA_INFERENCE_BASE_URL`, `LORA_INFERENCE_API_KEY` | empty | The OpenAI-compatible adapter server |
 | `LORA_SERVED_MODEL`, `LORA_TIMEOUT_SECONDS` | see the example file | Served model name and request timeout |
+| `LORA_FALLBACK_TO_MOCK` | `false` | With the fine-tuned provider selected: use the demo generator while its server is offline |
 | `SLACK_WEBHOOK_URL` | empty | Empty means mock delivery; never logged or returned |
 | `SESSION_COOKIE_SECURE` | `true` | `false` only for plain-HTTP development |
 | `SESSION_IDLE_MINUTES`, `SESSION_ABSOLUTE_HOURS` | `60`, `12` | Session lifetimes |
@@ -646,14 +659,14 @@ gtmflow-ai/
 │   │   ├── services/        Business logic: ingestion, generation, review, delivery, metrics, auth
 │   │   ├── auth_cli.py      Account management CLI
 │   │   └── main.py          App factory, deny-by-default dependency, middleware
-│   ├── alembic/             13 migrations
+│   ├── alembic/             14 migrations
 │   ├── data/ai_reviews/     Committed review decisions behind the training data
 │   ├── scripts/             Release harness, baseline verifier, evaluation and data scripts
 │   ├── tests/               Backend test suite
 │   └── requirements-lock.txt
 ├── frontend/
 │   └── src/
-│       ├── app/             Pages: home, login, upload, batches, leads, metrics, seller profile, annotation, demo
+│       ├── app/             Pages: Today, sign-in, Leads, lead workspace, Imports, Insights, Settings, seller profile
 │       ├── components/      UI components (cards, badges, jobs panel, push history, auth provider)
 │       └── lib/             Typed API client with CSRF handling
 ├── training/

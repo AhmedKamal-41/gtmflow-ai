@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { draftModelLabel } from "@/components/AIStatusProvider";
 import { AIOutputCard } from "@/components/AIOutputCard";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
@@ -13,6 +14,7 @@ import { FitScoreCard } from "@/components/FitScoreCard";
 import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { PriorityBadge } from "@/components/PriorityBadge";
 import { PushHistory } from "@/components/PushHistory";
 import { ScoreBreakdown } from "@/components/ScoreBreakdown";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -386,118 +388,80 @@ export default function LeadDetailPage() {
   const activeSellerProfileId =
     sellerStatus === undefined ? undefined : (sellerStatus.active_profile?.id ?? null);
 
+  const draftAuthor = latestOutreach ? draftModelLabel(latestOutreach.model_used) : null;
+  const reviewActions = canReviewOutreach && latestOutreach ? (
+    <div className="flex flex-wrap items-center gap-2">
+      {draftFlagCodes.length > 0 && (
+        <label className="flex w-full items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <input
+            type="checkbox"
+            aria-label="I reviewed the quality flags"
+            checked={flagsAckFor === latestOutreach.id}
+            onChange={(e) => setFlagsAckFor(e.target.checked ? latestOutreach.id : null)}
+          />
+          I reviewed the {draftFlagCodes.length} quality flag
+          {draftFlagCodes.length === 1 ? "" : "s"} on this draft
+        </label>
+      )}
+      <Button
+        icon="check"
+        loading={busy === "Approve"}
+        disabled={!flagsAcknowledged}
+        onClick={() =>
+          runAction("Approve", () =>
+            approveOutreach(
+              leadId,
+              latestOutreach.id,
+              latestOutreach.content_hash,
+              flagsAcknowledged ? draftFlagCodes : [],
+            ),
+          )
+        }
+      >
+        Approve outreach
+      </Button>
+      {canEditOutreach && (
+        <Button variant="secondary" disabled={busy !== null} onClick={startEditing}>
+          Edit draft
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        disabled={busy !== null}
+        onClick={() => {
+          setEditing(false);
+          setRejecting(true);
+        }}
+      >
+        Reject outreach
+      </Button>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Lead workspace"
         title={lead.company_name}
-        back={{ href: `/batches/${lead.batch_id}`, label: "Back to batch" }}
+        back={{ href: "/leads", label: "All leads" }}
         description={
           <span className="flex flex-wrap items-center gap-2">
+            {score && <PriorityBadge priority={score.priority} />}
             <StatusBadge status={lead.status} />
-            {lead.industry && (
-              <span className="text-slate-500">· {lead.industry}</span>
-            )}
-            {lead.location && (
-              <span className="text-slate-500">· {lead.location}</span>
-            )}
+            {lead.industry && <span className="text-slate-500">· {lead.industry}</span>}
+            {lead.location && <span className="text-slate-500">· {lead.location}</span>}
           </span>
         }
+        actions={
+          <Button
+            variant="ghost"
+            icon="refresh"
+            loading={busy === "Refresh"}
+            onClick={() => runAction("Refresh", async () => undefined)}
+          >
+            Refresh
+          </Button>
+        }
       />
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          loading={busy === "Score"}
-          onClick={() => runAction("Score", () => scoreLead(leadId))}
-        >
-          Score lead (legacy v1)
-        </Button>
-        <Button
-          variant="secondary"
-          loading={busy === "Fit"}
-          onClick={() => runAction("Fit", () => scoreLeadFit(leadId))}
-        >
-          Score company fit (v2 demo)
-        </Button>
-        <Button
-          variant="secondary"
-          loading={busy === "Summary"}
-          onClick={() => runAction("Summary", () => generateSummary(leadId))}
-        >
-          Generate summary
-        </Button>
-        <Button
-          variant="secondary"
-          loading={busy === "Outreach"}
-          disabled={outreachUnavailable}
-          onClick={() => runAction("Outreach", () => generateOutreach(leadId))}
-        >
-          Generate outreach
-        </Button>
-        {canReviewOutreach && latestOutreach && (
-          <>
-            {draftFlagCodes.length > 0 && (
-              <label className="flex items-center gap-2 text-xs text-amber-900">
-                <input
-                  type="checkbox"
-                  aria-label="I reviewed the quality flags"
-                  checked={flagsAckFor === latestOutreach.id}
-                  onChange={(e) => setFlagsAckFor(e.target.checked ? latestOutreach.id : null)}
-                />
-                I reviewed the {draftFlagCodes.length} quality flag
-                {draftFlagCodes.length === 1 ? "" : "s"}
-              </label>
-            )}
-            <Button
-              variant="secondary"
-              loading={busy === "Approve"}
-              disabled={!flagsAcknowledged}
-              onClick={() =>
-                runAction("Approve", () =>
-                  approveOutreach(
-                    leadId,
-                    latestOutreach.id,
-                    latestOutreach.content_hash,
-                    flagsAcknowledged ? draftFlagCodes : [],
-                  ),
-                )
-              }
-            >
-              Approve outreach
-            </Button>
-            <Button
-              variant="danger"
-              disabled={busy !== null}
-              onClick={() => {
-                setEditing(false);
-                setRejecting(true);
-              }}
-            >
-              Reject outreach
-            </Button>
-            {canEditOutreach && (
-              <Button variant="secondary" disabled={busy !== null} onClick={startEditing}>
-                Edit draft
-              </Button>
-            )}
-          </>
-        )}
-        <Button
-          variant="primary"
-          loading={busy === "Push"}
-          disabled={pushBlocked}
-          onClick={() => runAction("Push", pushWithCurrentCheck)}
-        >
-          Push to Slack
-        </Button>
-        <Button
-          variant="ghost"
-          loading={busy === "Refresh"}
-          onClick={() => runAction("Refresh", async () => undefined)}
-        >
-          Refresh
-        </Button>
-      </div>
 
       <SellerStatusNotice
         status={sellerStatus}
@@ -505,253 +469,323 @@ export default function LeadDetailPage() {
         onRetry={() => void refreshSellerStatus(generationRef.current)}
       />
 
-      {rejecting && latestOutreach && (
-        <Card title="Reject this draft" subtitle={`Draft ${latestOutreach.id.slice(0, 8)} · content ${latestOutreach.content_hash.slice(0, 12)}`}>
-          <label className="block text-sm font-medium text-slate-700">
-            Reason for rejecting (required)
-            <textarea
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              rows={2}
-              maxLength={2000}
-              value={rejectReason}
-              disabled={busy !== null}
-              onChange={(e) => setRejectReason(e.target.value)}
-            />
-          </label>
-          <div className="mt-3 flex gap-2">
-            <Button
-              variant="danger"
-              loading={busy === "Reject"}
-              disabled={!rejectReason.trim()}
-              onClick={() => void confirmReject()}
-            >
-              Confirm rejection
-            </Button>
-            <Button variant="ghost" disabled={busy === "Reject"} onClick={() => setRejecting(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      {editing && latestOutreach && (
-        <Card
-          title="Edit draft"
-          subtitle="Saving creates a new revision. The original model output is kept unchanged, and the new revision needs its own review."
-        >
-          <div className="space-y-3">
-            {(["subject", "email_body", "call_note"] as const).map((field) => (
-              <label key={field} className="block text-sm font-medium text-slate-700">
-                {field === "subject" ? "Subject" : field === "email_body" ? "Body" : "Call note"}
-                <textarea
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  rows={field === "email_body" ? 8 : 2}
-                  value={editFields[field]}
-                  disabled={busy === "Edit"}
-                  onChange={(e) => setEditFields((prev) => ({ ...prev, [field]: e.target.value }))}
-                />
-              </label>
-            ))}
-            <div className="flex gap-2">
-              <Button loading={busy === "Edit"} onClick={() => void saveEdit()}>
-                Save as new revision
-              </Button>
-              <Button variant="ghost" disabled={busy === "Edit"} onClick={() => setEditing(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
-
       {info && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-brand-200 bg-brand-50 p-3.5 text-sm text-brand-900">
+        <div role="status" className="flex items-center gap-2.5 rounded-lg border border-brand-200 bg-brand-50 p-3.5 text-sm text-brand-900">
           <Icon name="check" className="h-4 w-4 flex-none text-brand-600" />
           {info}
         </div>
       )}
       {error && <ErrorMessage>{error}</ErrorMessage>}
 
-      <Card title="Lead details" icon="file">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          <Field label="Company" value={lead.company_name} />
-          <Field label="Website" value={lead.website} />
-          <Field label="Industry" value={lead.industry} />
-          <Field label="Contact name" value={lead.contact_name} />
-          <Field label="Contact title" value={lead.contact_title} />
-          <Field label="Contact email" value={lead.contact_email} />
-          <Field label="Company size" value={lead.company_size} />
-          <Field label="Location" value={lead.location} />
-          <Field label="Source" value={lead.source} />
-        </dl>
-        {lead.cleaned_data &&
-          Object.keys(lead.cleaned_data).length > 0 && (
-            <div className="mt-4 border-t border-slate-200 pt-4">
-              <div className="text-sm font-medium text-slate-700">
-                Extra fields from CSV
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-6">
+          <section aria-labelledby="draft-heading" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 id="draft-heading" className="text-lg font-semibold text-slate-900">
+                  Current outreach draft
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {draftAuthor
+                    ? `Written by: ${draftAuthor}. Every claim is checked against this lead's record before it is saved.`
+                    : "Drafts use only this lead's record and your seller profile."}
+                </p>
               </div>
-              <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-                {Object.entries(lead.cleaned_data).map(([k, v]) => (
-                  <Field key={k} label={k} value={stringify(v)} />
-                ))}
-              </dl>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={latestOutreach ? "secondary" : "primary"}
+                  icon="sparkles"
+                  loading={busy === "Outreach"}
+                  disabled={outreachUnavailable}
+                  onClick={() => runAction("Outreach", () => generateOutreach(leadId))}
+                >
+                  Generate outreach
+                </Button>
+              </div>
             </div>
+            {/*
+              This card ALWAYS renders the exact content the approve/reject
+              buttons act on, fetched via the authoritative latest-outreach
+              lookup -- never inferred from the paginated history. The
+              reviewer must be able to read this exact draft before approving.
+            */}
+            {latestOutreach === undefined ? (
+              outreachLookupError ? (
+                <Card>
+                  <div className="space-y-2">
+                    <ErrorMessage>{outreachLookupError}</ErrorMessage>
+                    <div className="text-xs text-slate-500">
+                      Approve/reject are disabled until this lookup succeeds --
+                      never falls back to a stale or guessed draft.
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <LoadingState text="Resolving the current draft…" />
+              )
+            ) : latestOutreach === null ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
+                No outreach draft yet. Press <em>Generate outreach</em> to write one.
+              </div>
+            ) : (
+              <AIOutputCard
+                output={latestOutreach}
+                isLatestOfType
+                activeSellerProfileId={activeSellerProfileId}
+              />
+            )}
+          </section>
+
+          {rejecting && latestOutreach && (
+            <Card title="Reject this draft" subtitle="Say what is wrong so the next draft can be better.">
+              <label className="block text-sm font-medium text-slate-700">
+                Reason for rejecting (required)
+                <textarea
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  rows={2}
+                  maxLength={2000}
+                  value={rejectReason}
+                  disabled={busy !== null}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                />
+              </label>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="danger"
+                  loading={busy === "Reject"}
+                  disabled={!rejectReason.trim()}
+                  onClick={() => void confirmReject()}
+                >
+                  Confirm rejection
+                </Button>
+                <Button variant="ghost" disabled={busy === "Reject"} onClick={() => setRejecting(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </Card>
           )}
-      </Card>
 
-      <section>
-        <h2 className="mb-3 text-xl font-semibold text-slate-900">
-          Legacy priority score (v1)
-        </h2>
-        {score ? (
-          <ScoreBreakdown score={score} />
-        ) : (
-          <Card>
-            <div className="text-sm text-slate-600">
-              Not scored yet. Run <em>Score lead (legacy v1)</em> above.
-            </div>
-          </Card>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-xl font-semibold text-slate-900">
-          Company fit (v2 demo)
-        </h2>
-        {fitScore ? (
-          <FitScoreCard fit={fitScore} />
-        ) : (
-          <Card>
-            <div className="text-sm text-slate-600">
-              Not fit-scored yet. Run <em>Score company fit (v2 demo)</em> above.
-            </div>
-          </Card>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-xl font-semibold text-slate-900">
-          Current readiness &amp; eligibility
-        </h2>
-        {readiness ? (
-          <CurrentReadinessCard
-            readiness={readiness.readiness}
-            eligibility={readiness.eligibility}
-          />
-        ) : (
-          <LoadingState text="Checking current readiness…" />
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-xl font-semibold text-slate-900">Review</h2>
-        <ReviewStateCard
-          state={reviewState}
-          error={reviewStateError}
-          onRetry={() => void refreshReviewState(generationRef.current)}
-        />
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-xl font-semibold text-slate-900">
-          Current outreach draft
-        </h2>
-        {/*
-          Phase 4 closeout Part A.3: this card ALWAYS renders the exact
-          content the approve/reject buttons above will act on, fetched via
-          the authoritative latest-outreach lookup -- independent of the
-          paginated history list below, which may have this same draft many
-          pages deep if lots of summaries were generated after it. A lookup
-          pointer alone (an id with nothing rendered) must never be what
-          "enables" approval; the user must be able to actually read this
-          exact draft on screen before clicking Approve.
-        */}
-        {latestOutreach === undefined ? (
-          outreachLookupError ? (
-            <Card>
-              <div className="space-y-2">
-                <ErrorMessage>{outreachLookupError}</ErrorMessage>
-                <div className="text-xs text-slate-500">
-                  Approve/reject are disabled until this lookup succeeds --
-                  never falls back to a stale or guessed draft.
+          {editing && latestOutreach && (
+            <Card
+              title="Edit draft"
+              subtitle="Saving creates a new revision. The original model output is kept unchanged, and the new revision needs its own review."
+            >
+              <div className="space-y-3">
+                {(["subject", "email_body", "call_note"] as const).map((field) => (
+                  <label key={field} className="block text-sm font-medium text-slate-700">
+                    {field === "subject" ? "Subject" : field === "email_body" ? "Body" : "Call note"}
+                    <textarea
+                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      rows={field === "email_body" ? 8 : 2}
+                      value={editFields[field]}
+                      disabled={busy === "Edit"}
+                      onChange={(e) => setEditFields((prev) => ({ ...prev, [field]: e.target.value }))}
+                    />
+                  </label>
+                ))}
+                <div className="flex gap-2">
+                  <Button loading={busy === "Edit"} onClick={() => void saveEdit()}>
+                    Save as new revision
+                  </Button>
+                  <Button variant="ghost" disabled={busy === "Edit"} onClick={() => setEditing(false)}>
+                    Cancel
+                  </Button>
                 </div>
               </div>
             </Card>
-          ) : (
-            <LoadingState text="Resolving the current draft…" />
-          )
-        ) : latestOutreach === null ? (
-          <Card>
-            <div className="text-sm text-slate-600">
-              No outreach draft yet. Run <em>Generate outreach</em> above.
+          )}
+
+          <Card title="Your review" icon="check" subtitle="Approve the exact draft above, edit it, or reject it.">
+            <div className="space-y-4">
+              <ReviewStateCard
+                state={reviewState}
+                error={reviewStateError}
+                onRetry={() => void refreshReviewState(generationRef.current)}
+              />
+              {reviewActions}
             </div>
           </Card>
-        ) : (
-          <AIOutputCard
-            output={latestOutreach}
-            isLatestOfType
-            activeSellerProfileId={activeSellerProfileId}
-          />
-        )}
-      </section>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-900">
-            All AI outputs (history)
-          </h2>
-          {outputsHistory.total > 0 && (
-            <span className="text-sm text-slate-500">
-              Showing {outputsHistory.items.length.toLocaleString()} of{" "}
-              {outputsHistory.total.toLocaleString()}
-            </span>
-          )}
-        </div>
-        <HistoryPanel
-          state={outputsHistory}
-          emptyLabel="No AI outputs yet. Generate a summary or outreach above."
-          renderItems={(items) => (
-            <div className="space-y-3">
-              {items.map((o) => (
-                <AIOutputCard
-                  key={o.id}
-                  output={o}
-                  isLatestOfType={
-                    o.output_type !== "outreach_email" ||
-                    o.id === latestOutreach?.id
-                  }
+          <Card title="Send to Slack" icon="send" subtitle="Approved drafts go to your team's Slack channel. Nothing is sent twice.">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  icon="send"
+                  loading={busy === "Push"}
+                  disabled={pushBlocked}
+                  onClick={() => runAction("Push", pushWithCurrentCheck)}
+                >
+                  Push to Slack
+                </Button>
+                {pushBlocked && (
+                  <span className="text-sm text-slate-500">
+                    {readiness?.eligibility.excluded
+                      ? "This lead is excluded from routing."
+                      : "Approve the current draft first."}
+                  </span>
+                )}
+              </div>
+              <section>
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-900">Push history</h3>
+                  {pushesHistory.total > 0 && (
+                    <span className="text-xs text-slate-500">
+                      Showing {pushesHistory.items.length.toLocaleString()} of{" "}
+                      {pushesHistory.total.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <HistoryPanel
+                  state={pushesHistory}
+                  emptyLabel="Not sent yet."
+                  renderItems={(items) => (
+                    <PushHistory
+                      pushes={items}
+                      onResolve={(pushId, resolution) =>
+                        void runAction("Resolve", () => resolvePush(pushId, resolution))
+                      }
+                    />
+                  )}
                 />
-              ))}
+              </section>
             </div>
-          )}
-        />
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Push history
-          </h2>
-          {pushesHistory.total > 0 && (
-            <span className="text-sm text-slate-500">
-              Showing {pushesHistory.items.length.toLocaleString()} of{" "}
-              {pushesHistory.total.toLocaleString()}
-            </span>
-          )}
+          </Card>
         </div>
-        <HistoryPanel
-          state={pushesHistory}
-          emptyLabel="Not pushed yet."
-          renderItems={(items) => (
-            <PushHistory
-              pushes={items}
-              onResolve={(pushId, resolution) =>
-                void runAction("Resolve", () => resolvePush(pushId, resolution))
-              }
-            />
+
+        <aside className="space-y-6">
+          <Card title="Contact" icon="users">
+            <dl className="space-y-3">
+              <Field label="Name" value={lead.contact_name} />
+              <Field label="Title" value={lead.contact_title} />
+              <Field label="Email" value={lead.contact_email} />
+              <Field label="Website" value={lead.website} />
+              <Field label="Company size" value={lead.company_size} />
+              <Field label="Source" value={lead.source} />
+            </dl>
+            {lead.cleaned_data && Object.keys(lead.cleaned_data).length > 0 && (
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Notes from your import</div>
+                <dl className="mt-2 space-y-2">
+                  {Object.entries(lead.cleaned_data).map(([k, v]) => (
+                    <Field key={k} label={k.replace(/_/g, " ")} value={stringify(v)} />
+                  ))}
+                </dl>
+              </div>
+            )}
+          </Card>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">Why this priority</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={busy === "Score"}
+                onClick={() => runAction("Score", () => scoreLead(leadId))}
+              >
+                {score ? "Rescore" : "Score lead"}
+              </Button>
+            </div>
+            {score ? (
+              <ScoreBreakdown score={score} />
+            ) : (
+              <Card>
+                <div className="text-sm text-slate-600">Not scored yet.</div>
+              </Card>
+            )}
+          </section>
+        </aside>
+      </div>
+
+      <details className="group rounded-xl border border-slate-200 bg-white shadow-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-semibold text-slate-900">
+          Technical details
+          <span className="text-xs font-normal text-slate-500 group-open:hidden">
+            Company fit, eligibility, review record and full AI history
+          </span>
+        </summary>
+        <div className="space-y-6 border-t border-slate-100 p-5">
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900">Company fit (v2 demo)</h2>
+              <Button variant="secondary" size="sm" loading={busy === "Fit"} onClick={() => runAction("Fit", () => scoreLeadFit(leadId))}>
+                Score company fit (v2 demo)
+              </Button>
+            </div>
+            {fitScore ? (
+              <FitScoreCard fit={fitScore} />
+            ) : (
+              <div className="text-sm text-slate-600">Not fit-scored yet.</div>
+            )}
+          </section>
+
+          {reviewState && (
+            <section className="space-y-1 text-xs text-slate-500">
+              <h2 className="mb-2 text-base font-semibold text-slate-900">Review record</h2>
+              <p>
+                Each review records the signed-in account that made it. Reviews made before sign-in
+                existed are labeled &quot;local-demo-unauthenticated&quot;.
+                {reviewState.draft_content_hash && (
+                  <> Current draft content hash: <span className="font-mono">{reviewState.draft_content_hash.slice(0, 12)}</span>.</>
+                )}
+              </p>
+              <p aria-label="Source freshness">
+                Source: {reviewState.source.provider ?? reviewState.source.batch_source ?? "unknown"}
+                {reviewState.source.reported_acquisition_date
+                  ? ` · reported acquisition ${reviewState.source.reported_acquisition_date}`
+                  : ""}
+                . {reviewState.source.freshness_note}
+              </p>
+            </section>
           )}
-        />
-      </section>
+
+          <section>
+            <h2 className="mb-3 text-base font-semibold text-slate-900">Current readiness &amp; eligibility</h2>
+            {readiness ? (
+              <CurrentReadinessCard readiness={readiness.readiness} eligibility={readiness.eligibility} />
+            ) : (
+              <LoadingState text="Checking current readiness…" />
+            )}
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900">All AI outputs (history)</h2>
+              <div className="flex items-center gap-3">
+                {outputsHistory.total > 0 && (
+                  <span className="text-sm text-slate-500">
+                    Showing {outputsHistory.items.length.toLocaleString()} of{" "}
+                    {outputsHistory.total.toLocaleString()}
+                  </span>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={busy === "Summary"}
+                  onClick={() => runAction("Summary", () => generateSummary(leadId))}
+                >
+                  Generate summary
+                </Button>
+              </div>
+            </div>
+            <HistoryPanel
+              state={outputsHistory}
+              emptyLabel="No AI outputs yet."
+              renderItems={(items) => (
+                <div className="space-y-3">
+                  {items.map((o) => (
+                    <AIOutputCard
+                      key={o.id}
+                      output={o}
+                      isLatestOfType={o.output_type !== "outreach_email" || o.id === latestOutreach?.id}
+                    />
+                  ))}
+                </div>
+              )}
+            />
+          </section>
+        </div>
+      </details>
     </div>
   );
 }
@@ -779,31 +813,31 @@ function ReviewStateCard({
 }) {
   if (error) {
     return (
-      <Card>
-        <div className="space-y-2">
-          <ErrorMessage>{error}</ErrorMessage>
-          <Button variant="secondary" onClick={onRetry}>
-            Retry review state
-          </Button>
-        </div>
-      </Card>
+      <div className="space-y-2">
+        <ErrorMessage>{error}</ErrorMessage>
+        <Button variant="secondary" onClick={onRetry}>
+          Retry review state
+        </Button>
+      </div>
     );
   }
   if (!state) return <LoadingState text="Loading review state…" />;
   const review = state.latest_review;
+  if (state.status === "no_draft") {
+    return (
+      <p aria-label="Review status" className="text-sm text-slate-600">
+        Nothing to review yet. Generate a draft first.
+      </p>
+    );
+  }
   return (
-    <Card>
+    <div>
       <div aria-label="Review status" className="space-y-3 text-sm text-slate-700">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold text-slate-900">{STATUS_LABELS[state.status]}</span>
           {state.draft_origin === "human_edited" && (
             <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs">
               human-edited revision of {state.draft_parent_output_id?.slice(0, 8)}
-            </span>
-          )}
-          {state.draft_content_hash && (
-            <span className="font-mono text-xs text-slate-400">
-              content {state.draft_content_hash.slice(0, 12)}
             </span>
           )}
         </div>
@@ -828,19 +862,8 @@ function ReviewStateCard({
             {review.reason ? ` · reason: ${review.reason}` : ""}
           </p>
         )}
-        <p className="text-xs text-slate-500">
-          Each review records the signed-in account that made it. Reviews made before sign-in
-          existed are labeled &quot;local-demo-unauthenticated&quot;.
-        </p>
-        <p className="text-xs text-slate-500" aria-label="Source freshness">
-          Source: {state.source.provider ?? state.source.batch_source ?? "unknown"}
-          {state.source.reported_acquisition_date
-            ? ` · reported acquisition ${state.source.reported_acquisition_date}`
-            : ""}
-          . {state.source.freshness_note}
-        </p>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -891,8 +914,8 @@ function SellerStatusNotice({
     >
       New outreach uses seller profile version {active.version} (
       {active.profile.company_name}
-      {demo ? ", demonstration only" : ""}), hash{" "}
-      <span className="font-mono">{active.content_hash.slice(0, 12)}</span>.
+      {demo ? ", demonstration only" : ""}).{" "}
+      <span className="font-mono text-xs opacity-70">revision {active.content_hash.slice(0, 12)}</span>
     </div>
   );
 }

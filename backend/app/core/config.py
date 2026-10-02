@@ -49,6 +49,10 @@ class Settings:
     lora_inference_api_key: str = ""
     lora_served_model: str = "qwen3-4b-lora-v1"
     lora_timeout_seconds: float = 120.0
+    # With the fine-tuned provider selected: when its server is not reachable
+    # (checked before each generation, cached briefly), draft with the mock
+    # generator instead of failing. Such drafts are recorded as mock.
+    lora_fallback_to_mock: bool = False
     # Phase 12: operator sessions (docs/engineering-log/phase12-release-handoff.md).
     session_cookie_secure: bool = True
     session_idle_minutes: int = 60
@@ -71,9 +75,12 @@ class Settings:
     email_from: str = ""
 
     @property
-    def mock_only(self) -> bool:
-        """True when no action can reach a real AI provider or Slack."""
-        return self.use_mock_ai and not self.slack_webhook_url
+    def guest_safe(self) -> bool:
+        """True when no action can send a real Slack message or call a paid,
+        per-request AI API: drafts come from the mock generator or the
+        self-hosted fine-tuned model, and no Slack webhook is configured."""
+        drafting_is_safe = self.use_mock_ai or self.ai_provider == "qwen3-4b-lora-v1"
+        return drafting_is_safe and not self.slack_webhook_url
 
 
 def get_settings() -> Settings:
@@ -88,6 +95,7 @@ def get_settings() -> Settings:
         lora_inference_api_key=os.getenv("LORA_INFERENCE_API_KEY", ""),
         lora_served_model=(os.getenv("LORA_SERVED_MODEL") or "qwen3-4b-lora-v1").strip(),
         lora_timeout_seconds=float(os.getenv("LORA_TIMEOUT_SECONDS") or 120),
+        lora_fallback_to_mock=_as_bool(os.getenv("LORA_FALLBACK_TO_MOCK"), default=False),
         session_cookie_secure=_as_bool(os.getenv("SESSION_COOKIE_SECURE"), default=True),
         session_idle_minutes=int(os.getenv("SESSION_IDLE_MINUTES") or 60),
         session_absolute_hours=int(os.getenv("SESSION_ABSOLUTE_HOURS") or 12),

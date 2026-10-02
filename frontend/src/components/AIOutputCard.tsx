@@ -152,9 +152,11 @@ function sellerLabel(output: AIOutput): string {
 
 function Provenance({ output, grounded }: { output: AIOutput; grounded: boolean }) {
   return (
+    <details className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+      <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-700">Model details</summary>
     <div
       aria-label="Generation provenance"
-      className="mt-4 space-y-0.5 border-t border-slate-100 pt-3 text-xs text-slate-500"
+      className="mt-2 space-y-0.5"
     >
       {grounded ? (
         <>
@@ -173,6 +175,7 @@ function Provenance({ output, grounded }: { output: AIOutput; grounded: boolean 
         </div>
       )}
     </div>
+    </details>
   );
 }
 
@@ -198,7 +201,7 @@ function GroundedSummaryView({ content }: { content: GroundedSummaryContent }) {
       )}
       {content.unknowns?.length > 0 && (
         <div>
-          <FieldLabel>Not known from the data</FieldLabel>
+          <FieldLabel>Not known, so not assumed</FieldLabel>
           <Chips items={content.unknowns} />
         </div>
       )}
@@ -234,21 +237,21 @@ function GroundedOutreachView({ content }: { content: GroundedOutreachContent })
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <FieldLabel>Lead facts cited</FieldLabel>
+          <FieldLabel>Based on these facts</FieldLabel>
           <Chips items={content.lead_facts_used} />
         </div>
         <div>
-          <FieldLabel>Seller capabilities cited</FieldLabel>
+          <FieldLabel>Capabilities mentioned</FieldLabel>
           {content.capabilities_used.length ? <Chips items={content.capabilities_used} /> : <p className="mt-1 text-slate-500">None</p>}
         </div>
         <div>
-          <FieldLabel>Approved claims cited</FieldLabel>
+          <FieldLabel>Approved claims used</FieldLabel>
           {content.claims_used.length ? <Chips items={content.claims_used} /> : <p className="mt-1 text-slate-500">None</p>}
         </div>
       </div>
       {content.unknowns_acknowledged?.length > 0 && (
         <div>
-          <FieldLabel>Not known from the data</FieldLabel>
+          <FieldLabel>Not known, so not assumed</FieldLabel>
           <Chips items={content.unknowns_acknowledged} />
         </div>
       )}
@@ -271,15 +274,26 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Readable label for a cited id ("fact-company_size" -> "company size",
+// "cap-2" -> "capability 2"); the exact id stays in the tooltip.
+export function readableId(id: string): string {
+  const text = id
+    .replace(/^fact-(extra-)?/, "")
+    .replace(/^cap-(\d+)$/, "capability $1")
+    .replace(/^claim-(\d+)$/, "claim $1");
+  return text.replace(/[_-]+/g, " ");
+}
+
 function Chips({ items }: { items: string[] }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1.5">
       {items.map((p) => (
         <span
           key={p}
+          title={p}
           className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
         >
-          {p}
+          {readableId(p)}
         </span>
       ))}
     </div>

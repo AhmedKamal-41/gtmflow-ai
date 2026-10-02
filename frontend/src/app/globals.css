@@ -10,10 +10,6 @@
 
   body {
     @apply bg-slate-50 text-slate-900;
-    background-image:
-      radial-gradient(40rem 40rem at 110% -10%, rgb(37 99 235 / 0.05), transparent 60%),
-      radial-gradient(36rem 36rem at -10% 0%, rgb(99 102 241 / 0.04), transparent 55%);
-    background-attachment: fixed;
   }
 
   /* Visible, consistent focus ring for keyboard users. */

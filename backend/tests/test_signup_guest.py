@@ -222,7 +222,7 @@ def test_guests_are_read_only_when_a_real_integration_is_configured(app_client, 
     client.headers["X-CSRF-Token"] = info["csrf_token"]
     assert client.get("/api/metrics/dashboard").status_code == 200
     refused = client.post("/api/demo/run")
-    assert refused.status_code == 403 and "mock mode" in refused.json()["detail"]
+    assert refused.status_code == 403 and "read-only on this server" in refused.json()["detail"]
     assert client.post("/api/auth/logout").status_code == 204
 
 

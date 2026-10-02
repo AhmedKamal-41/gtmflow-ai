@@ -207,7 +207,7 @@ export default function SellerProfilePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader eyebrow="Setup" title="Seller profile" description="Describe what you sell, who it helps, and which claims you can support." />
+      <PageHeader title="Seller profile" back={{ href: "/settings", label: "Settings" }} description="Describe what you sell, who it helps, and which claims you can support. Drafts may only use what is written here." />
       <ActivationBanner status={status} error={statusError} onRetry={() => void loadStatus()} onDeactivate={deactivate} busy={activating !== null} />
       {activationMessage && <p role="status" className="text-sm text-emerald-700">{activationMessage}</p>}
       {activationError && <ErrorMessage>{activationError}</ErrorMessage>}

@@ -26,13 +26,6 @@ import type {
   SellerProfileStatus,
   UploadResponse,
   ReviewState,
-  AnnotationCandidateDetail,
-  AnnotationCandidateSummary,
-  AnnotationProvider,
-  AnnotationQueue,
-  AnnotationSubmit,
-  AnnotationSummary,
-  TrainingAnnotation,
 } from "@/types/api";
 
 export type PageParams = { limit?: number; offset?: number };
@@ -404,47 +397,12 @@ export function reviseOutput(
   });
 }
 
-export function getAnnotationProvider(): Promise<AnnotationProvider> {
-  return request<AnnotationProvider>("/api/annotation/provider");
-}
 
-export function getAnnotationQueues(): Promise<AnnotationQueue[]> {
-  return request<AnnotationQueue[]>("/api/annotation/queues");
-}
 
-export function getAnnotationSummary(queue: string): Promise<AnnotationSummary> {
-  return request<AnnotationSummary>(`/api/annotation/queues/${queue}/summary`);
-}
 
-export function getAnnotationCandidates(
-  queue: string,
-  params?: PageParams,
-): Promise<Page<AnnotationCandidateSummary>> {
-  return request<Page<AnnotationCandidateSummary>>(
-    `/api/annotation/queues/${queue}/candidates${buildQuery({ ...params })}`,
-  );
-}
 
-export function getAnnotationCandidate(id: string): Promise<AnnotationCandidateDetail> {
-  return request<AnnotationCandidateDetail>(`/api/annotation/candidates/${id}`);
-}
 
-export function generateAnnotationCandidate(
-  id: string,
-  provider: string,
-): Promise<AnnotationCandidateDetail> {
-  return request<AnnotationCandidateDetail>(`/api/annotation/candidates/${id}/generate`, {
-    method: "POST",
-    body: JSON.stringify({ provider }),
-  });
-}
 
-export function submitAnnotation(id: string, body: AnnotationSubmit): Promise<TrainingAnnotation> {
-  return request<TrainingAnnotation>(`/api/annotation/candidates/${id}/annotations`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
 
 export function getMetricsDashboard(): Promise<MetricsDashboard> {
   return request<MetricsDashboard>("/api/metrics/dashboard");
@@ -586,4 +544,63 @@ export async function continueAsGuest(): Promise<SessionInfo> {
   const info = await request<SessionInfo>("/api/auth/guest", { method: "POST", body: "{}" });
   setCsrfToken(info.csrf_token);
   return info;
+}
+
+// ---- The rep's workspace: lead inbox and drafting model --------------------
+
+export type LeadStage = "needs_score" | "needs_draft" | "to_review" | "outdated" | "rejected" | "approved" | "sent";
+
+export type InboxItem = {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  contact_title: string | null;
+  industry: string | null;
+  batch_id: string;
+  batch_name: string | null;
+  priority: "Hot" | "Warm" | "Cold" | null;
+  score: number | null;
+  stage: LeadStage;
+  delivery_unknown: boolean;
+  draft_model: string | null;
+  blocked: boolean;
+  updated_at: string;
+};
+
+export type InboxPage = {
+  items: InboxItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  counts: Record<LeadStage | "all" | "hot" | "delivery_unknown", number>;
+};
+
+export function getInbox(params: {
+  stage?: LeadStage;
+  priority?: "Hot" | "Warm" | "Cold";
+  q?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<InboxPage> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const suffix = query.toString();
+  return request<InboxPage>(`/api/inbox${suffix ? `?${suffix}` : ""}`);
+}
+
+export type AIStatus = {
+  mode: "mock" | "fine_tuned" | "openai" | "unavailable";
+  label: string;
+  detail: string;
+  fine_tuned_selected: boolean;
+  fine_tuned_connected: boolean;
+  fallback_enabled: boolean;
+  base_model: string;
+  adapter: string;
+};
+
+export function getAIStatus(): Promise<AIStatus> {
+  return request<AIStatus>("/api/ai/status");
 }

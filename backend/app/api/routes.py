@@ -14,6 +14,7 @@ from app.api.outreach_review import router as outreach_review_router
 from app.api.push import router as push_router
 from app.api.scoring import router as scoring_router
 from app.api.seller_profile import router as seller_profile_router
+from app.api.workspace import router as workspace_router
 
 router = APIRouter()
 router.include_router(health_router)
@@ -30,3 +31,4 @@ router.include_router(seller_profile_router)
 router.include_router(annotation_router)
 router.include_router(jobs_router)
 router.include_router(auth_router)
+router.include_router(workspace_router)

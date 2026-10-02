@@ -45,17 +45,21 @@ guest"; the page asks `GET /api/auth/options` which to show.
 
 ## Pages
 
+The app is built around a sales rep's day; a sidebar links the five sections.
+
 | Route | Purpose |
 |---|---|
-| `/login` | Operator/viewer sign-in |
-| `/` | Workflow overview |
-| `/upload` | Bounded CSV upload with validation feedback |
-| `/batches`, `/batches/[batchId]` | Leads, scoring and background job controls |
-| `/leads/[leadId]` | Grounded drafts, exact-draft review, flag acknowledgement, delivery history and outcome resolution |
+| `/login` | Sign in, create an account (emailed code), or continue as a guest |
+| `/` | **Today**: what needs attention, first-run setup, drafting-model status |
+| `/leads` | **Leads**: every lead ranked Hot first, with stage tabs, search and priority filter |
+| `/leads/[leadId]` | Lead workspace: grounded draft, exact-draft review, flag acknowledgement, sending and delivery history; technical details collapsed |
+| `/imports` | **Imports**: CSV upload (scored on import), sample data, past imports |
+| `/batches/[batchId]` | One import: its leads, background jobs and optional scoring details |
+| `/metrics` | **Insights**: cohort approval, delivery outcomes and mock-versus-real breakdown |
+| `/settings` | **Settings**: drafting model status, what you sell, account |
 | `/seller-profile` | Versioned seller profile and explicit activation |
-| `/annotation` | Training annotation workbench |
-| `/metrics` | Cohort approval, delivery outcomes and mock-versus-real breakdown |
-| `/demo` | Labeled synthetic demonstration |
+
+`/upload` and `/batches` redirect to `/imports`.
 
 Follow the [current demo walkthrough](../docs/demo-script.md), including seller
 activation before outreach generation. The worker must be running for jobs.

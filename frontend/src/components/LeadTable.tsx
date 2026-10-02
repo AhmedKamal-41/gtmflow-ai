@@ -24,6 +24,8 @@ type Props = {
   fitScores?: Record<string, LeadFitScore | undefined>;
   // Current readiness/eligibility (live state, independent of scoring).
   readiness?: Record<string, CurrentReadiness | undefined>;
+  // Company fit, routing and email-readiness columns (off for the rep view).
+  showDetails?: boolean;
 };
 
 const GAP_LABEL: Record<string, string> = {
@@ -33,6 +35,7 @@ const GAP_LABEL: Record<string, string> = {
   draft_not_reviewed: "draft not reviewed",
   draft_rejected: "draft rejected",
   lead_excluded_from_routing: "excluded",
+  seller_profile_is_demonstration: "demo seller profile",
 };
 
 export function LeadTable({
@@ -40,6 +43,7 @@ export function LeadTable({
   scores,
   fitScores = {},
   readiness = {},
+  showDetails = false,
 }: Props) {
   if (leads.length === 0) {
     return (
@@ -58,11 +62,15 @@ export function LeadTable({
               <th className="px-4 py-3">Company</th>
               <th className="px-4 py-3">Industry</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Legacy score (v1)</th>
-              <th className="px-4 py-3">Legacy priority (v1)</th>
-              <th className="px-4 py-3">Company fit (v2 demo)</th>
-              <th className="px-4 py-3">Routing (current)</th>
-              <th className="px-4 py-3">Email readiness (current)</th>
+              <th className="px-4 py-3 text-right">{showDetails ? "Legacy score (v1)" : "Score"}</th>
+              <th className="px-4 py-3">{showDetails ? "Legacy priority (v1)" : "Priority"}</th>
+              {showDetails && (
+                <>
+                  <th className="px-4 py-3">Company fit (v2 demo)</th>
+                  <th className="px-4 py-3">Routing (current)</th>
+                  <th className="px-4 py-3">Email readiness (current)</th>
+                </>
+              )}
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -104,6 +112,8 @@ export function LeadTable({
                       <span className="text-xs text-slate-400">Not scored</span>
                     )}
                   </td>
+                  {showDetails && (
+                    <>
                   <td className="px-4 py-3">
                     {fit ? (
                       <div className="space-y-0.5">
@@ -153,6 +163,8 @@ export function LeadTable({
                       <span className="text-slate-300">-</span>
                     )}
                   </td>
+                    </>
+                  )}
                   <td className="px-4 py-3 text-right">
                     <Link
                       href={`/leads/${lead.id}`}

@@ -121,7 +121,8 @@ def get_ai_client() -> AIClient:
     USE_MOCK_AI (default true) always wins. With USE_MOCK_AI=false,
     AI_PROVIDER chooses the real provider: "openai" (the default, unchanged
     behaviour) or "qwen3-4b-lora-v1" (Phase 10). Any other value fails
-    closed before a network call."""
+    closed before a network call. With LORA_FALLBACK_TO_MOCK=true, an
+    unreachable fine-tuned server selects the mock instead."""
     if settings.use_mock_ai:
         from app.ai.mock_client import MockAIClient
 
@@ -130,6 +131,16 @@ def get_ai_client() -> AIClient:
         return OpenAIClient(api_key=settings.openai_api_key)
     if settings.ai_provider == "qwen3-4b-lora-v1":
         from app.ai.lora_client import LocalLoRAClient
+
+        if settings.lora_fallback_to_mock:
+            from app.ai.status import fine_tuned_reachable
+
+            if not fine_tuned_reachable():
+                # Opt-in: the server is down, so draft with the mock generator.
+                # The output is recorded as mock (model_used/model_revision).
+                from app.ai.mock_client import MockAIClient
+
+                return MockAIClient()
 
         return LocalLoRAClient(
             base_url=settings.lora_inference_base_url,

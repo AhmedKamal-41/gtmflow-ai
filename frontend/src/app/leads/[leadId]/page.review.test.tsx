@@ -116,7 +116,8 @@ describe("review workspace", () => {
     const status = await screen.findByLabelText("Review status");
     expect(status).toHaveTextContent("Pending review");
     expect(status).toHaveTextContent("has not been approved or rejected yet");
-    expect(status).toHaveTextContent("local-demo-unauthenticated");
+    // The honest-identity note now lives in the "Technical details" review record.
+    expect(screen.getByText(/Each review records the signed-in account/)).toHaveTextContent("local-demo-unauthenticated");
     expect(screen.getByLabelText("Source freshness")).toHaveTextContent("reported acquisition 2025-07-28");
     expect(screen.getByRole("button", { name: "Push to Slack" })).toBeDisabled();
   });

@@ -1,71 +1,59 @@
 # Demo script
 
-Nine steps, about 6 minutes. Everything runs in **mock mode**: deterministic mock AI and a mock Slack webhook, no keys, and no message leaves the app. Setup commands are in the README ("Setup (local, mock mode)").
+Eight steps, about 6 minutes, following a sales rep's day. The default setup drafts with the **fine-tuned model when its server is connected** and falls back to a labeled demo generator otherwise. Slack is mocked, so no message leaves the app. Setup commands are in the README ("Local setup").
 
 Audience: a recruiter or hiring manager with 5–7 minutes.
 
-## 1. Sign in
+## 1. Get in
 
-Open http://localhost:3000. You are sent to **/login**. Sign in with the account you created with `python -m app.auth_cli create-user`.
+Open http://localhost:3000. On the sign-in page, press **Continue as guest** (or sign in, or create an account confirmed with an emailed 6-digit code).
 
-> **What to say:** "Every data route requires a signed-in user; actions require an operator, enforced on the backend, not just hidden in the UI. Accounts come from an admin CLI; there's no public sign-up, because this is a single-team tool. Each approval and delivery records who did it."
+> **What to say:** "Every route needs a session, enforced on the backend. Visitors can use a guest account that is safe by construction: guests can only change data while the server can't send real messages or call a paid AI API. Sign-up is verified by email, and every action is audited with who did it."
 
-## 2. Run the demo batch
+## 2. Today
 
-Open **/demo** and click **Run the full demo**. It loads a synthetic 10-lead list, scores it (2 Hot, 4 Warm, 4 Cold), drafts and approves outreach for the two Hot leads, and delivers them to the mock Slack webhook.
+The **Today** page shows what needs attention and which model is drafting. On an empty workspace it offers **Import leads** or **Try with sample data**; press **Try with sample data**. It imports 10 companies through the normal upload and scores them (2 Hot, 4 Warm, 4 Cold). Nothing is drafted, approved or sent automatically.
 
-> **What to say:** "The demo is labeled as synthetic, and its auto-approval is labeled 'demo-auto-approve'. For real leads, a person approves every draft."
+> **What to say:** "The sample goes through exactly the same path as a real CSV."
 
-## 3. Activate a seller profile, upload a list, and use background jobs
+## 3. Tell GTMFlow what you sell
 
-Outreach needs an explicitly activated seller profile. On **/seller-profile**:
+Today shows **One step before drafting**. Open **Set up seller profile**, click **Load GTMFlow demonstration template**, **Save draft**, open the saved version, tick both confirmations and activate it.
 
-1. Click **Load GTMFlow demonstration template**, then **Save draft**.
-2. Under the saved version, tick both confirmations ("I reviewed version 1…" and "…is a demonstration profile, not a real offer").
-3. Activate it.
+> **What to say:** "Drafts may only describe the product the way this profile does. Activation is an explicit, reviewed step, and a demonstration profile can never make an email 'ready'."
 
-Then upload `sample_data/leads_sample.csv` on **/upload** and open the batch. In **Background jobs**, run **Legacy-score all leads** (to produce the Hot/Warm/Cold bands), **Fit-score all leads**, and **Generate outreach drafts**. The worker you started (`python -m app.jobs.worker`) picks them up; the panel shows progress and counts.
+## 4. Leads
 
-> **What to say:** "Long batch work runs in a worker, not in the web request. Jobs survive a worker crash: another worker resumes unfinished items. Completed database effects are not repeated; uncertain external deliveries need an operator decision."
+Open **Leads**: every lead ranked Hot first, with stage tabs (To review, Ready to send, Needs a draft, …), search and a priority filter. Open **Cascade Modular Homes**.
 
-## 4. Open a Hot lead
+> **What to say:** "The stage comes from the same rules that review and delivery enforce, so the list never promises something the lead page will refuse."
 
-Click **Cascade Modular Homes**. You see the legacy score breakdown, the company-fit score with its evidence coverage, and the current outreach draft.
+## 5. Generate and read the draft
 
-> **What to say:** "Two scores, kept apart: the original 100-point heuristic and a versioned company-fit score that reports how much evidence it had."
+Press **Generate outreach**. The draft says which model wrote it, lists the facts it is based on and what is not known (intent, budget, current tools), and keeps its provenance under **Model details**.
 
-## 5. Read the grounded draft
-
-The draft cites the record facts it used (fact ids), states what is unknown (intent, budget, current tools), and shows its provenance: prompt, model and seller profile.
-
-> **What to say:** "The model may only use facts in the record and claims in the activated seller profile. The server rejects output that cites anything else, so an invalid draft is never saved. The same checks apply to every model: the mock, OpenAI, or the fine-tuned Qwen model."
+> **What to say:** "The model may only use facts in the record and claims in the seller profile. The server rejects output that cites anything else, so an invalid draft is never saved. The same checks apply to every model: the demo generator, OpenAI, or the fine-tuned Qwen model."
 
 ## 6. Review the exact draft
 
-Click **Approve outreach**. If the draft had runtime quality flags (for example "Exploring Opportunities…" framing), a checkbox would require you to acknowledge them first. You can also reject with a reason, or edit (an edit becomes a new revision that needs its own review).
+Press **Approve outreach**. If the draft had runtime quality flags, a checkbox would require acknowledging them first. You can also **Edit draft** (a new revision that needs its own review) or reject with a reason.
 
-> **What to say:** "An approval names the exact content hash I looked at. If anything changes afterwards (the draft, the company facts, the seller profile) the approval stops authorizing delivery."
+> **What to say:** "An approval names the exact content I looked at. If the draft, the company facts or the seller profile change, the approval stops authorizing delivery."
 
-## 7. Push to Slack, twice
+## 7. Send to Slack, twice
 
-Click **Push to Slack**: the push history shows `mock_success · mock webhook · attempt 1`. Click it again: nothing new is sent. The response is a replay of the same delivery.
+Press **Push to Slack**: the history shows `mock success · attempt 1`. Press it again: nothing new is sent; the response replays the same delivery. Back on **Today**, the lead now counts as **Sent**.
 
-> **What to say:** "Delivery claims a database row before sending, so two tabs, two workers or a restarted job can't send the same approved draft twice. If Slack times out, the outcome is recorded as unknown and never resent automatically. An operator checks the channel and records what happened."
+> **What to say:** "Delivery claims a database row before sending, so two tabs, two workers or a restarted job can't send twice. A timeout is recorded as unknown and never resent automatically; an operator confirms what happened."
 
-## 8. Metrics
+## 8. Insights and the model
 
-Open **/metrics**. A banner says the data is mock-only. The approval rate counts each draft once, by its latest review, so it can't exceed 100%. The "Mock versus real" card splits generation and delivery.
+Open **Insights**: a banner says the data is mock-only, approval counts each draft once, and mock and real activity are split. Then open **Settings → Drafting model**: the fine-tuned model, its adapter, and whether its server is connected.
 
-> **What to say:** "Real messages delivered: zero. The dashboard says so instead of counting mock deliveries as real ones. Time saved is an explicit estimate: five minutes per lead."
+> **What to say:** "I fine-tuned Qwen3-4B with LoRA on 419 AI-reviewed examples for about 60 cents of GPU time. On held-out data, a blind AI review rated 69% of its drafts acceptable as-is, against 1% for the base model; outreach was the weak spot, and the runtime checks come from that analysis. It is AI-evaluated, not human-verified. I ran the app's own client against the real model on a temporary GPU that deleted itself; when no model server is connected, the app says so and uses the demo generator."
 
-## 9. The model work (talk track, no live GPU)
+> **Closing line:** "Import → prioritize → grounded draft by a fine-tuned model → human approval → safe delivery → honest metrics, with every step audited."
 
-Show `docs/engineering-log/phase9-evaluation-handoff.md` and `phase10-integration-handoff.md`.
+## Evidence
 
-> **What to say:** "I fine-tuned Qwen3-4B with LoRA on 419 AI-reviewed examples for about 60 cents of GPU time. On held-out data, a blind AI review rated 69% of its drafts acceptable as-is, against 1% for the base model. Summaries were fine; outreach was the weak spot, and I traced its two main faults to phrasing kept in the training data. All of that is AI-evaluated, not human-verified. Then I ran the app's own client against the real model once, on a temporary GPU pod that deleted itself, and all acceptance checks passed. There's no always-on model server; the app runs on the mock by default."
-
-> **Closing line:** "The loop is ingest → score → grounded draft → human approval → safe delivery → honest metrics, with every step audited and every claim tied to evidence in the repo."
-
-## Reproducible portfolio evidence
-
-The [Phase 12 release run](https://github.com/AhmedKamal-41/gtmflow-ai/actions/runs/36293369509) verifies 521 backend tests on isolated PostgreSQL, 107 frontend tests, typecheck/build and 84 live mock checks. It makes no real sends and uses no production database. Show this alongside the dated Phase 9/10 handoffs; historical screenshots alone do not demonstrate the current sign-in or routing behavior.
+Tests, the release harness and the dated handoffs are listed in the README ("Testing strategy") and the [engineering log](engineering-log/README.md).

@@ -41,7 +41,7 @@ API and worker (store these as host secrets; never commit them):
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | The managed database URL (`postgres://` URLs are rewritten to the psycopg driver automatically) |
-| `USE_MOCK_AI` | `true` |
+| `USE_MOCK_AI`, `AI_PROVIDER`, `LORA_FALLBACK_TO_MOCK` | `false`, `qwen3-4b-lora-v1`, `true`: the app prefers the fine-tuned model and uses the labeled demo generator until a model server is connected (plan B). Or `USE_MOCK_AI=true` for the demo generator only |
 | `OPENAI_API_KEY`, `SLACK_WEBHOOK_URL`, `LORA_INFERENCE_BASE_URL`, `LORA_INFERENCE_API_KEY` | Empty |
 | `SESSION_COOKIE_SECURE` | `true` |
 | `ALLOWED_ORIGINS` | The exact public HTTPS URL of the frontend, e.g. `https://gtmflow-web.onrender.com` |
@@ -62,7 +62,7 @@ Frontend (read **at build time**):
 1. Create the database and run migrations once, as a one-off command: `alembic upgrade head`. Never run `alembic stamp head`.
 2. Deploy the API, the worker and the frontend.
 3. Accounts: for a public showcase, set `GUEST_ACCESS_ENABLED=true` (visitors press **Continue as guest**) and optionally `SELF_SIGNUP_ENABLED=true` with SMTP settings, so visitors can create accounts confirmed by an emailed code. Without `SMTP_HOST` no email is sent and sign-up cannot be completed by visitors. Your own operator account comes from a one-off shell: `python -m app.auth_cli create-user <name>` prompts for the password without echoing it.
-4. Smoke test: sign in, run `/demo`, queue a job on a batch, and check `/metrics`.
+4. Smoke test: continue as a guest, **Try with sample data** on Today, generate and approve one draft, push it, and check **Insights**.
 5. Re-run the release harness against a fresh staging database (`backend/scripts/verify_release.py`). It refuses any database that isn't empty.
 
 ### Open items before going public
@@ -75,7 +75,7 @@ Frontend (read **at build time**):
 
 ## B. Hosting the fine-tuned model
 
-The app talks to the adapter through an OpenAI-compatible server (`training/gtmflow_training/serve.py`, verified once in Phase 10). Set `USE_MOCK_AI=false`, `AI_PROVIDER=qwen3-4b-lora-v1`, `LORA_INFERENCE_BASE_URL` and `LORA_INFERENCE_API_KEY` on the API and worker.
+The app talks to the adapter through an OpenAI-compatible server (`training/gtmflow_training/serve.py`, verified once in Phase 10). Set `USE_MOCK_AI=false`, `AI_PROVIDER=qwen3-4b-lora-v1`, `LORA_INFERENCE_BASE_URL` and `LORA_INFERENCE_API_KEY` on the API and worker. With `LORA_FALLBACK_TO_MOCK=true` the app keeps working (with the demo generator, clearly labeled) whenever the GPU server is stopped, so an on-demand server is practical.
 
 | Option | Estimated cost | Trade-off |
 |---|---|---|
