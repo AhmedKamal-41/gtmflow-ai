@@ -1,6 +1,6 @@
 from app.models.ai_output import AIOutput
 from app.models.ai_output_review import AIOutputReview
-from app.models.auth import LoginThrottle, User, UserSession
+from app.models.auth import EmailVerification, LoginThrottle, User, UserSession
 from app.models.background_job import BackgroundJob, BackgroundJobItem
 from app.models.annotation import (
     AnnotationCandidate,
@@ -33,6 +33,7 @@ __all__ = [
     "LeadBatch",
     "LeadFitScore",
     "LeadScore",
+    "EmailVerification",
     "LoginThrottle",
     "SourceSnapshot",
     "SellerProfile",

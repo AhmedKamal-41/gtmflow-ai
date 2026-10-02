@@ -20,3 +20,7 @@ Start with [`phase-status.md`](phase-status.md) for the one-table summary, and [
 | 12 | Access control, dependency audit, release verification | [`phase12-release-handoff.md`](phase12-release-handoff.md) |
 
 Cross-cutting design decisions, with the reasoning behind them, are in [`decisions.md`](decisions.md).
+
+## After Phase 12
+
+- **Self-service sign-up and guest access (2026-10-02).** Migration `0014_signup_and_guest`: sign-up confirmed by an emailed 6-digit code (hashed, 10-minute expiry, 5 attempts, 60-second resend cooldown), and per-visitor guest accounts that can change data only on a mock-only server. Both are off by default. Tests: `backend/tests/test_signup_guest.py`, `frontend/src/app/login/page.test.tsx`, and live checks in `backend/scripts/verify_release.py`.

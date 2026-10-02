@@ -1,10 +1,15 @@
-"""Small ASGI boundary: private responses and bounded JSON sign-in bodies.
+"""Small ASGI boundary: private responses and bounded JSON bodies for sign-in,
+sign-up, verification and guest access.
 
 Avoid BaseHTTPMiddleware so cancellation and request-scoped actor context
 retain Starlette's normal behavior (including the upload crash tests).
 """
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.responses import JSONResponse
+
+# Public POST endpoints that create sessions or accounts (app/api/auth.py).
+ACCOUNT_POST_PATHS = frozenset({"/api/auth/login", "/api/auth/register", "/api/auth/verify-email",
+                                "/api/auth/resend-code", "/api/auth/guest"})
 
 
 class HTTPProtection:
@@ -24,7 +29,7 @@ class HTTPProtection:
                 headers["Referrer-Policy"] = "same-origin"
             await send(message)
 
-        if scope["path"] == "/api/auth/login" and scope["method"] == "POST":
+        if scope["path"] in ACCOUNT_POST_PATHS and scope["method"] == "POST":
             headers = Headers(scope=scope)
             if headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
                 return await JSONResponse({"detail": "Sign-in requires application/json."}, status_code=415)(scope, receive, private_send)

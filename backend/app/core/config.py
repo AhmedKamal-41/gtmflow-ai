@@ -54,6 +54,26 @@ class Settings:
     session_idle_minutes: int = 60
     session_absolute_hours: int = 12
     password_hash_n: int = 2**15  # scrypt cost for NEW hashes; stored per hash
+    # Self-service sign-up with an emailed verification code, and one-click
+    # guest access. Both are off unless explicitly enabled.
+    self_signup_enabled: bool = False
+    self_signup_role: str = "operator"
+    signup_allowed_email_domains: tuple[str, ...] = ()
+    guest_access_enabled: bool = False
+    guest_session_hours: int = 2
+    # Verification email. With no SMTP host, a mock sender prints the code to
+    # the API log (local development only; nothing is sent).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    email_from: str = ""
+
+    @property
+    def mock_only(self) -> bool:
+        """True when no action can reach a real AI provider or Slack."""
+        return self.use_mock_ai and not self.slack_webhook_url
 
 
 def get_settings() -> Settings:
@@ -72,6 +92,19 @@ def get_settings() -> Settings:
         session_idle_minutes=int(os.getenv("SESSION_IDLE_MINUTES") or 60),
         session_absolute_hours=int(os.getenv("SESSION_ABSOLUTE_HOURS") or 12),
         password_hash_n=int(os.getenv("PASSWORD_HASH_N") or 2**15),
+        self_signup_enabled=_as_bool(os.getenv("SELF_SIGNUP_ENABLED"), default=False),
+        self_signup_role=(os.getenv("SELF_SIGNUP_ROLE") or "operator").strip().lower(),
+        signup_allowed_email_domains=tuple(
+            d.strip().lower().lstrip("@") for d in (os.getenv("SIGNUP_ALLOWED_EMAIL_DOMAINS") or "").split(",") if d.strip()
+        ),
+        guest_access_enabled=_as_bool(os.getenv("GUEST_ACCESS_ENABLED"), default=False),
+        guest_session_hours=int(os.getenv("GUEST_SESSION_HOURS") or 2),
+        smtp_host=os.getenv("SMTP_HOST", "").strip(),
+        smtp_port=int(os.getenv("SMTP_PORT") or 587),
+        smtp_username=os.getenv("SMTP_USERNAME", ""),
+        smtp_password=os.getenv("SMTP_PASSWORD", ""),
+        smtp_starttls=_as_bool(os.getenv("SMTP_STARTTLS"), default=True),
+        email_from=os.getenv("EMAIL_FROM", "").strip(),
     )
 
 

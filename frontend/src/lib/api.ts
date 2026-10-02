@@ -515,7 +515,7 @@ export function getFitProfile(): Promise<FitProfile> {
 
 export type SessionInfo = {
   username: string;
-  role: "operator" | "viewer";
+  role: "operator" | "viewer" | "guest";
   expires_at: string;
   csrf_token: string;
 };
@@ -544,4 +544,46 @@ export async function logout(): Promise<void> {
     if (!(error instanceof APIError && error.status === 401)) throw error;
   }
   setCsrfToken(null);
+}
+
+// ---- Sign-up with an emailed code, and guest access -----------------------
+
+export type AuthOptions = {
+  self_signup: boolean;
+  guest_access: boolean;
+  email_delivery: "mock" | "smtp";
+  guest_can_edit: boolean;
+};
+
+export function getAuthOptions(): Promise<AuthOptions> {
+  return request<AuthOptions>("/api/auth/options");
+}
+
+export function register(email: string, password: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function resendCode(email: string): Promise<{ message: string }> {
+  return request<{ message: string }>("/api/auth/resend-code", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function verifyEmail(email: string, code: string): Promise<SessionInfo> {
+  const info = await request<SessionInfo>("/api/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+  setCsrfToken(info.csrf_token);
+  return info;
+}
+
+export async function continueAsGuest(): Promise<SessionInfo> {
+  const info = await request<SessionInfo>("/api/auth/guest", { method: "POST", body: "{}" });
+  setCsrfToken(info.csrf_token);
+  return info;
 }

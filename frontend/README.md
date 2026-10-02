@@ -39,7 +39,9 @@ independently enforces authentication, roles and every approval gate.
 Sign-out clears the UI only after revocation is confirmed (or the server says
 the session expired). A failed request keeps the session visible and shows a
 retry message. Delayed responses cannot restore stale state. Viewers can read
-but receive 403 on actions; there is no public registration.
+but receive 403 on actions. When the server enables them, `/login` also offers
+"Create an account" (confirmed with an emailed 6-digit code) and "Continue as
+guest"; the page asks `GET /api/auth/options` which to show.
 
 ## Pages
 

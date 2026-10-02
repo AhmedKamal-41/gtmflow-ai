@@ -45,6 +45,9 @@ API and worker (store these as host secrets; never commit them):
 | `OPENAI_API_KEY`, `SLACK_WEBHOOK_URL`, `LORA_INFERENCE_BASE_URL`, `LORA_INFERENCE_API_KEY` | Empty |
 | `SESSION_COOKIE_SECURE` | `true` |
 | `ALLOWED_ORIGINS` | The exact public HTTPS URL of the frontend, e.g. `https://gtmflow-web.onrender.com` |
+| `GUEST_ACCESS_ENABLED` | `true` for a public showcase. Guests can change data only while the server is mock-only |
+| `SELF_SIGNUP_ENABLED` | `true` to let visitors create accounts (needs the SMTP settings below) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM` | Any SMTP provider (many have free tiers for low volume). Store the password as a secret |
 
 Frontend (read **at build time**):
 
@@ -58,7 +61,7 @@ Frontend (read **at build time**):
 
 1. Create the database and run migrations once, as a one-off command: `alembic upgrade head`. Never run `alembic stamp head`.
 2. Deploy the API, the worker and the frontend.
-3. Create accounts from a one-off shell. There is no public registration: `python -m app.auth_cli create-user <name>` prompts for the password without echoing it. Add `--role viewer` for read-only access.
+3. Accounts: for a public showcase, set `GUEST_ACCESS_ENABLED=true` (visitors press **Continue as guest**) and optionally `SELF_SIGNUP_ENABLED=true` with SMTP settings, so visitors can create accounts confirmed by an emailed code. Without `SMTP_HOST` no email is sent and sign-up cannot be completed by visitors. Your own operator account comes from a one-off shell: `python -m app.auth_cli create-user <name>` prompts for the password without echoing it.
 4. Smoke test: sign in, run `/demo`, queue a job on a batch, and check `/metrics`.
 5. Re-run the release harness against a fresh staging database (`backend/scripts/verify_release.py`). It refuses any database that isn't empty.
 
