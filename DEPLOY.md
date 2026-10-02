@@ -1,5 +1,14 @@
 # Deploying GTMFlow AI to Railway
 
+> **Outdated: do not follow this guide as-is.** It predates Phases 10–12 and would deploy an incomplete app. It is missing:
+> - **the background worker** (`python -m app.jobs.worker`): jobs would queue forever;
+> - **operator accounts** (`python -m app.auth_cli create-user …`): nobody could sign in;
+> - **session and origin configuration:** `ALLOWED_ORIGINS` must be the exact HTTPS frontend URL, `SESSION_COOKIE_SECURE=true`, and the frontend should proxy `/api` (`API_PROXY_TARGET`, empty `NEXT_PUBLIC_API_BASE_URL`) so the session cookie stays same-origin;
+> - **the hash-locked Python 3.12 install** (`pip install --require-hashes -r requirements-lock.txt`);
+> - **migration `0013`** and the trusted-proxy rules in `docs/upgrade/phase12-release-handoff.md` §6.
+>
+> No deployment has been verified on any host. Use the Phase 12 handoff as the source of truth until this guide is rewritten for the chosen platform.
+
 This deploys three services into one Railway project:
 
 1. **Postgres**, managed database
