@@ -58,9 +58,19 @@ Migrations are never run automatically by the app process (see `app/main.py`, wh
 
 ## Operator accounts (Phase 12)
 
-Every route except `/health`, `/api/health` and `POST /api/auth/login` needs
-a signed-in operator or viewer. State changes require an operator (except a viewer logging out). `/docs`, `/redoc` and `/openapi.json` are protected too. There is no registration endpoint; accounts are made
-with the CLI (the password is prompted twice and never echoed; for scripted
+Every route except the health checks, `GET /api/auth/options` and the public
+account endpoints (`login`, `register`, `verify-email`, `resend-code`, `guest`)
+needs a session. State changes require an operator, or a guest while the server
+is mock-only (a viewer may still log out). `/docs`, `/redoc` and `/openapi.json`
+are protected too.
+
+Self-service sign-up (`SELF_SIGNUP_ENABLED=true`) emails a 6-digit code that
+must be entered before the account can sign in; without `SMTP_HOST` the code is
+printed in the API log and nothing is sent. Guest access
+(`GUEST_ACCESS_ENABLED=true`) gives each visitor a fresh, password-less account
+with a short session. Both are off by default; see `.env.example`.
+
+Operator accounts are made with the CLI (the password is prompted twice and never echoed; for scripted
 setup it can come from `GTMFLOW_NEW_PASSWORD`):
 
 ```bash

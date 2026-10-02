@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -52,7 +53,8 @@ def main() -> None:
                "LORA_INFERENCE_API_KEY": "", "SESSION_COOKIE_SECURE": "false", "PASSWORD_HASH_N": "32768",
                "ALLOWED_ORIGINS": "http://127.0.0.1:13000", "PYTHONUNBUFFERED": "1",
                "NEXT_TELEMETRY_DISABLED": "1", "API_PROXY_TARGET": "http://127.0.0.1:18000",
-               "NEXT_PUBLIC_API_BASE_URL": ""}
+               "NEXT_PUBLIC_API_BASE_URL": "", "SELF_SIGNUP_ENABLED": "true", "GUEST_ACCESS_ENABLED": "true",
+               "SMTP_HOST": ""}
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
             env.pop(key, None)
         os.environ.update({key: env[key] for key in ("DATABASE_URL", "USE_MOCK_AI", "OPENAI_API_KEY", "SLACK_WEBHOOK_URL")})
@@ -164,6 +166,32 @@ def main() -> None:
                     return response.json() if code != 204 else None
 
                 request("GET", "/api/health")
+                options = request("GET", "/api/auth/options")
+                check(options["self_signup"] and options["guest_access"] and options["email_delivery"] == "mock",
+                      "sign-up and guest access offered, email mocked")
+                with httpx.Client(base_url=base, timeout=30, trust_env=False) as visitor:
+                    def visit(method, path, code=200, **kwargs):
+                        response = visitor.request(method, path, **kwargs)
+                        check(response.status_code == code, f"visitor {method} {path} returns {code}")
+                        return response.json() if code != 204 else None
+
+                    address = "release.visitor@example.com"
+                    visit("POST", "/api/auth/register", 202, json={"email": address, "password": password})
+                    visit("POST", "/api/auth/login", 401, json={"username": address, "password": password})
+                    # Mock email: the code exists only in the API's own log.
+                    api_log = Path(processes[0][1].name).read_text()
+                    codes = re.findall(rf"verification code for {re.escape(address)}: (\d{{6}})", api_log)
+                    check(len(codes) == 1, "one mock verification code issued")
+                    member = visit("POST", "/api/auth/verify-email", json={"email": address, "code": codes[0]})
+                    check(member["role"] == "operator", "verified sign-up is signed in")
+                    visit("POST", "/api/auth/verify-email", 400, json={"email": address, "code": codes[0]})
+                    visit("POST", "/api/auth/logout", 204, headers={"X-CSRF-Token": member["csrf_token"]})
+                    visit("POST", "/api/auth/login", json={"username": address, "password": password})
+                with httpx.Client(base_url=base, timeout=30, trust_env=False) as guest:
+                    response = guest.post("/api/auth/guest", json={})
+                    check(response.status_code == 200 and response.json()["role"] == "guest", "guest session through the proxy")
+                    guest.headers["X-CSRF-Token"] = response.json()["csrf_token"]
+                    check(guest.get("/api/metrics/dashboard").status_code == 200, "guest can use the app (mock-only server)")
                 request("GET", "/api/leads", 401)
                 request("POST", "/api/demo/run", 401)
                 request("POST", "/api/auth/login", 401, json={"username": "release-operator", "password": "incorrect"})

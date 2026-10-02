@@ -61,10 +61,16 @@ export function AppHeader() {
         </nav>
         {session && (
           <div className="flex items-center gap-2 text-xs text-slate-500" aria-label="Signed in">
-            <span>
-              {session.username}
-              {session.role === "viewer" ? " (read-only)" : ""}
-            </span>
+            {session.role === "guest" ? (
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200">
+                Guest
+              </span>
+            ) : (
+              <span>
+                {session.username}
+                {session.role === "viewer" ? " (read-only)" : ""}
+              </span>
+            )}
             <button
               type="button"
               className="rounded-md px-2 py-1 font-medium text-slate-600 hover:bg-slate-100"

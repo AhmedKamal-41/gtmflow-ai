@@ -1,7 +1,8 @@
 """Phase 12: operator accounts and login sessions (single workspace).
 
-Accounts are created only with the operator CLI (`python -m app.auth_cli`);
-there is no registration endpoint. Passwords are stored as scrypt hashes with
+Accounts are created with the operator CLI (`python -m app.auth_cli`), by
+self-service sign-up with an emailed verification code, or as one-click guest
+accounts; sign-up and guests are off unless enabled in settings. Passwords are stored as scrypt hashes with
 a per-user salt and their cost parameters. A session stores only the SHA-256
 of its random token (the cookie value), so a database read does not yield a
 usable session.
@@ -19,7 +20,11 @@ from app.core.database import Base
 
 ROLE_OPERATOR = "operator"  # every read and action
 ROLE_VIEWER = "viewer"      # read-only
-ROLES = (ROLE_OPERATOR, ROLE_VIEWER)
+ROLE_GUEST = "guest"        # operator actions only while the server is mock-only
+ROLES = (ROLE_OPERATOR, ROLE_VIEWER)  # roles the CLI and sign-up may grant
+
+CREATED_VIA_SIGNUP = "signup"
+CREATED_VIA_GUEST = "guest"
 
 
 def _now() -> datetime:
@@ -30,7 +35,8 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    username: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    # CLI usernames are short identifiers; sign-up accounts use their email.
+    username: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default=ROLE_OPERATOR)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -39,6 +45,9 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     password_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+    # NULL for CLI accounts (created before or without sign-up).
+    created_via: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     sessions: Mapped[list["UserSession"]] = relationship("UserSession", back_populates="user")
 
@@ -70,3 +79,18 @@ class LoginThrottle(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class EmailVerification(Base):
+    """The one outstanding sign-up code for an account.
+
+    Only a hash of the 6-digit code is stored. A code expires, allows a
+    bounded number of wrong guesses, and can be re-sent only after a cooldown.
+    """
+    __tablename__ = "email_verifications"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)

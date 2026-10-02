@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.actor import Actor, reset_actor, set_actor
-from app.models.auth import ROLES, LoginThrottle, User, UserSession
+from app.models.auth import CREATED_VIA_SIGNUP, ROLES, LoginThrottle, User, UserSession
 from app.models.workflow_event import WorkflowEvent
 
 MIN_PASSWORD_LENGTH = 12
@@ -161,19 +161,22 @@ class LoginThrottled(Exception):
     pass
 
 
-def _limit_peer(session: Session, client_ip: str | None) -> None:
+def _limit_peer(session: Session, client_ip: str | None, scope: str = "login") -> None:
     """Count attempts atomically before hashing, across API processes.
 
     The peer comes from the ASGI connection, never a header read here.
     Only explicitly trusted reverse proxies may set forwarded addresses.
-    PostgreSQL and SQLite are the app's supported databases.
+    PostgreSQL and SQLite are the app's supported databases. Sign-up,
+    verification and guest access each count in their own bucket.
     """
     now = _now()
     cutoff = now - timedelta(seconds=LOGIN_WINDOW_SECONDS)
     session.execute(delete(LoginThrottle).where(LoginThrottle.window_started_at < cutoff))
     insert = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
     table = LoginThrottle.__table__
-    statement = insert(table).values(key=token_hash(client_ip or "unknown"), window_started_at=now, attempts=1)
+    peer = client_ip or "unknown"
+    key = token_hash(peer if scope == "login" else f"{scope}:{peer}")
+    statement = insert(table).values(key=key, window_started_at=now, attempts=1)
     expired = table.c.window_started_at < cutoff
     statement = statement.on_conflict_do_update(
         index_elements=[table.c.key],
@@ -206,8 +209,10 @@ def login(session: Session, username: str, password: str, *, client_ip: str | No
     now = _now()
     locked = _aware(user.locked_until) is not None and _aware(user.locked_until) > now
     ok = verify_password(password, user.password_hash)  # computed even when locked: same timing
-    if locked or not user.is_active or not ok:
-        if not locked and user.is_active:
+    # A sign-up account cannot sign in until its email is verified.
+    unverified = user.created_via == CREATED_VIA_SIGNUP and user.email_verified_at is None
+    if locked or not user.is_active or not ok or unverified:
+        if not locked and user.is_active and not unverified:
             user.failed_login_count += 1
             if user.failed_login_count >= MAX_FAILED_LOGINS:
                 user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
@@ -220,14 +225,27 @@ def login(session: Session, username: str, password: str, *, client_ip: str | No
     parts = user.password_hash.split("$")
     if int(parts[1]) < settings.password_hash_n or (int(parts[1]) == settings.password_hash_n and int(parts[3]) < PASSWORD_HASH_P):
         user.password_hash = hash_password(password)
+    user.failed_login_count, user.locked_until, user.last_login_at = 0, None, now
+    token, row = start_session(session, user, client_ip=client_ip, user_agent=user_agent,
+                               previous_token=previous_token, now=now)
+    return user, token, row
+
+
+def start_session(session: Session, user: User, *, client_ip: str | None, user_agent: str | None,
+                  previous_token: str | None = None, hours: int | None = None,
+                  now: datetime | None = None) -> tuple[str, UserSession]:
+    """Create a new session for an already-authenticated user and commit.
+
+    A previous session in the same browser is revoked (no fixation). Only
+    the token's hash is stored; the token itself goes into the cookie."""
+    now = now or _now()
     if previous_token:
         session.execute(update(UserSession).where(UserSession.token_hash == token_hash(previous_token),
                                                   UserSession.revoked_at.is_(None))
                         .values(revoked_at=now).execution_options(synchronize_session=False))
-    user.failed_login_count, user.locked_until, user.last_login_at = 0, None, now
     token = secrets.token_urlsafe(32)
     row = UserSession(user_id=user.id, token_hash=token_hash(token), created_at=now, last_seen_at=now,
-                      expires_at=now + timedelta(hours=settings.session_absolute_hours),
+                      expires_at=now + timedelta(hours=hours or settings.session_absolute_hours),
                       client_ip=(client_ip or "")[:64] or None, user_agent=(user_agent or "")[:200] or None)
     session.add(row)
     actor_token = set_actor(Actor(label=f"user:{user.username}", user_id=str(user.id), role=user.role))
@@ -236,7 +254,7 @@ def login(session: Session, username: str, password: str, *, client_ip: str | No
         session.commit()
     finally:
         reset_actor(actor_token)
-    return user, token, row
+    return token, row
 
 
 @dataclass(frozen=True)
@@ -261,6 +279,7 @@ def resolve(session: Session, token: str | None) -> ResolvedSession | None:
     now = _now()
     user = row.user
     if (not user.is_active or _aware(row.expires_at) <= now
+            or (user.created_via == CREATED_VIA_SIGNUP and user.email_verified_at is None)
             or now - _aware(row.last_seen_at) > timedelta(minutes=settings.session_idle_minutes)
             or _aware(row.created_at) < _aware(user.password_changed_at)):
         return None

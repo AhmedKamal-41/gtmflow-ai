@@ -79,8 +79,9 @@ operator to resolve, never resent automatically.
 
 Long batch work (scoring, generation, routing) runs in a separate worker process, from a job queue
 stored in PostgreSQL, with progress, cancellation, bounded retries and crash recovery. Everything
-sits behind server-side sessions with CSRF protection and two roles, and every audit event records
-who did it, including work the worker does on a user's behalf.
+sits behind server-side sessions with CSRF protection and roles, and every audit event records who
+did it, including work the worker does on a user's behalf. Visitors can create an account (confirmed
+by an emailed code) or continue as a guest, when the server enables those options.
 
 ## Key features
 
@@ -104,6 +105,9 @@ who did it, including work the worker does on a user's behalf.
 - **Honest metrics:** approval counted once per draft by its latest review, delivery outcomes, mock
   versus real breakdowns, and time saved labeled as an estimate.
 - **One-click demo:** `/demo` seeds a sample batch and runs the whole workflow in mock mode.
+- **Three ways in:** sign in, create an account confirmed with an emailed 6-digit code, or press
+  **Continue as guest** to use the app immediately. Sign-up and guest access are server settings,
+  off by default.
 
 ## Engineering highlights
 
@@ -136,7 +140,7 @@ who did it, including work the worker does on a user's behalf.
   recorded", so a demo can never inflate a real number.
 
 - **Deny-by-default access control.** An app-wide FastAPI dependency protects every route; the only
-  public paths are the health checks and `POST /api/auth/login`. A test enumerates every operation
+  public paths are the health checks and the sign-in, sign-up and guest endpoints. A test enumerates every operation
   in the OpenAPI schema and asserts that anonymous requests are refused. A SQLAlchemy
   `before_insert` hook stamps the current actor on every `WorkflowEvent`, including events written
   by the worker process.
@@ -163,7 +167,7 @@ who did it, including work the worker does on a user's behalf.
 ```mermaid
 flowchart TB
     UI["Browser<br/>Next.js 15 pages"] -->|"session cookie<br/>+ X-CSRF-Token"| Proxy["Next.js server<br/>same-origin /api proxy"]
-    Proxy --> API["FastAPI<br/>auth · CSRF · roles<br/>57 operations"]
+    Proxy --> API["FastAPI<br/>auth · CSRF · roles<br/>62 operations"]
 
     API <-->|"data, audit events,<br/>job queue"| PG[("PostgreSQL 16")]
     PG <-->|"leased jobs,<br/>item results"| Worker["Job worker<br/>app.jobs.worker"]
@@ -348,14 +352,15 @@ Infrastructure and tooling:
 |---|---|---|
 | Database | PostgreSQL 16 (SQLite for quick tests) | All state, including the job queue |
 | CI | GitHub Actions | Backend, frontend, training and release-verification workflows |
-| Release check | `backend/scripts/verify_release.py` | 84 live checks against a fresh database |
+| Release check | `backend/scripts/verify_release.py` | 96 live checks against a fresh database |
 
 ## Security
 
 Only mechanisms present in the code are listed here.
 
-- **Deny by default.** Every route requires a session except `/health`, `/api/health` and
-  `POST /api/auth/login`. `/docs`, `/redoc` and `/openapi.json` also require a session.
+- **Deny by default.** Every route requires a session except the health checks, sign-in options,
+  and the sign-in, sign-up, verification and guest endpoints. `/docs`, `/redoc` and `/openapi.json`
+  also require a session.
 - **Server-side sessions.** A 256-bit random token per login, stored only as its SHA-256. The
   cookie (`gtmflow_session`) is `HttpOnly`, `SameSite=Lax` and `Secure` by default. Sessions have a
   60-minute idle timeout and a 12-hour absolute lifetime, are rotated at login, and are revoked on
@@ -363,14 +368,23 @@ Only mechanisms present in the code are listed here.
 - **CSRF protection.** Every state-changing request needs an `X-CSRF-Token` header derived from the
   session, which only a same-origin page can read from `GET /api/auth/session`.
 - **Passwords.** scrypt (N = 2^15, r = 8, p = 3) with a random salt and 12 to 256 characters.
-  Hashes are upgraded at login when the cost settings rise. Accounts are created from a CLI that
-  prompts without echo; there is no public registration.
+  Hashes are upgraded at login when the cost settings rise. Operator accounts can be created from
+  a CLI that prompts without echo.
+- **Sign-up with email verification.** A new account cannot sign in until the 6-digit code sent
+  to its address is entered. Only a hash of the code is stored; it expires after 10 minutes, allows
+  5 wrong guesses, and can be re-sent after 60 seconds. Responses are identical whether or not an
+  address already has an account, and sign-up can be limited to approved email domains.
+- **Guest access.** Each guest gets a fresh account with no password and a 2-hour session. Guests
+  can change data only while the server is mock-only (mock AI, no Slack webhook), so a guest can
+  never trigger a real message or a paid API call.
 - **Brute-force limits.** Five consecutive failures lock an account for 15 minutes. A
   database-backed limiter allows 30 attempts per client per 5 minutes across all API processes,
   and an unknown username takes as long as a wrong password.
-- **Login hardening.** JSON-only login, an allowed-Origin check, a 16 KiB body limit, and one
-  generic error message for every failure.
-- **Roles.** `operator` can change data; `viewer` is read-only.
+- **Public endpoint hardening.** Sign-in, sign-up, verification and guest requests are JSON-only,
+  Origin-checked, limited to 16 KiB and throttled per client (in separate buckets), with one
+  generic error message for every sign-in failure.
+- **Roles.** `operator` can change data; `viewer` is read-only; `guest` acts as an operator only
+  on a mock-only server.
 - **Audit.** Every `WorkflowEvent` records its actor, including events written by the worker.
 - **Secrets.** Configuration comes from the environment. `.env` files are git-ignored, and the
   Slack webhook URL is never logged or returned.
@@ -441,11 +455,11 @@ email "ready", only an internal Slack handoff.
 
 | Sign in | Upload |
 |---|---|
-| [![Sign-in form](docs/screenshots/login.png)](docs/screenshots/login.png) | [![CSV upload form](docs/screenshots/upload.png)](docs/screenshots/upload.png) |
+| [![Sign-in form with create-account and continue-as-guest options](docs/screenshots/login.png)](docs/screenshots/login.png) | [![CSV upload form](docs/screenshots/upload.png)](docs/screenshots/upload.png) |
 | **Batches** | **Guided demo** |
 | [![Batches list](docs/screenshots/batches.png)](docs/screenshots/batches.png) | [![One-click demo page](docs/screenshots/demo.png)](docs/screenshots/demo.png) |
-| **Seller profile** | |
-| [![Seller profile editor with an active demonstration profile](docs/screenshots/seller-profile.png)](docs/screenshots/seller-profile.png) | |
+| **Email verification** | **Seller profile** |
+| [![Check-your-email step with a 6-digit code field and a resend countdown](docs/screenshots/verify-email.png)](docs/screenshots/verify-email.png) | [![Seller profile editor with an active demonstration profile](docs/screenshots/seller-profile.png)](docs/screenshots/seller-profile.png) |
 
 ## Testing strategy
 
@@ -455,14 +469,15 @@ email "ready", only an internal Slack handoff.
 | PostgreSQL | same suite with `TEST_DATABASE_URL` | Real concurrency (simultaneous pushes, lease races), process-kill recovery, migration preservation |
 | Frontend | `frontend/src/**/*.test.ts(x)` | Lead, batch, metrics, seller-profile and annotation pages; the API client (CSRF, 401 handling); auth provider, jobs panel, push history |
 | Training | `training/tests/` | Weighted objective, split guards, adapter hash checks, launcher secret handling, serving limits |
-| Release harness | `backend/scripts/verify_release.py` | 84 live checks: production frontend, API and worker on a fresh database |
+| Release harness | `backend/scripts/verify_release.py` | 96 live checks: production frontend, API, worker, sign-up and guest access on a fresh database |
 
 Tests block outbound network calls. Key safety tests were mutation-checked: the safeguard was
 removed and the test had to fail.
 
-Latest verified results: **521 backend tests on PostgreSQL** (516 passed and 5 skipped on SQLite),
-**107 frontend tests**, **84 of 84 release checks**, and a clean typecheck and production build,
-both in [CI](https://github.com/AhmedKamal-41/gtmflow-ai/actions/runs/36293369509) and locally.
+Latest verified results (2026-10-02, local): **545 backend tests on PostgreSQL** (540 passed and 5
+skipped on SQLite), **112 frontend tests**, **96 of 96 release checks**, and a clean typecheck and
+production build. The same workflows run in [CI](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml)
+on every push.
 
 ```bash
 cd backend
@@ -478,12 +493,18 @@ Never point `TEST_DATABASE_URL` at a database whose contents matter.
 
 ## API reference
 
-57 operations. Every route except the health checks and login needs a session; state changes also
-need `X-CSRF-Token` and the `operator` role.
+62 operations. Every route except the health checks and the public account endpoints below needs a
+session; state changes also need `X-CSRF-Token` and the `operator` role (or `guest` on a mock-only
+server).
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/auth/login` | Sign in (JSON body); sets the session cookie |
+| `GET` | `/api/auth/options` | Which of sign-up and guest access this server offers (public) |
+| `POST` | `/api/auth/login` | Sign in with email or username (JSON body); sets the session cookie |
+| `POST` | `/api/auth/register` | Create an account and email a 6-digit code (public) |
+| `POST` | `/api/auth/verify-email` | Confirm the code and sign in (public) |
+| `POST` | `/api/auth/resend-code` | Send a new code after the cooldown (public) |
+| `POST` | `/api/auth/guest` | Start a guest session (public) |
 | `GET` | `/api/auth/session` | Current user, role and CSRF token |
 | `POST` | `/api/auth/logout` | Revoke the session |
 | `POST` | `/api/batches/upload` | Upload a CSV (multipart) |
@@ -531,8 +552,9 @@ python3.12 -m venv .venv
 export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:55432/gtmflow_demo
 export USE_MOCK_AI=true OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
 export SESSION_COOKIE_SECURE=false ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+export SELF_SIGNUP_ENABLED=true GUEST_ACCESS_ENABLED=true   # sign-up codes print in this terminal
 .venv/bin/alembic upgrade head
-.venv/bin/python -m app.auth_cli create-user admin     # prompts for a password (12+ characters)
+.venv/bin/python -m app.auth_cli create-user admin     # optional: an operator account (prompts for a password)
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 ```
 
@@ -553,7 +575,9 @@ npm ci
 API_PROXY_TARGET=http://127.0.0.1:8000 NEXT_PUBLIC_API_BASE_URL= npm run dev
 ```
 
-Open http://localhost:3000, sign in, and press **Run the full demo** on `/demo`. The
+Open http://localhost:3000 and either **Continue as guest**, create an account (the 6-digit code
+appears in terminal 1, because no email is sent locally), or sign in. Then press **Run the full
+demo** on `/demo`. The
 [demo script](docs/demo-script.md) walks through the rest. Codespaces, SQLite-only and account
 maintenance options are in the
 [startup guide](docs/engineering-log/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode).
@@ -577,6 +601,10 @@ Backend (`backend/.env.example` documents each one):
 | `SESSION_COOKIE_SECURE` | `true` | `false` only for plain-HTTP development |
 | `SESSION_IDLE_MINUTES`, `SESSION_ABSOLUTE_HOURS` | `60`, `12` | Session lifetimes |
 | `ALLOWED_ORIGINS` | localhost:3000 | Exact browser origins for credentialed requests and login |
+| `SELF_SIGNUP_ENABLED` | `false` | Allow sign-up confirmed by an emailed code |
+| `SELF_SIGNUP_ROLE`, `SIGNUP_ALLOWED_EMAIL_DOMAINS` | `operator`, any | Role for verified sign-ups; optional domain allowlist |
+| `GUEST_ACCESS_ENABLED`, `GUEST_SESSION_HOURS` | `false`, `2` | One-click guest access and its session length |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_STARTTLS`, `EMAIL_FROM` | empty, `587`, …, `true` | Verification email; empty host means the code is printed locally and nothing is sent |
 
 Frontend (read at build time):
 
@@ -649,7 +677,8 @@ gtmflow-ai/
 - **Real integrations are unexercised:** Slack delivery has only run against the mock webhook and
   test doubles; OpenAI generation is implemented but paid and opt-in.
 - **Single workspace:** no multi-tenancy or self-service registration, by design.
-- **Accounts are managed from the CLI,** with no MFA or self-service recovery.
+- **No MFA or password reset yet.** Sign-up is verified by email, but a forgotten password needs
+  the CLI (`set-password`), and old guest accounts are not cleaned up automatically.
 - **The company-fit profile is a broad demonstration,** not a calibrated ideal-customer profile, and
   CSV leads without structured country data score as insufficient evidence.
 - **Time saved is an estimate** (5 minutes per processed lead), not a measurement.
@@ -663,8 +692,8 @@ gtmflow-ai/
 - Package the adapter for serverless GPU inference to avoid an always-on server.
 - Exercise real Slack delivery in a test workspace.
 - Add CRM destinations (HubSpot, Salesforce) using the same claim-before-send ledger.
-- Add retention jobs for old sessions, job items and login-throttle rows.
-- Add MFA and an account-recovery flow before any multi-user deployment.
+- Add retention jobs for old sessions, guest accounts, job items and login-throttle rows.
+- Add a password-reset email and optional MFA.
 
 ## Engineering log
 

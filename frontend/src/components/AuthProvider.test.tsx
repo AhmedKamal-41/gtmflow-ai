@@ -25,6 +25,7 @@ vi.mock("@/lib/api", async () => {
     login: vi.fn(() => (fake.loginResult ? Promise.resolve(fake.loginResult)
       : Promise.reject(new actual.APIError(401, "Unauthorized", "Invalid username or password.")))),
     logout: vi.fn(() => Promise.resolve()),
+    getAuthOptions: vi.fn(() => Promise.resolve({ self_signup: false, guest_access: false, email_delivery: "mock", guest_can_edit: true })),
   };
 });
 
@@ -80,7 +81,7 @@ describe("login page", () => {
 
   it("shows the server's generic error and keeps the user on the page", async () => {
     render(<AuthProvider><LoginPage /></AuthProvider>);
-    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "ada" } });
+    fireEvent.change(screen.getByLabelText("Email or username"), { target: { value: "ada" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "nope" } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Sign in" })));
     expect(screen.getByRole("alert")).toHaveTextContent("Invalid username or password.");
@@ -91,14 +92,14 @@ describe("login page", () => {
     fake.loginResult = SESSION;
     nav.search = new URLSearchParams("next=/metrics");
     const { unmount } = render(<AuthProvider><LoginPage /></AuthProvider>);
-    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "ada" } });
+    fireEvent.change(screen.getByLabelText("Email or username"), { target: { value: "ada" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "right-password-1" } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Sign in" })));
     expect(nav.replace).toHaveBeenLastCalledWith("/metrics");
     unmount();
     nav.search = new URLSearchParams("next=//evil.example/steal");
     render(<AuthProvider><LoginPage /></AuthProvider>);
-    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "ada" } });
+    fireEvent.change(screen.getByLabelText("Email or username"), { target: { value: "ada" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "right-password-1" } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Sign in" })));
     expect(nav.replace).toHaveBeenLastCalledWith("/");
@@ -109,7 +110,7 @@ describe("login page", () => {
       fake.loginResult = SESSION;
       nav.search = new URLSearchParams({ next });
       render(<AuthProvider><LoginPage /></AuthProvider>);
-      fireEvent.change(screen.getByLabelText("Username"), { target: { value: "ada" } });
+      fireEvent.change(screen.getByLabelText("Email or username"), { target: { value: "ada" } });
       fireEvent.change(screen.getByLabelText("Password"), { target: { value: "right-password-1" } });
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Sign in" })));
       expect(nav.replace).toHaveBeenLastCalledWith("/");
