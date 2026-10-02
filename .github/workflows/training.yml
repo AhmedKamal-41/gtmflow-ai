@@ -1,0 +1,51 @@
+name: training
+
+# Validates that the Phase 8 training code is invocable on CPU (guards,
+# weighting, formatting, a tiny smoke run). It never trains the real model
+# and never needs a GPU or paid compute. The formatting and smoke tests
+# download only the pinned tokenizer/config files (a few MB, no weights).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "training/**"
+      - "backend/app/ai/prompts.py"
+      - ".github/workflows/training.yml"
+  pull_request:
+    paths:
+      - "training/**"
+      - "backend/app/ai/prompts.py"
+      - ".github/workflows/training.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: training
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned CPU dependencies
+        run: pip install -r requirements-lock-cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Fetch the pinned tokenizer and config (no weights)
+        run: |
+          python - <<'PY'
+          import json
+          from huggingface_hub import snapshot_download
+          cfg = json.load(open("configs/phase8-qwen3-4b-lora-v1.json"))["base_model"]
+          snapshot_download(cfg["repo"], revision=cfg["revision"], cache_dir=".cache/hf",
+                            allow_patterns=["config.json", "generation_config.json", "tokenizer.json",
+                                            "tokenizer_config.json", "vocab.json", "merges.txt"])
+          PY
+
+      - name: Run tests
+        env:
+          HF_HUB_OFFLINE: "1"
+        run: python -m pytest -q

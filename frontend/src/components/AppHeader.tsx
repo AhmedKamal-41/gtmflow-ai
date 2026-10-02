@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useAuth } from "./AuthProvider";
 import { Icon, type IconName } from "./Icon";
 
 const NAV: { href: string; label: string; icon: IconName }[] = [
@@ -10,6 +11,8 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/upload", label: "Upload", icon: "upload" },
   { href: "/batches", label: "Batches", icon: "layers" },
   { href: "/metrics", label: "Metrics", icon: "chart" },
+  { href: "/seller-profile", label: "Seller", icon: "users" },
+  { href: "/annotation", label: "Annotate", icon: "file" },
   { href: "/demo", label: "Demo", icon: "play" },
 ];
 
@@ -20,6 +23,7 @@ function isActive(pathname: string, href: string): boolean {
 
 export function AppHeader() {
   const pathname = usePathname() ?? "/";
+  const { session, signOut, signOutError } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur">
@@ -42,6 +46,7 @@ export function AppHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
+                aria-label={item.label}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium transition-colors ${
                   active
                     ? "bg-brand-50 text-brand-700"
@@ -54,7 +59,23 @@ export function AppHeader() {
             );
           })}
         </nav>
+        {session && (
+          <div className="flex items-center gap-2 text-xs text-slate-500" aria-label="Signed in">
+            <span>
+              {session.username}
+              {session.role === "viewer" ? " (read-only)" : ""}
+            </span>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 font-medium text-slate-600 hover:bg-slate-100"
+              onClick={() => void signOut()}
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
+      {signOutError && <p role="alert" className="px-4 pb-2 text-sm text-red-700">{signOutError}</p>}
     </header>
   );
 }

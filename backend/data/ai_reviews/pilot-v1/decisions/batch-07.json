@@ -1,0 +1,250 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 67,
+   "source_output_id": "a2609b9d-6809-41e9-9983-bca4e16ffeb9",
+   "source_content_hash": "054269c7b4f5f5cfcb36944be67f8ce6a4ebdd82c5013bae28b879cb1c13a7f3",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Centre AL, 11-50 and website match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 68,
+   "source_output_id": "e4bf9d01-2d96-4b91-ab39-4593d6e623e1",
+   "source_content_hash": "81fe88e64c9e127beef5376ff0f2664cafd92f3b60bd319518247dcea9fdd0bd",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Mentions a 'demo workflow solution' but claims a specialization and benefits 'for your operations' and 'objectives', '[Your Name]'; does not say it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for American Auctioneers LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists American Auctioneers LLC as a real estate company in Centre, Alabama.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 69,
+   "source_output_id": "b3c38650-537f-4062-bf2f-dd31ceb64dc4",
+   "source_content_hash": "ab98a90ab3615be5c9966c84d3bf39910a188f6c29f87ef76b677c5dc85efda2",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Centennial CO, 1-10 and website match; seller_relevance describes GTMFlow's capabilities, not the lead.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 70,
+   "source_output_id": "84d32d68-a848-46a5-8006-0d59804bc8b0",
+   "source_content_hash": "e21549958ecf014c392024ed53c0fb0447549c0b9dcdab0cca6bf40bce832a03",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented 'business needs', '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Soul Rehab Massage",
+    "email_body": "Hi there,\n\nThe supplied company record lists Soul Rehab Massage as a medical practice in Centennial, Colorado.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "broken_signature",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 71,
+   "source_output_id": "28791ce0-12c1-4d66-8294-1419661fa036",
+   "source_content_hash": "3710df29ceaac5eddde650f802aca6b3dd4178a762d9b9ad5acb8df701a96111",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, 1-10, Los Angeles CA, founded 2023, real estate and the recorded website match; no speculation.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The website (prflending.com) and LinkedIn slug (loansandrealty) do not match the company name; the record may mix sources.",
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 72,
+   "source_output_id": "3f316430-eaf7-443b-8754-60f83b10fba5",
+   "source_content_hash": "bb382bd91a2d2d3f324966218dcdf81591e4a4eb321c5ca1022d436994159d1e",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Founding year and location are supported, but it offers outreach 'tailored to your needs' and help 'with your operations', '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Equity Solutions and Investments, Inc.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Equity Solutions and Investments, Inc. as a real estate company in Los Angeles, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The website (prflending.com) and LinkedIn slug (loansandrealty) do not match the company name; the record may mix sources.",
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 73,
+   "source_output_id": "14c6f3ac-4f4c-47c9-a400-fcdfcc735549",
+   "source_content_hash": "a3a722334ee65d08711959e0d26946722b7f6a7525913d1a90e2637fe445f5c3",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care, Reseda CA and 11-50 ('employing between 11 and 50 people') match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 74,
+   "source_output_id": "8946179d-871d-4ab3-9963-409302cd5128",
+   "source_content_hash": "a320639ca958feb3c61e4ada2f481e8c26495c749a90acac6451e5c816f9161e",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Broken signature and invented alignment with 'your goals' and 'status in the healthcare industry'; mentions a 'demonstration offering' but not that it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for San Antonio Health Care",
+    "email_body": "Hi there,\n\nThe supplied company record lists San Antonio Health Care as a hospital and health care organization in Reseda, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "broken_signature",
+    "invented_fit",
+    "placeholder_signature",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 75,
+   "source_output_id": "8efddf88-8910-4254-9d8e-537ab72f0711",
+   "source_content_hash": "a6c43870cfdfb8af58a521cd1fb2700fac00cf32cefa12999ad4477bb5196ef6",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Athens GA, founded 2023, 1-10 and LinkedIn match; seller_relevance says it is a portfolio demonstration without a real customer segment.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  },
+  {
+   "position": 76,
+   "source_output_id": "f5264e3d-4a99-4f7f-86a3-07403bf5f7f8",
+   "source_content_hash": "d56157b9a6ab5987d548feb6c2246f072eda3a18e8a271ef462bc393140196e3",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Body contains literal '\\n' escape text; invents 'a new player' framing and alignment with 'your goals', '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for A Bridge to Properties",
+    "email_body": "Hi there,\n\nThe supplied company record lists A Bridge to Properties as a real estate company in Athens, Georgia.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "literal_escape_sequences",
+    "invented_fit",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:13.202838+00:00"
+  }
+ ]
+}

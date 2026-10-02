@@ -1,0 +1,261 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "test-v1",
+ "reviews": [
+  {
+   "position": 88,
+   "source_output_id": "9381f465-7d7d-4f86-967b-ddd7995b9d36",
+   "source_content_hash": "944913e3e91eaeb63c783ff1bcf125c9213717c167f42ae054647f0eb70557e0",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invented research and praise ('while researching real estate firms', 'impressed by your presence'), specialization claim, invented needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_research",
+    "invented_praise",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Dunning Real Estate Group",
+    "email_body": "Hi there,\n\nThe supplied company record lists Dunning Real Estate Group as a real estate company in Chicago, Illinois.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 89,
+   "source_output_id": "d2b68a04-5778-4c7e-80dc-cb026afdfb34",
+   "source_content_hash": "6aa775db2cde484aeef0f8b6652b721fe7793203d2832d4a6815f95c5ef5ca13",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Lexington Park MD and 1-10 match; seller_relevance describes capabilities and is hedged ('may be relevant').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 90,
+   "source_output_id": "3c7c1fca-27a3-4aec-971e-7a64ce545a74",
+   "source_content_hash": "f1470746dd49a7d8a38d5718d516234698ab7933c49f0445917f0e9068348552",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented specialization ('automating lead workflows for companies in the healthcare sector'), invented 'expertise' and 'synergies', '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_praise",
+    "invented_fit",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Benner Medical Group PA",
+    "email_body": "Hi there,\n\nThe supplied company record lists Benner Medical Group PA as a medical practice in Lexington Park, Maryland.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 91,
+   "source_output_id": "294bf010-8eb2-4280-b30d-76c667ed6876",
+   "source_content_hash": "e44601a0f86c45da178c7373330d6aed2c5fa31d85186930fbccc5b5e5a6a3e2",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct ('small' for 1-10), but seller_relevance asserts the capabilities 'are relevant'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 92,
+   "source_output_id": "1a05f5e4-202e-442e-b3f2-2b239954400c",
+   "source_content_hash": "c5a933f0bf8defd09d196f1c8fa437f48b3d2d9df2d3d20bebd262a289941700",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Body contains literal '\\n' escape text, invents a need ('evaluating new solutions to enhance your operations'), awkwardly narrates the unknowns, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "literal_escape_sequences",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Kew Manor Owners Corp",
+    "email_body": "Hi there,\n\nThe supplied company record lists Kew Manor Owners Corp as a real estate company in Jamaica, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 93,
+   "source_output_id": "f2dc97ee-ee13-40dc-91b6-6ad103c5cd14",
+   "source_content_hash": "9276c535da848c3ea5ac8e56571a6497386baeed5478c39d2c845ce6ec4959c3",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care, Parsippany NJ and 11-50 match; no speculation. Stiff opening ('The lead is a company named').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 94,
+   "source_output_id": "23a07cfd-1194-4553-8310-7e51f652c196",
+   "source_content_hash": "4e0bc1be2581a123478d7e2467b1553fbe37e2b87de5f9596c3c2e90838cf785",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invents alignment with 'your goals', assumes the reader works there ('I see that you are with'), '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_fit",
+    "assumed_contact",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for New Jersey Advanced Pain Management Center",
+    "email_body": "Hi there,\n\nThe supplied company record lists New Jersey Advanced Pain Management Center as a company in the hospital & health care category in Parsippany, New Jersey.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 95,
+   "source_output_id": "9b02cacb-aa0e-4c88-895b-41814b490987",
+   "source_content_hash": "9c5420b36d866fd8a3f61e3c9750b5aef4217be5b87d4521740451567b77905f",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Cullman AL, 11-50 and LinkedIn match; seller_relevance is hedged and says it is not directly applicable.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 96,
+   "source_output_id": "06300cdb-89e3-4b09-96f6-243525f725cd",
+   "source_content_hash": "a5f43202d33fd42c9a8c9fc861caf59180a742325496cc1451263a7176249030",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Specialization claim ('tools that support businesses like yours'), invented initiatives, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Bon Secour Village LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Bon Secour Village LLC as a real estate company in Cullman, Alabama.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  },
+  {
+   "position": 97,
+   "source_output_id": "514c5c57-1f89-480b-b4c0-438af7997dd4",
+   "source_content_hash": "c413613f91eb1b890bcd1f898137a6f99c326e6116fdc44876c951c175a22156",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, West Chester OH and 1-10 match; seller_relevance describes capabilities and rates relevance low.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:29:36.220738+00:00"
+  }
+ ]
+}

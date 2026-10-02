@@ -2,6 +2,18 @@
 // Kept permissive on unions (string instead of literal) so the UI never
 // crashes if the backend introduces a new status/priority value.
 
+// Phase 3: every list endpoint (batches, leads, AI-output history, push
+// history) returns this envelope instead of a bare array. `total` is
+// server-computed across the whole dataset, not len(items) -- always show
+// it rather than deriving a count from the current page.
+export type Page<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 export type LeadBatch = {
   id: string;
   name: string | null;
@@ -29,6 +41,12 @@ export type Lead = {
   cleaned_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  // Phase 2/3 provenance + canonical identity. NULL for CSV/demo leads.
+  company_identity_id: string | null;
+  source_snapshot_id: string | null;
+  import_run_id: string | null;
+  source_record_id: string | null;
+  source_raw_data: Record<string, unknown> | null;
 };
 
 export type ScoreBreakdown = {
@@ -58,6 +76,8 @@ export type LeadScore = {
   reasoning: string;
 };
 
+// Historical (prompt v1) content shapes. Kept so outputs generated before
+// grounded prompting still render as they were produced.
 export type SummaryContent = {
   company_summary: string;
   detected_pain_points: string[];
@@ -75,6 +95,28 @@ export type OutreachContent = {
   confidence: string;
 };
 
+// Grounded (output schema v2) content shapes, validated by the backend
+// before saving (app/ai/grounding.py).
+export type GroundedSummaryContent = {
+  company_summary: string;
+  evidence: { fact_id: string; statement: string }[];
+  unknowns: string[];
+  hypotheses: string[];
+  seller_relevance: string | null;
+  confidence: string;
+};
+
+export type GroundedOutreachContent = {
+  subject: string;
+  email_body: string;
+  lead_facts_used: string[];
+  capabilities_used: string[];
+  claims_used: string[];
+  unknowns_acknowledged: string[];
+  call_note: string;
+  confidence: string;
+};
+
 export type AIOutput = {
   id: string;
   lead_id: string;
@@ -83,6 +125,63 @@ export type AIOutput = {
   model_used: string | null;
   prompt_version: string | null;
   created_at: string;
+  // Phase 2 identity + provenance.
+  parent_output_id: string | null;
+  origin: string; // "generated" | "human_edited"
+  input_snapshot: Record<string, unknown> | null;
+  input_hash: string | null;
+  output_schema_version: string | null;
+  model_revision: string | null;
+  adapter_revision: string | null;
+  // Phase 5 seller provenance; null on pre-grounding (prompt v1) outputs.
+  seller_profile_id: string | null;
+  seller_profile_version: number | null;
+  seller_profile_content_hash: string | null;
+  seller_profile_kind: string | null;
+  // Phase 6: exact-content identity and review.
+  content_hash: string;
+  purpose: string; // "operational" | "annotation"
+  author_label: string | null;
+  review_status: string | null; // pending | approved | rejected | superseded
+  // Phase 10: runtime quality checks (runtime-checks-v1). Flags ask for
+  // review; approving a flagged draft needs an explicit acknowledgement.
+  quality_checks_version?: string;
+  quality_flags?: QualityFlag[];
+};
+
+export type QualityFlag = {
+  code: string;
+  field: string;
+  match: string;
+  source: string;
+  severity: string;
+};
+
+// Phase 10: durable background jobs.
+export type JobType = "fit_score" | "legacy_score" | "generate_summary" | "generate_outreach" | "push_hot";
+
+export type Job = {
+  id: string;
+  job_type: JobType;
+  batch_id: string | null;
+  params: Record<string, unknown>;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  attempts: number;
+  max_attempts: number;
+  max_item_attempts: number;
+  total_items: number | null;
+  counts: Record<string, number>;
+  result: Record<string, unknown> | null;
+  last_error: string | null;
+  cancel_requested: boolean;
+  lease_expires_at: string | null;
+  heartbeat_at: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  deduplicated: boolean;
+  done_items: number;
+  progress_pct: number | null;
 };
 
 export type IntegrationPush = {
@@ -90,9 +189,18 @@ export type IntegrationPush = {
   lead_id: string;
   integration_type: string;
   payload: Record<string, unknown> & { text?: string };
-  status: string; // "success" | "mock_success" | "failed"
+  status: string; // "success" | "mock_success" | "failed" | "unknown" | "pending"
   response_text: string | null;
   created_at: string;
+  // Phase 11 delivery ledger (null on rows from before Phase 11).
+  approved_output_id?: string | null;
+  attempt?: number | null;
+  delivery_mode?: "mock" | "real" | null;
+  outcome_code?: string | null;
+  resolution?: string | null;
+  resolution_note?: string | null;
+  resolved_at?: string | null;
+  replay?: boolean;
 };
 
 export type UploadResponseError = {
@@ -135,14 +243,17 @@ export type BatchPushResponse = {
   pushed: number;
   skipped: number;
   failed: number;
+  blocked: number;
   results: BatchPushResult[];
 };
 
 export type OutreachReviewResponse = {
   lead_id: string;
   ai_output_id: string;
+  review_id: string;
   event_type: string; // "outreach_approved" | "outreach_rejected"
   message: string;
+  idempotent_replay: boolean;
 };
 
 export type DemoRunResponse = {
@@ -157,6 +268,126 @@ export type DemoRunResponse = {
   leads_pushed: number;
 };
 
+// --- Phase 4: v2 deterministic company-fit scorer -------------------------
+// Entirely separate from the legacy `LeadScore` (Hot/Warm/Cold) above. A
+// `strong_match` fit band is NOT the same claim as legacy "Hot" -- it means
+// "matched this broad demonstration profile's two active criteria," not a
+// calibrated purchase-probability signal. Always label these distinctly in
+// the UI; never silently translate one into the other's meaning.
+
+export type FitCriterion = {
+  name: string;
+  weight: number;
+  active: boolean;
+  source_field: string;
+  raw_input: unknown;
+  normalized_input: string | null;
+  result: string; // "match" | "mismatch" | "unknown" | "not_configured"
+  points: number;
+  explanation: string;
+};
+
+export type ActionReadiness = {
+  status: string; // "ready" | "not_ready"
+  gaps: string[];
+  gap_explanations: Record<string, string>;
+};
+
+export type Readiness = {
+  outbound_email: ActionReadiness;
+  internal_slack_handoff: ActionReadiness;
+};
+
+export type Eligibility = {
+  excluded: boolean;
+  reasons: string[];
+  checked_at: string;
+};
+
+export type HistoricalAssessment = {
+  readiness: Readiness;
+  eligibility_excluded: boolean;
+  eligibility_reasons: string[];
+  computed_at: string;
+};
+
+// GET /api/leads/{id}/readiness -- live state, independent of fit scoring.
+export type CurrentReadiness = {
+  lead_id: string;
+  readiness: Readiness;
+  eligibility: Eligibility;
+};
+
+export type LeadFitScore = {
+  id: string | null;
+  lead_id: string;
+  scorer_version: string;
+  profile_id: string;
+  profile_version: string;
+  normalization_version: string;
+  input_fingerprint: string;
+  fit_score: number;
+  max_fit_score: number;
+  evidence_coverage_pct: number;
+  band: string; // "strong_match" | "partial_match" | "weak_match" | "insufficient_evidence"
+  criteria: FitCriterion[];
+  // CURRENT readiness/eligibility, recomputed from live lead, batch,
+  // draft and review state on every read (single-lead and bulk alike).
+  readiness: Readiness;
+  readiness_is_current: boolean;
+  eligibility: Eligibility;
+  // What readiness/eligibility were when this score row was computed --
+  // historical, for audit only; never used to gate an action. null for
+  // an unpersisted result.
+  at_scoring: HistoricalAssessment | null;
+  computed_at: string;
+  computation_ms: number;
+};
+
+export type FitProfile = {
+  profile_id: string;
+  profile_version: string;
+  scorer_version: string;
+  normalization_version: string;
+  description: string;
+  industry_match_values: string[];
+  industry_weight: number;
+  country_match_values: string[];
+  country_weight: number;
+  size_weight: number;
+  zero_weight_criteria: string[];
+  max_fit_score: number;
+  coverage_threshold_pct: number;
+  band_strong_min: number;
+  band_partial_min: number;
+};
+
+// Distinct leads, each counted once in the band of its LATEST applicable
+// score. `score_rows` counts every stored row (history included).
+export type BatchFitSummary = {
+  batch_id: string;
+  total_leads: number;
+  scored_leads: number;
+  unscored_leads: number;
+  score_rows: number;
+  strong_match: number;
+  partial_match: number;
+  weak_match: number;
+  insufficient_evidence: number;
+  average_fit_score: number | null;
+};
+
+// POST /api/batches/{id}/fit-score: this run's counts + the batch's
+// distinct-lead state afterwards.
+export type BatchFitScoreRunSummary = {
+  batch_id: string;
+  attempted: number;
+  newly_scored: number;
+  skipped_unchanged: number;
+  failed: number;
+  summary: BatchFitSummary;
+};
+
 export type MetricsDashboard = {
   total_leads_uploaded: number;
   total_leads_processed: number;
@@ -166,7 +397,13 @@ export type MetricsDashboard = {
   outreach_generated: number;
   outreach_approved: number;
   outreach_rejected: number;
-  approval_rate: number;
+  // Phase 11: one cohort -- distinct operational outreach drafts by their
+  // latest review; approved + rejected + pending = generated.
+  outreach_pending_review: number;
+  approval_rate: number; // approved drafts / drafts, never above 100
+  reviewed_approval_rate: number; // approved / (approved + rejected)
+  approval_events: number; // raw events, audit only
+  rejection_events: number;
   // Count of successful push rows. A lead pushed twice contributes 2.
   leads_pushed: number;
   // Distinct leads with at least one successful push.
@@ -178,4 +415,218 @@ export type MetricsDashboard = {
   average_lead_score: number;
   missing_data_rate: number;
   automation_coverage: number;
+  // v2 company fit (demo profile): distinct leads by latest band.
+  fit_scored_leads: number;
+  fit_strong_match: number;
+  fit_partial_match: number;
+  fit_weak_match: number;
+  fit_insufficient_evidence: number;
+  // Phase 11 delivery ledger and mock-versus-real breakdowns.
+  push_unknown_count: number;
+  push_pending_count: number;
+  real_messages_delivered: number;
+  mock_messages_delivered: number;
+  generation_by_mode: Record<"mock" | "real" | "unknown", GenerationModeCounts>;
+  delivery_by_mode: Record<"mock" | "real" | "unknown", DeliveryModeCounts>;
+  data_mode: "empty" | "mock_only" | "real_only" | "mixed";
+};
+export type GenerationModeCounts = {
+  drafts_generated: number;
+  drafts_approved: number;
+  drafts_rejected: number;
+  drafts_pending_review: number;
+  approval_rate: number;
+};
+export type DeliveryModeCounts = {
+  attempts: number;
+  delivered: number;
+  unique_leads_delivered: number;
+  failed: number;
+  outcome_unknown: number;
+  pending: number;
+  success_rate: number;
+};
+export type SellerProfileContent = {
+  profile_kind: "seller" | "demo";
+  company_name: string;
+  product_name: string;
+  value_proposition: string;
+  target_customer: string;
+  capabilities: string[];
+  proof_points: { claim: string; source: string }[];
+  exclusions: string[];
+};
+
+export type SellerProfile = {
+  id: string;
+  version: number;
+  status: "draft" | "active";
+  profile: SellerProfileContent;
+  content_hash: string;
+  editor_label: string;
+  created_at: string;
+};
+
+export type SellerProfileActivation = {
+  id: string;
+  sequence: number;
+  action: "activate" | "deactivate";
+  seller_profile_id: string | null;
+  seller_profile_version: number | null;
+  content_hash: string | null;
+  reviewed_confirmation: boolean;
+  demo_acknowledged: boolean;
+  actor_label: string;
+  created_at: string;
+};
+
+export type SellerProfileStatus = {
+  state: "missing" | "draft_only" | "active";
+  latest_version: number | null;
+  activation_sequence: number;
+  last_activation: SellerProfileActivation | null;
+  active_profile: SellerProfile | null;
+  latest_is_active: boolean;
+};
+
+// ---------------------------------------------------------------- Phase 6
+
+export type Review = {
+  id: string;
+  ai_output_id: string | null;
+  decision: "approved" | "rejected";
+  reason: string | null;
+  reviewer_label: string;
+  content_hash: string | null;
+  legacy_unlinked: boolean;
+  created_at: string;
+};
+
+export type SourceInfo = {
+  batch_source: string | null;
+  provider: string | null;
+  source_snapshot_id: string | null;
+  reported_acquisition_date: string | null;
+  retrieved_at: string | null;
+  license: string | null;
+  freshness_note: string;
+};
+
+export type ReviewState = {
+  lead_id: string;
+  status: "no_draft" | "pending" | "approved" | "rejected";
+  draft_id: string | null;
+  draft_content_hash: string | null;
+  draft_origin: string | null;
+  draft_parent_output_id: string | null;
+  approval_applicable: boolean;
+  delivery_blockers: string[];
+  email_blockers: string[];
+  blocker_explanations: Record<string, string>;
+  latest_review: Review | null;
+  source: SourceInfo;
+  quality_checks_version?: string;
+  draft_quality_flags?: QualityFlag[];
+};
+
+export type ReviewTiming = {
+  active_ms: number;
+  wall_ms: number;
+  hidden_ms: number;
+  idle_ms: number;
+  interaction_count: number;
+  idle_threshold_ms: number;
+  flags: ("was_hidden" | "had_idle_gap" | "resumed_after_failure" | "content_changed_during_session")[];
+};
+
+export type TrainingAnnotation = {
+  id: string;
+  submission_id: string;
+  candidate_id: string;
+  source_output_id: string;
+  source_content_hash: string;
+  decision: "accepted" | "corrected" | "skipped";
+  target_output_id: string | null;
+  target_content_hash: string | null;
+  factual_support: string | null;
+  writing_quality: number | null;
+  missing_info_handling: string | null;
+  notes: string | null;
+  skip_reason: string | null;
+  reviewer_label: string;
+  review_mode: string;
+  timing: (ReviewTiming & { source: string; incomplete: boolean }) | null;
+  created_at: string;
+};
+
+export type AnnotationCandidateSummary = {
+  id: string;
+  queue: string;
+  position: number;
+  task: "company_summary" | "outreach_email";
+  split: string;
+  group_key: string;
+  lead_id: string;
+  company_name: string;
+  status: "awaiting_generation" | "pending_review" | "accepted" | "corrected" | "skipped";
+  source_output_id: string | null;
+  is_mock: boolean | null;
+};
+
+export type AnnotationCandidateDetail = AnnotationCandidateSummary & {
+  manifest_version: string;
+  lead_facts: Record<string, string | null>;
+  source: SourceInfo;
+  source_output: AIOutput | null;
+  target_output: AIOutput | null;
+  latest_annotation: TrainingAnnotation | null;
+  annotation_count: number;
+};
+
+export type AnnotationSubmit = {
+  submission_id: string;
+  source_output_id: string;
+  source_content_hash: string;
+  decision: "accepted" | "corrected" | "skipped";
+  corrected_content?: Record<string, unknown>;
+  factual_support?: "supported" | "partially_supported" | "unsupported";
+  writing_quality?: number;
+  missing_info_handling?: "good" | "acceptable" | "poor";
+  notes?: string;
+  skip_reason?: string;
+  timing?: ReviewTiming;
+};
+
+export type AnnotationQueue = {
+  queue: string;
+  split: string;
+  candidates: number;
+  generated: number;
+};
+
+export type AnnotationProvider = {
+  configured_provider: string;
+  model_revision: string | null;
+  is_mock: boolean;
+  available: boolean;
+  detail: string;
+};
+
+export type AnnotationSummary = {
+  queue: string;
+  manifest_version: string | null;
+  candidates: number;
+  unique_companies: number;
+  generated: number;
+  awaiting_generation: number;
+  pending_review: number;
+  reviewed_examples: number;
+  reviewed_unique_companies: number;
+  accepted: number;
+  corrected: number;
+  skipped: number;
+  mock_candidates: number;
+  by_task: Record<string, number>;
+  by_split: Record<string, number>;
+  experiment_targets: Record<string, number>;
 };

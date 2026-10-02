@@ -1,0 +1,168 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 55,
+   "source_output_id": "daa090df-0574-4e50-933d-b2abf9cfb875",
+   "source_content_hash": "c920089dad160171d3dd3648632682913ae2e42494253f1f35609cc6b089152f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance only describes capabilities, but the hypotheses invent a need and speculate about limited resources (labeled unconfirmed).",
+   "issues": [
+    "invented_need_hypothesis",
+    "speculative_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The name ('Accretive Portco Solutions') and website (ebitda-margin.com) suggest portfolio-company or finance services while the record says real estate; the classification may be wrong.",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:33:08.195755+00:00"
+  },
+  {
+   "position": 56,
+   "source_output_id": "799c8035-1004-4c47-b303-7e707ef68cee",
+   "source_content_hash": "d7e8e2e05a71acbc00c8e6f079b885d683e604553ca562713972299c745a5346",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Presents the prospect's own website as GTMFlow's ('check our offerings at ebitda-margin.com'), invented collaboration potential and goals, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "misattributed_website",
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The name ('Accretive Portco Solutions') and website (ebitda-margin.com) suggest portfolio-company or finance services while the record says real estate; the classification may be wrong.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Accretive Portco Solutions",
+    "email_body": "Hi there,\n\nThe supplied company record lists Accretive Portco Solutions as a real estate company in Chicago, Illinois.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:08.195755+00:00"
+  },
+  {
+   "position": 57,
+   "source_output_id": "de9deccd-fb42-463e-98f9-0a501f90c9c6",
+   "source_content_hash": "42dab187c9c43827af17b2ca98385b0bc01bbde91cbd3ef41c4c7f7509bf2f8f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are quoted as recorded (including the recorded spelling 'physicans'), but seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:33:08.195755+00:00"
+  },
+  {
+   "position": 58,
+   "source_output_id": "39232bab-4891-4a50-a488-c8b7d87a6a74",
+   "source_content_hash": "50c7be8273078cc8655f959ab0a24583651c8d3bac37ecd17af54b2286dc6f9a",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Silently respells and shortens the recorded name ('Univ Chicago Physicians Group'), broken signature ('My name is from GTMFlow'), specialization claim, invented challenges, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "altered_recorded_name",
+    "broken_signature",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Univ Chicago Physicans Grp Weiss Hosp",
+    "email_body": "Hi there,\n\nThe supplied company record lists Univ Chicago Physicans Grp Weiss Hosp as a company in the hospital & health care category in Chicago, Illinois.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:08.195755+00:00"
+  },
+  {
+   "position": 59,
+   "source_output_id": "924c3624-2e6a-4026-91b4-a31f13c3b341",
+   "source_content_hash": "69eb85a66305c4ce8c1c81e5df4465835f6eee250488699221cb729c85959469",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Scottsdale AZ, founded 2009 and 1-10 ('small') match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:33:08.195755+00:00"
+  },
+  {
+   "position": 60,
+   "source_output_id": "6f5bb770-7611-48cf-b2ce-c8c8aefc80d1",
+   "source_content_hash": "30609ad039208d368f92fe987f9f1a937eecf8e58895e174f624866fc928c7cc",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Invented 'synergies between our operations', specialization claim, invented needs; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_fit",
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Hybrid Home Living",
+    "email_body": "Hi there,\n\nThe supplied company record lists Hybrid Home Living as a real estate company in Scottsdale, Arizona.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:08.195755+00:00"
+  }
+ ]
+}

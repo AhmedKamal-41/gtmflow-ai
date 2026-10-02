@@ -4,7 +4,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.ai import quality_checks as _quality_checks
+from app.core.hashing import content_hash as _content_hash
 
 
 class AIOutputBase(BaseModel):
@@ -24,3 +27,58 @@ class AIOutputRead(AIOutputBase):
     id: UUID
     lead_id: UUID
     created_at: datetime
+
+    # Phase 2 identity + provenance. `id` + `created_at` together already
+    # identify the exact revision; these fields explain how it was produced.
+    parent_output_id: UUID | None = None
+    origin: str = "generated"
+    input_snapshot: dict[str, Any] | None = None
+    input_hash: str | None = None
+    output_schema_version: str | None = None
+    model_revision: str | None = None
+    adapter_revision: str | None = None
+
+    # Phase 5 seller provenance: NULL on outputs generated before grounded
+    # prompting (prompt_version "v1") -- those are never relabeled.
+    seller_profile_id: UUID | None = None
+    seller_profile_version: int | None = None
+    seller_profile_content_hash: str | None = None
+    seller_profile_kind: str | None = None
+
+    # Phase 6. `purpose`: "operational" (a lead's drafts) or "annotation"
+    # (training candidates, never delivered). `author_label` is set on human
+    # revisions. `review_status` is filled by endpoints that list drafts:
+    # pending / approved / rejected / superseded, or None when the output
+    # isn't an operational outreach draft.
+    purpose: str = "operational"
+    author_label: str | None = None
+    review_status: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def content_hash(self) -> str:
+        """Identity of the exact content shown; reviews must send it back."""
+        return _content_hash(self.content)
+
+    # Phase 10: runtime quality checks (runtime-checks-v1), computed from the
+    # stored content and the input snapshot it was generated from. Flags ask
+    # for review; they never approve, reject or change anything.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def quality_checks_version(self) -> str:
+        return _quality_checks.CHECKS_VERSION
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def quality_flags(self) -> list[dict[str, Any]]:
+        return _quality_checks.check_output(self.output_type, self.content, self.input_snapshot)
+
+
+class AIOutputRevisionCreate(BaseModel):
+    """A human correction. Creates a new immutable revision; the output it
+    revises (and the original model response) are never changed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_content_hash: str = Field(min_length=64, max_length=64)
+    content: dict[str, Any]

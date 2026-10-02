@@ -1,0 +1,283 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 77,
+   "source_output_id": "ae32e1e6-adf8-4040-9989-fe30d99acf34",
+   "source_content_hash": "6b11167c113c3bdfad1cf1f17a55b5f29c00fc72c27cc7874d60c59b737a614b",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Silently changes the recorded company name ('Rehabilation' -> 'Rehabilitation') in both the summary and its evidence statement, so the evidence no longer matches the cited fact. Restored the recorded spelling; other facts are supported.",
+   "corrected_fields": {
+    "company_summary": "Laurenwood Nursing & Rehabilation (name as recorded) is listed as a medical practice located in Duncanville, Texas, United States, with a company size of 1-10 employees. The company operates in the healthcare segment.",
+    "evidence": [
+     {
+      "fact_id": "fact-company_name",
+      "statement": "The company name is recorded as Laurenwood Nursing & Rehabilation."
+     },
+     {
+      "fact_id": "fact-website",
+      "statement": "The company website is mlpayton.com."
+     },
+     {
+      "fact_id": "fact-industry",
+      "statement": "The industry is classified as medical practice."
+     },
+     {
+      "fact_id": "fact-company_size",
+      "statement": "The company size is 1-10 employees."
+     },
+     {
+      "fact_id": "fact-location",
+      "statement": "The company is located in Duncanville, Texas, United States."
+     }
+    ]
+   },
+   "issues": [
+    "altered_recorded_name"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The recorded name is spelled 'Rehabilation' (likely a source typo) and the website (mlpayton.com) does not match the name; a nursing and rehabilitation center is recorded as a 'medical practice'.",
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 78,
+   "source_output_id": "b92988dc-d5b6-4ebc-9535-163d906da727",
+   "source_content_hash": "8732a074b2a28e6cd5fd8a074367c76f70595258e2d584cf3b95b1a08af07c64",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature, invented specialization and care focus ('focusing on providing care'), needs to 'streamline your efforts', '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Laurenwood Nursing & Rehabilation",
+    "email_body": "Hi there,\n\nThe supplied company record lists Laurenwood Nursing & Rehabilation as a medical practice in Duncanville, Texas.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The recorded name is spelled 'Rehabilation' (likely a source typo) and the website (mlpayton.com) does not match the name; a nursing and rehabilitation center is recorded as a 'medical practice'.",
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 79,
+   "source_output_id": "fdb85224-f493-4cfe-8357-f87f49e6f183",
+   "source_content_hash": "f3fd77baa8f6bb9b071cd38f7f51e2d016a1bd143a3cfa3fd44eafc6320fad91",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypotheses invent marketing needs and expansion, and seller_relevance asserts GTMFlow 'is relevant'.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 80,
+   "source_output_id": "99c72d01-7583-4e7a-81d5-864641aa7050",
+   "source_content_hash": "330cc3580e8fcdf8bf68b76905f0305c361848266579e9ba3a75ecfa31129ec8",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invents 'synergies' and a need to optimize outreach; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for JLS East, LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists JLS East, LLC as a real estate company in Orlando, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_fit",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 81,
+   "source_output_id": "a01d2665-ecde-46e0-a878-0e499ff11be1",
+   "source_content_hash": "8844e93e6c078f881c92e33cea3969758d808d089344a5ed9fafd3eb3fc0fb9b",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Englewood CO and 51-200 match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 82,
+   "source_output_id": "8143b1e3-6b8a-44b3-ade2-00c080bae6d1",
+   "source_content_hash": "6df004b7aee87add146f2643453e7b56ab02ce367d27ec4af703486d5ebe7094",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Mentions a 'demonstration portfolio' but claims to 'support the unique needs of your medical practice' and a healthcare focus; does not say it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Leslie R. Capin, M.D., P.C.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Leslie R. Capin, M.D., P.C. as a medical practice in Englewood, Colorado.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_need",
+    "invented_focus",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 83,
+   "source_output_id": "1f7ff848-f6f4-4559-9e35-1fbaa1779640",
+   "source_content_hash": "f9ab60254db974c001f9eaaac9686bbcd69e34fb5831597443ba320bec4438f4",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Las Vegas NV, founded 2022, 1-10, website and LinkedIn all match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 84,
+   "source_output_id": "9e77d9af-9398-4c98-ab83-18ce816c4fd4",
+   "source_content_hash": "81b44493ea64d00131de67be54d49b8f908c34730440f014901bf9368d2c43fc",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Claims a specialization, 'strategies tailored to your needs', asks about challenges, '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Better Agent",
+    "email_body": "Hi there,\n\nThe supplied company record lists Better Agent as a real estate company in Las Vegas, Nevada.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 85,
+   "source_output_id": "9b98ce7a-4ccf-4021-8e6a-4cf3b4795733",
+   "source_content_hash": "8cd427ad6802fade6f953586d95f9b10349189608a9b13606b1826628eb06c22",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name, medical practice, Lacey WA and 1-10 match; accurate but minimal.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  },
+  {
+   "position": 86,
+   "source_output_id": "82a774d4-b529-4c16-8d33-79147c316642",
+   "source_content_hash": "99e715fe8019fed1b4645c00cbcd12129d30c87ab023ab4bd32497474b1ecf2a",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Claims a specialization and that GTMFlow 'could help streamline your outreach efforts'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Herbert E Todd",
+    "email_body": "Hi there,\n\nThe supplied company record lists Herbert E Todd as a medical practice in Lacey, Washington.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The company name is a person's name; the record may describe an individual's profile rather than an organization.",
+   "reviewed_at": "2026-09-24T04:32:54.590216+00:00"
+  }
+ ]
+}

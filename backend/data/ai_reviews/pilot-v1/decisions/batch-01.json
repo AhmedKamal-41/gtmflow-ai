@@ -1,0 +1,255 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 7,
+   "source_output_id": "524cd93c-8d07-4f0e-bf38-cfa84452d3ba",
+   "source_content_hash": "f693e338304a497b0feae852092c1b3dc8a91b8078217cc08b9128d1e9109abf",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Every statement (name, industry, US location, 1-10 size, website, LinkedIn URL) matches the record; unknowns listed; seller_relevance null.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 8,
+   "source_output_id": "ae76e91a-4382-48c2-918c-1f43c1f071f0",
+   "source_content_hash": "8dc39c0da60938a9dd2ab25f43b86f30500da8c1b15dcbcdb07c74385374b89f",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Presents the prospect's own website (landmaxrealestate.com) as GTMFlow's website, invents a specialization ('enhancing lead workflows') and benefits, leaves a '[Your Name]' placeholder, and never identifies the demonstration.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Landmax Real Estate",
+    "email_body": "Hi there,\n\nThe supplied company record lists Landmax Real Estate as a real estate company in the United States.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "misattributed_website",
+    "invented_specialization",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 9,
+   "source_output_id": "9844506d-a26b-4114-ab4b-91f06b3bb1d6",
+   "source_content_hash": "b712277caf02e80fc2acf262128ae477554b6168ef08eeedd155a4c00cb7f9b7",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Calls the company a 'healthcare consulting company', inferred from its name; the record's industry is only 'hospital & health care'. Other facts (Crofton MD, founded 2017, 11-50) are supported.",
+   "corrected_fields": {
+    "company_summary": "Elevation Health Consulting is listed in the hospital & health care industry and located in Crofton, Maryland, United States. The record gives a founding year of 2017 and a company size of 11-50 employees.",
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "inferred_from_company_name"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 10,
+   "source_output_id": "647abcff-b4e6-4edf-a56b-d2a50fcd6e09",
+   "source_content_hash": "312dd26b88df989efc7b577fb874bbc9af36148871c0055febb6bc8aa3823851",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invents 'a growing company', assumed needs ('streamline lead outreach', 'your initiatives'), a specialization claim, and a '[Your Name]' placeholder; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Elevation Health Consulting",
+    "email_body": "Hi there,\n\nThe supplied company record lists Elevation Health Consulting as a hospital and health care organization in Crofton, Maryland.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_company_detail",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 11,
+   "source_output_id": "d3a45516-1bb0-437c-b325-0f59781cef00",
+   "source_content_hash": "495e4ed823f7d313c8323580261323c01af44420cf978c19c2a83648700131a4",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate industry, Oviedo FL, founded 1998 and 1-10 ('small', as accepted in human review #3) are all in the record; seller_relevance is hedged and lists only profile capabilities.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The name ('...Foundation Inc') suggests a nonprofit while the record says real estate; the summary correctly follows the record, but the record itself may be misclassified.",
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 12,
+   "source_output_id": "438d41ef-cceb-4194-acec-d40bd4935733",
+   "source_content_hash": "62bbe56f9eb0091fbcad3b1f2cc9e94d50cade7f542e6c705f0d24dc1538afa1",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented praise ('a notable player'), 'companies like yours' need framing; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for National Development Foundation Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists National Development Foundation Inc as a real estate company in Oviedo, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "broken_signature",
+    "invented_praise",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 13,
+   "source_output_id": "b4606928-dd7b-4cf7-a9e9-56c753ef95db",
+   "source_content_hash": "b28b0b9ddee89628e4657d13b5330353851cfa7bb34824e418265f20969304b0",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "All statements match the record (name as recorded, medical practice, New York NY, 1-10); wording is stiff ('The lead is for a company named...') but accurate; evidence includes importer labels, as accepted in human review #1.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 14,
+   "source_output_id": "9418910a-3044-4613-a9c6-5ed15234cfa7",
+   "source_content_hash": "8748e246fdfd0374145f3b78325ee78a7a3b8205827b059c93404e606994d7b9",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Addresses the practice's namesake directly although no contact is on file, invents a need ('enhance your operational workflows'), and leaves '[Your Name]/[Your Position]' placeholders; it does mention the demonstration.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Josephine C. Samson, M.D.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Josephine C. Samson, M.D. as a medical practice in New York, New York.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "assumed_contact",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 15,
+   "source_output_id": "dab4c2dd-826d-4e20-b4a0-d6e002332f44",
+   "source_content_hash": "cde1152b95167b32b8645619972340517713f60512b830a49d49ef7c28c1200a",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Jenkintown PA, 1-10, founded 2012 and website all match; seller_relevance lists only profile capabilities and states it is a demonstration.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  },
+  {
+   "position": 16,
+   "source_output_id": "8f398562-63eb-44ce-aac2-88e66afcb74f",
+   "source_content_hash": "e30ba91761784af3fd5626468e6f57950863360b406498f459fda7f0d3552c03",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Founding year and small size are supported, but 'making strides', 'tailored to your needs' and 'goals and challenges' are invented; broken signature and '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Redblock Realty Inc.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Redblock Realty Inc. as a real estate company in Jenkintown, Pennsylvania.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_praise",
+    "invented_need",
+    "broken_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:28:04.084580+00:00"
+  }
+ ]
+}

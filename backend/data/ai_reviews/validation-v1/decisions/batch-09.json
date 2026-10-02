@@ -1,0 +1,142 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 72,
+   "source_output_id": "1bb2dc8c-e67f-4055-963f-67d862b41735",
+   "source_content_hash": "c28471718149fbd2a3a1b189e2cc11a758538a913aef4203bcc0cbea7693ed03",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Specialization claim, invented needs, '[Your Name]' placeholder twice and '[Your Contact Information]'; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Columbia Holdings Inc",
+    "email_body": "Hi there,\n\nThe supplied company record lists Columbia Holdings Inc as a real estate company in Kent, Washington.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:52.128227+00:00"
+  },
+  {
+   "position": 73,
+   "source_output_id": "1be96dcf-cc06-4ea1-8220-b4e434658e5d",
+   "source_content_hash": "8641cdef468dbf898ebc063f94da043a91b65f9cfa0a65aa9c046f65e5530c3e",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, hospital & health care, Lawrenceburg KY and 1-10 match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:33:52.128227+00:00"
+  },
+  {
+   "position": 74,
+   "source_output_id": "67ad7a73-4ca2-4e97-8f00-832bcb8982d8",
+   "source_content_hash": "49e6a0882b477a0cbd4273db4d39d1ec9eda170f8632b650e3570e2e29715b2f",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Specialization claim, invented goals and initiatives, vague 'our LinkedIn profile' reference, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "vague_reference",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Anderson Adult Daycare Health Program",
+    "email_body": "Hi there,\n\nThe supplied company record lists Anderson Adult Daycare Health Program as an organization in the hospital & health care category in Lawrenceburg, Kentucky.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:52.128227+00:00"
+  },
+  {
+   "position": 75,
+   "source_output_id": "e0813d91-9678-4664-b446-b91bb40c2f52",
+   "source_content_hash": "86dd856e7926328af6c7b6d5d191d90cb6e41f005c5e98b4d16a0712d058a925",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Fort Pierce FL and 1-10 ('small') match; seller_relevance describes capabilities and is hedged ('could be relevant to the real estate industry').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:33:52.128227+00:00"
+  },
+  {
+   "position": 76,
+   "source_output_id": "b7e68175-ed8f-4cfa-93cf-1db2b2cfccab",
+   "source_content_hash": "96267d9582e29c3f7d7ca219b6b0ff00f3a936f191fb26192c438eac46589f72",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invented research ('while researching companies'), specialization claim ('developing strategies and tools that help teams like yours'), invented needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_research",
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Ray's Real Estate Services, Inc.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Ray's Real Estate Services, Inc. as a real estate company in Fort Pierce, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:33:52.128227+00:00"
+  }
+ ]
+}

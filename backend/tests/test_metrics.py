@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
+from tests.conftest import approve_current_draft, review_json
+
+# These tests generate outreach, which needs an explicitly activated
+# seller revision (Phase 5). The fixture activates a synthetic one.
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 # Cascade + Northbridge -> Hot, Vault -> Cold.
 SCORED_CSV = (
@@ -29,7 +35,7 @@ def _scored_batch_setup(client: TestClient) -> tuple[str, list[dict]]:
     up = _upload(client, SCORED_CSV)
     batch_id = up["batch_id"]
     client.post(f"/api/batches/{batch_id}/score")
-    leads = client.get(f"/api/leads?batch_id={batch_id}").json()
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     return batch_id, leads
 
 
@@ -58,6 +64,27 @@ def test_metrics_empty_database_returns_zeros(client: TestClient) -> None:
         "average_lead_score": 0.0,
         "missing_data_rate": 0.0,
         "automation_coverage": 0.0,
+        "fit_scored_leads": 0,
+        "fit_strong_match": 0,
+        "fit_partial_match": 0,
+        "fit_weak_match": 0,
+        "fit_insufficient_evidence": 0,
+        # Phase 11
+        "outreach_pending_review": 0,
+        "reviewed_approval_rate": 0.0,
+        "approval_events": 0,
+        "rejection_events": 0,
+        "push_unknown_count": 0,
+        "push_pending_count": 0,
+        "real_messages_delivered": 0,
+        "mock_messages_delivered": 0,
+        "generation_by_mode": {m: {"drafts_generated": 0, "drafts_approved": 0, "drafts_rejected": 0,
+                                   "drafts_pending_review": 0, "approval_rate": 0.0}
+                               for m in ("mock", "real", "unknown")},
+        "delivery_by_mode": {m: {"attempts": 0, "delivered": 0, "unique_leads_delivered": 0, "failed": 0,
+                                 "outcome_unknown": 0, "pending": 0, "success_rate": 0.0}
+                             for m in ("mock", "real", "unknown")},
+        "data_mode": "empty",
     }
 
 
@@ -115,13 +142,21 @@ def test_metrics_counts_outreach_generated(client: TestClient) -> None:
 
 def test_metrics_approval_rate_and_counts(client: TestClient) -> None:
     _, leads = _scored_batch_setup(client)
-    for lead in leads:
-        client.post(f"/api/leads/{lead['id']}/generate-outreach")
-    client.post(f"/api/leads/{leads[0]['id']}/approve-outreach")
-    client.post(f"/api/leads/{leads[1]['id']}/approve-outreach")
+    outputs = [
+        client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
+        for lead in leads
+    ]
+    client.post(
+        f"/api/leads/{leads[0]['id']}/approve-outreach",
+        json=review_json(client, leads[0]['id'], outputs[0]["id"]),
+    )
+    client.post(
+        f"/api/leads/{leads[1]['id']}/approve-outreach",
+        json=review_json(client, leads[1]['id'], outputs[1]["id"]),
+    )
     client.post(
         f"/api/leads/{leads[2]['id']}/reject-outreach",
-        json={"reason": "Too generic"},
+        json=review_json(client, leads[2]['id'], outputs[2]["id"], reason="Too generic"),
     )
 
     body = client.get("/api/metrics/dashboard").json()
@@ -136,6 +171,7 @@ def test_metrics_push_success_rate_counts_mock_and_success(
 ) -> None:
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
+    approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
     body = client.get("/api/metrics/dashboard").json()
     assert body["leads_pushed"] == 1
@@ -147,11 +183,16 @@ def test_metrics_push_success_rate_counts_mock_and_success(
 def test_metrics_unique_leads_pushed_dedupes_repeat_pushes(
     client: TestClient,
 ) -> None:
-    """Same lead pushed twice -> leads_pushed=2, unique_leads_pushed=1."""
+    """Same lead delivered twice -> leads_pushed=2, unique_leads_pushed=1.
+    Phase 11: the second delivery is an explicit redeliver; a plain repeat
+    push is a replay and sends nothing."""
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
+    approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
-    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
+    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})  # replay
+    assert client.get("/api/metrics/dashboard").json()["leads_pushed"] == 1
+    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack", "redeliver": True})
     body = client.get("/api/metrics/dashboard").json()
     assert body["leads_pushed"] == 2
     assert body["unique_leads_pushed"] == 1
@@ -172,6 +213,7 @@ def test_metrics_failed_push_count_uses_monkeypatched_sender(
 
     _, leads = _scored_batch_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
+    approve_current_draft(client, hot['id'])  # delivery needs an applicable approval
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
 
     body = client.get("/api/metrics/dashboard").json()
@@ -179,3 +221,19 @@ def test_metrics_failed_push_count_uses_monkeypatched_sender(
     assert body["leads_pushed"] == 0
     assert body["unique_leads_pushed"] == 0
     assert body["push_success_rate"] == 0.0
+
+
+def test_fit_metrics_count_distinct_leads_not_score_rows(client: TestClient) -> None:
+    _upload(client, SCORED_CSV)
+    lead_ids = [lead["id"] for lead in client.get("/api/leads").json()["items"]]
+    for _ in range(3):  # three history rows per lead
+        for lead_id in lead_ids:
+            assert client.post(f"/api/leads/{lead_id}/fit-score").status_code == 201
+    body = client.get("/api/metrics/dashboard").json()
+    assert body["fit_scored_leads"] == len(lead_ids)
+    assert (
+        body["fit_strong_match"] + body["fit_partial_match"]
+        + body["fit_weak_match"] + body["fit_insufficient_evidence"]
+    ) == len(lead_ids)
+    # Fit scoring is not legacy scoring: v1 counters are untouched.
+    assert body["total_leads_processed"] == 0

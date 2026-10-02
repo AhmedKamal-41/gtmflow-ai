@@ -1,11 +1,24 @@
-"""Pure CSV parsing + per-row validation. No database side effects."""
+"""Pure CSV parsing + per-row validation. No database side effects.
+
+`iter_cleaned_leads` is the true streaming entry point: it reads directly
+from a text-mode file object via `csv.reader` (which itself streams lines,
+never materializing the whole file) and yields one `CleanedLead` at a time,
+so a caller can insert+commit in bounded chunks as rows are parsed, instead
+of first collecting every row into a list (Part E.1/E.3 of the Phase 3
+closeout -- see app/api/batches.py's `upload_batch`, which drives this
+generator directly against a temp file rather than an in-memory string).
+
+`parse_csv` still exists, unchanged in signature and return shape, as a
+thin wrapper for callers that want the whole result materialized (existing
+tests, and any future caller that doesn't need bounded writes).
+"""
 
 from __future__ import annotations
 
 import csv
 import io
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterator, TextIO
 
 KNOWN_COLUMNS: set[str] = {
     "company_name",
@@ -20,6 +33,12 @@ KNOWN_COLUMNS: set[str] = {
     "status",
 }
 REQUIRED_COLUMN = "company_name"
+
+# Part E defaults (docs/engineering-log's Phase 3 handoff). Enforced here (row
+# count, while parsing) and in the API layer (byte size, while reading the
+# upload) -- neither limit is trusted from a client-supplied header alone.
+DEFAULT_MAX_ROWS = 50_000
+DEFAULT_MAX_ERROR_EXAMPLES = 50
 
 
 class CSVValidationError(Exception):
@@ -58,6 +77,22 @@ class IngestionResult:
     total_rows: int
     valid_leads: list[CleanedLead] = field(default_factory=list)
     errors: list[RowError] = field(default_factory=list)
+    # Total invalid-row count, independent of how many RowError *examples*
+    # were kept in `errors` (bounded by max_error_examples) -- a file with
+    # thousands of bad rows still reports an accurate total, not just the
+    # size of the truncated example list.
+    total_error_count: int = 0
+
+
+@dataclass
+class StreamParseStats:
+    """Mutated in place by `iter_cleaned_leads` as it streams -- read this
+    after fully consuming the generator (or after it raises) to get
+    row/error counts without needing the generator to also "return" them."""
+
+    total_rows: int = 0
+    total_error_count: int = 0
+    error_examples: list[RowError] = field(default_factory=list)
 
 
 def _normalize_header(name: str) -> str:
@@ -75,33 +110,52 @@ def _is_blank_row(row: list[str]) -> bool:
     return not row or all(not (cell or "").strip() for cell in row)
 
 
-def parse_csv(raw_text: str) -> IngestionResult:
-    """Parse a CSV string into cleaned leads + per-row errors.
+def iter_cleaned_leads(
+    file_obj: TextIO,
+    *,
+    max_rows: int | None = DEFAULT_MAX_ROWS,
+    max_error_examples: int = DEFAULT_MAX_ERROR_EXAMPLES,
+    stats: StreamParseStats | None = None,
+) -> Iterator[CleanedLead]:
+    """True streaming parse: reads directly from `file_obj` (text mode) via
+    `csv.reader`, which streams lines itself -- never materializes the
+    whole file or the whole row list. Yields one valid `CleanedLead` at a
+    time; invalid rows are counted into `stats` and skipped, not yielded.
 
-    Raises:
-        CSVValidationError: empty file, blank header, or missing required column.
+    Raises immediately (before yielding anything) for an empty file, blank
+    header, or missing required column; raises mid-stream if `max_rows` is
+    exceeded -- in both cases the caller sees a clean `CSVValidationError`,
+    never a silently truncated result.
     """
-    reader = csv.reader(io.StringIO(raw_text))
-    rows = list(reader)
-    if not rows or _is_blank_row(rows[0]):
+    if stats is None:
+        stats = StreamParseStats()
+
+    reader = csv.reader(file_obj)
+    try:
+        header_row = next(reader)
+    except StopIteration:
+        raise CSVValidationError("CSV file is empty.") from None
+    if _is_blank_row(header_row):
         raise CSVValidationError("CSV file is empty.")
 
-    header = [_normalize_header(c) for c in rows[0]]
+    header = [_normalize_header(c) for c in header_row]
     if REQUIRED_COLUMN not in header:
         raise CSVValidationError(
             f"Required column '{REQUIRED_COLUMN}' is missing.",
             field_name=REQUIRED_COLUMN,
         )
 
-    valid: list[CleanedLead] = []
-    errors: list[RowError] = []
-    total_data_rows = 0
-
-    for offset, row in enumerate(rows[1:]):
+    for offset, row in enumerate(reader):
         row_number = offset + 2  # header was line 1
         if _is_blank_row(row):
             continue
-        total_data_rows += 1
+        stats.total_rows += 1
+        if max_rows is not None and stats.total_rows > max_rows:
+            raise CSVValidationError(
+                f"CSV has more than {max_rows} data rows. Split it into "
+                "smaller files, or use the PDL curation CLI for bulk "
+                "imports (see backend/app/pdl/cli.py)."
+            )
 
         cells = list(row) + [""] * (len(header) - len(row))
         mapped = dict(zip(header, cells))
@@ -109,13 +163,15 @@ def parse_csv(raw_text: str) -> IngestionResult:
 
         company_name = cleaned.get(REQUIRED_COLUMN)
         if not company_name:
-            errors.append(
-                RowError(
-                    row_number=row_number,
-                    field=REQUIRED_COLUMN,
-                    message="company_name is required",
+            stats.total_error_count += 1
+            if len(stats.error_examples) < max_error_examples:
+                stats.error_examples.append(
+                    RowError(
+                        row_number=row_number,
+                        field=REQUIRED_COLUMN,
+                        message="company_name is required",
+                    )
                 )
-            )
             continue
 
         extras = {
@@ -125,24 +181,49 @@ def parse_csv(raw_text: str) -> IngestionResult:
         }
         cleaned_data: dict[str, Any] | None = extras or None
 
-        valid.append(
-            CleanedLead(
-                company_name=company_name,
-                website=cleaned.get("website"),
-                industry=cleaned.get("industry"),
-                contact_name=cleaned.get("contact_name"),
-                contact_email=cleaned.get("contact_email"),
-                contact_title=cleaned.get("contact_title"),
-                company_size=cleaned.get("company_size"),
-                location=cleaned.get("location"),
-                source=cleaned.get("source"),
-                status=cleaned.get("status"),
-                cleaned_data=cleaned_data,
-            )
+        yield CleanedLead(
+            company_name=company_name,
+            website=cleaned.get("website"),
+            industry=cleaned.get("industry"),
+            contact_name=cleaned.get("contact_name"),
+            contact_email=cleaned.get("contact_email"),
+            contact_title=cleaned.get("contact_title"),
+            company_size=cleaned.get("company_size"),
+            location=cleaned.get("location"),
+            source=cleaned.get("source"),
+            status=cleaned.get("status"),
+            cleaned_data=cleaned_data,
         )
 
+
+def parse_csv(
+    raw_text: str,
+    *,
+    max_rows: int | None = DEFAULT_MAX_ROWS,
+    max_error_examples: int = DEFAULT_MAX_ERROR_EXAMPLES,
+) -> IngestionResult:
+    """Whole-result convenience wrapper around `iter_cleaned_leads`, for
+    callers that want everything materialized at once (existing tests; any
+    caller not doing bounded/chunked writes). Same signature and return
+    shape as before this function was reimplemented on top of the streaming
+    generator.
+
+    Raises:
+        CSVValidationError: empty file, blank header, missing required
+            column, or more data rows than `max_rows`.
+    """
+    stats = StreamParseStats()
+    valid = list(
+        iter_cleaned_leads(
+            io.StringIO(raw_text),
+            max_rows=max_rows,
+            max_error_examples=max_error_examples,
+            stats=stats,
+        )
+    )
     return IngestionResult(
-        total_rows=total_data_rows,
+        total_rows=stats.total_rows,
         valid_leads=valid,
-        errors=errors,
+        errors=stats.error_examples,
+        total_error_count=stats.total_error_count,
     )

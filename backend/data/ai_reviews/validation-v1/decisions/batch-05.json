@@ -1,0 +1,291 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 44,
+   "source_output_id": "e2f1af2b-15a6-403b-8c83-31abe0d9fed1",
+   "source_content_hash": "2ca349aba4f6d186e861699bc8d5be9dcb839b8d1f959b3ea148ddda5dbd53b2",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invents a need ('might be exploring solutions to streamline your outreach strategies') and challenges, specialization claim, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_need",
+    "invented_specialization",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for BMN Real Estate and Referral Services",
+    "email_body": "Hi there,\n\nThe supplied company record lists BMN Real Estate and Referral Services as a real estate company in Scottsdale, Arizona.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 45,
+   "source_output_id": "c434a684-4ffb-428c-9189-e7a57ef319b2",
+   "source_content_hash": "7f8abf82278732a2f896c81e0f222a018b4a460a8b68c1dc6604a684609192ee",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, medical practice, Fort Lauderdale FL and 1-10 match; seller_relevance describes capabilities and says no commercial offer corresponds to this lead. Stiff.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 46,
+   "source_output_id": "a375036c-5739-4656-93d7-83e011ee6b10",
+   "source_content_hash": "378e33254c31d9f051e5915033a1c25ee9322a9cfe7eb0d4befc14f1ef536438",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Specialization claim ('based on detailed insights'), invented alignment with 'your needs', asks about their lead generation, '[Your Name]' placeholder twice; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Zachariah P Zachariah MDPA",
+    "email_body": "Hi there,\n\nThe supplied company record lists Zachariah P Zachariah MDPA as a medical practice in Fort Lauderdale, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 47,
+   "source_output_id": "7d51e492-ae82-4795-8224-aa3fd52ea63c",
+   "source_content_hash": "7f4991bb765232b46e23eb7fcd7e8cb2f8d721fc0a58dcf147da74a2144cac16",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Beltsville MD and 1-10 ('small') match; seller_relevance is hedged and notes there are no claims.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "'Our Parish Time' reads like a parish or church publication but is recorded as a real estate company; outputs follow the record, but the classification may be wrong.",
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 48,
+   "source_output_id": "4f02298e-3efe-4b88-b7bc-996243b4025a",
+   "source_content_hash": "8b98b572e284c3ce10c8c48fe4ab3bffcc8761d5f05cb247353a26f6e8df33bc",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Overstates the record ('specializing in the real estate sector'), invents challenges and needs; mentions a 'workflow demonstration' but not that it is not a commercial offer; '[Your Name]' placeholder.",
+   "issues": [
+    "overstated_specialization",
+    "invented_need",
+    "incomplete_demo_label",
+    "placeholder_signature"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Our Parish Time' reads like a parish or church publication but is recorded as a real estate company; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Our Parish Time",
+    "email_body": "Hi there,\n\nThe supplied company record lists Our Parish Time as a real estate company in Beltsville, Maryland.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 49,
+   "source_output_id": "1646f4de-50ee-4fb5-b053-c5eb55b17ef4",
+   "source_content_hash": "98121ad7a378648481c8bc0029e1876eeb3f6f1b01ebe3079d16d27e8ceb8ae8",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Every statement follows the record (name, website, hospital & health care, founded 2011, 1-10, 'Maryland, Illinois'); 'healthcare organization' is a fair reading; no speculation.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The institute's website is on uchicago.edu while the location is recorded as 'Maryland, Illinois', which looks garbled; a university institute is also recorded as a 1-10 company. The record may be inaccurate.",
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 50,
+   "source_output_id": "7a89ebf1-1e3b-4453-9be9-15c8ec10f1dc",
+   "source_content_hash": "5e329c5a56b42e46b54746d6d11f76e21ec46a15142bfe442214843dc3e2f529",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invented alignment 'with your mission', specialization claim, invented initiatives; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_fit",
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The institute's website is on uchicago.edu while the location is recorded as 'Maryland, Illinois', which looks garbled; a university institute is also recorded as a 1-10 company. The record may be inaccurate.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for The Bucksbaum Institute for Clinical Excellence",
+    "email_body": "Hi there,\n\nThe supplied company record lists The Bucksbaum Institute for Clinical Excellence as an organization in the hospital & health care category in Maryland, Illinois.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 51,
+   "source_output_id": "2188cdef-4df9-471f-ac65-5e09f2c12b9f",
+   "source_content_hash": "78f13776c52a227f2bb559507c44ef2f98095d4a4ed78ca6ecfc922e94ba14cc",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, real estate, Omaha NE and 1-10 ('small') match; seller_relevance lists capabilities and is hedged ('may be relevant'). Stiff.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 52,
+   "source_output_id": "8138a58f-2466-427b-af33-b33309ee6971",
+   "source_content_hash": "851ef579a6c54d77bdd898779d203cc1b127047a840e902dae9b89d2f73ddd6f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Specialization claim ('tailored to businesses like yours ... particularly in areas such as Omaha'), invented benefit ('improve efficiency'); no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_specialization",
+    "invented_fit",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Cbshome Real Estate Relocation Services",
+    "email_body": "Hi there,\n\nThe supplied company record lists Cbshome Real Estate Relocation Services as a real estate company in Omaha, Nebraska.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 53,
+   "source_output_id": "93148e99-820f-4f92-af3f-f9b60ff34fcd",
+   "source_content_hash": "3452aef02299f6698bd3a420de59d0861fa961d9229b6e68d272bb52ed499918",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Record facts are correct, but seller_relevance asserts the demonstration 'is relevant'.",
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  },
+  {
+   "position": 54,
+   "source_output_id": "87675020-b427-447a-81c8-8dc11196109e",
+   "source_content_hash": "bf82e6430e6d465f75b42b500da06d8135eeb162db272b634e2822e152931d0f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Invents interest and challenges ('could be of interest to you', 'challenges you might be facing'), claims to streamline their outreach; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_need",
+    "invented_fit",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Juanita's Home Health, LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Juanita's Home Health, LLC as a company in the hospital & health care category in Brooklyn Park, Minnesota.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:32:50.475369+00:00"
+  }
+ ]
+}

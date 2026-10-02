@@ -1,0 +1,264 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 87,
+   "source_output_id": "adeb7240-a9a4-4b9f-9ea7-847a1e32033a",
+   "source_content_hash": "9fbd36a2024a3a5702ee761fc62c6901d3fbd77707b5d72063d144c391e9e9e2",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Facts are supported, but seller_relevance states flatly that GTMFlow 'is relevant' and 'could be beneficial'.",
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 88,
+   "source_output_id": "695e52aa-46de-429b-a9f0-dfc304d3d30d",
+   "source_content_hash": "b857bf0651732f944e0d75cc7980c29e482ac7dd524e61e5174cbd5104abec8d",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invents research ('while researching real estate entities in Bixby'), asserts the company 'could benefit' from tools to streamline operations, claims a specialization, '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for MG Property LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists MG Property LLC as a real estate company in Bixby, Oklahoma.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_research",
+    "invented_need",
+    "invented_specialization",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 89,
+   "source_output_id": "2bca6ae1-7b1e-4470-9f81-4207f952c61b",
+   "source_content_hash": "d818de6024a83d5fe23a1b4be533e2a7ecd5e70f10cf18e206e916bd66f936a0",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Says the named person 'operates a medical practice', an inference from the company name (the record lists a company in the medical practice industry); seller_relevance is muddled ('relevant to the lead's capabilities').",
+   "corrected_fields": {
+    "company_summary": "Alisa Nowik Stern, Psy.D is listed in the medical practice industry and located in Mountain View, California, United States, with a company size of 1-10 employees. The record lists the website dralisa.com and the LinkedIn page linkedin.com/company/alisa-nowik-stern-psy.d, and the healthcare segment.",
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "inferred_from_company_name",
+    "muddled_relevance"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 90,
+   "source_output_id": "97198504-434c-4a49-a1b3-5e87457c8666",
+   "source_content_hash": "30b565484fce291c54922f713b57f9d6dc26dffe9a8fc16caf16d23170c5823b",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Addresses 'Dr. Nowik Stern' personally although no contact is on file, and claims to enhance the practice's efficiency; mentions a demonstration workflow but not that it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Alisa Nowik Stern, Psy.D",
+    "email_body": "Hi there,\n\nThe supplied company record lists Alisa Nowik Stern, Psy.D as a medical practice in Mountain View, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "assumed_contact",
+    "invented_need",
+    "placeholder_signature",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 91,
+   "source_output_id": "54f2f96e-ac4f-44a1-bb0b-4c9a1c4a0427",
+   "source_content_hash": "c90eb2f1491a6c42144088f7bc29d46c5c4cc46788972b7e8429a1c6db896981",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Davidson NC and 1-10 match the record; no speculation.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "A company named 'Piedmont Securities' is recorded as real estate; outputs follow the record, but the classification may be wrong.",
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 92,
+   "source_output_id": "0032c438-dfd8-4212-a26a-39ee4d29c0f2",
+   "source_content_hash": "518f815c3554ff752596969d42aad247c7800de6a0a73ff26acc5956a302ffc2",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Record facts are right, but it claims a specialization and asks about 'current needs'; '[Your Name]'; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Piedmont Securities LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Piedmont Securities LLC as a real estate company in Davidson, North Carolina.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A company named 'Piedmont Securities' is recorded as real estate; outputs follow the record, but the classification may be wrong.",
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 93,
+   "source_output_id": "20a755e9-47a4-4f57-98e6-1a791e8622da",
+   "source_content_hash": "a9d3add55ec0fd26b27facc51660c3174b2fc1589c6b9390ea5efdb28e6677ce",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, medical practice, Havre de Grace MD and 1-10 match; seller_relevance is hedged ('could be relevant') and lists only profile capabilities.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 94,
+   "source_output_id": "0963cf55-b544-4afd-9e10-189301924431",
+   "source_content_hash": "d97042cf2b5ad35d83d7f111134dd0984341c50aa1adac5f1645afaa0e2cbdd2",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invents an 'interesting fit' from practice size and a 'focus on healthcare', and describes a capability GTMFlow does not list ('helps healthcare teams evaluate lead workflows'); mentions a demonstration platform but not that it is not a commercial offer.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for John E Lufburrow, DDS",
+    "email_body": "Hi there,\n\nThe supplied company record lists John E Lufburrow, DDS as a medical practice in Havre de Grace, Maryland.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_fit",
+    "unlisted_capability",
+    "placeholder_signature",
+    "incomplete_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 95,
+   "source_output_id": "8a433195-f484-44b2-b44f-cbdfb232547d",
+   "source_content_hash": "cb55d71e65811c7a9d3910c81b3415eaf81faab3102879265b3be79cbf055420",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, 1-10 ('small'), Old Tappan NJ, real estate and the recorded website match; no speculation.",
+   "issues": [],
+   "uncertain": true,
+   "uncertainty_reason": "The website (hardmoneycentral.com) does not match the company name; it may belong to a related brand or a different company.",
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  },
+  {
+   "position": 96,
+   "source_output_id": "5d69f95c-5b18-4052-a130-999d593b1bbc",
+   "source_content_hash": "21951330cba6d66956e8822593d2e53bf3bbc7ebb235d8fa242759b06a39fb2a",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Presents the prospect's website as GTMFlow's ('check us out further at hardmoneycentral.com'), claims a specialization, has no greeting structure or signature; no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Clark Capital Group, LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Clark Capital Group, LLC as a real estate company in Old Tappan, New Jersey.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "misattributed_website",
+    "invented_specialization",
+    "missing_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The website (hardmoneycentral.com) does not match the company name; it may belong to a related brand or a different company.",
+   "reviewed_at": "2026-09-24T04:33:41.137783+00:00"
+  }
+ ]
+}

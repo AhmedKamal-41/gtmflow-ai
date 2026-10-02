@@ -1,0 +1,109 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "reviews": [
+  {
+   "position": 97,
+   "source_output_id": "41a731ae-b3b7-4d5a-b9de-89799da745fe",
+   "source_content_hash": "5f2bf81049d47663f436e0775bf1e76fcc833ba4be9323435617acc71cc13dcd",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Facts follow the record, but seller_relevance states flatly that GTMFlow 'is relevant' and 'can support efforts related to the lead'.",
+   "corrected_fields": {
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "issues": [
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Statewide Properties LLC' is recorded under 'hospital & health care'; outputs follow the record, but the classification looks wrong.",
+   "reviewed_at": "2026-09-24T04:34:06.148638+00:00"
+  },
+  {
+   "position": 98,
+   "source_output_id": "b8c4ab1c-1f0a-4591-b9f8-628dfdb12513",
+   "source_content_hash": "5c906e8368fa0d7f8dd27ec19c87db84ff938c62c66753bafbccac599b281f48",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Calls the rubric 'reliable' (an unsupported quality claim) and promises outreach 'tailored to your specific needs'; says 'portfolio demonstration' but not that it is not a commercial offer; '[Your Name]'.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Statewide Properties LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Statewide Properties LLC as a company in the hospital & health care category in Ocala, Florida.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "unsupported_quality_claim",
+    "invented_need",
+    "placeholder_signature",
+    "incomplete_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "'Statewide Properties LLC' is recorded under 'hospital & health care'; outputs follow the record, but the classification looks wrong.",
+   "reviewed_at": "2026-09-24T04:34:06.148638+00:00"
+  },
+  {
+   "position": 99,
+   "source_output_id": "afb9c251-f849-46ab-b64a-5801e5233f05",
+   "source_content_hash": "d5d85777705e59732b6997dd5b1aef21179743067ba713190f04c898a85e574f",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, Chicago IL, real estate, 11-50, website and LinkedIn match; seller_relevance is hedged ('may relate to') and capability-side.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:34:06.148638+00:00"
+  },
+  {
+   "position": 100,
+   "source_output_id": "82946816-4cb3-4ad0-aa4d-bc849c464828",
+   "source_content_hash": "7df7e2368348df0ad0b09484a05bf7760d13d5a48c6c535f43934d50fef4405b",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Claims a specialization and that GTMFlow 'could streamline your lead generation processes and improve engagement' (invented need and result); no demonstration label.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for 555 Cornelia Condominium",
+    "email_body": "Hi there,\n\nThe supplied company record lists 555 Cornelia Condominium as a real estate organization in Chicago, Illinois.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "invented_result",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T04:34:06.148638+00:00"
+  }
+ ]
+}

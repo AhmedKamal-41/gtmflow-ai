@@ -1,0 +1,96 @@
+{
+  "run_name": "phase9-eval-v1",
+  "seed": 20260925,
+  "base_model": {
+    "repo": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "license": "apache-2.0",
+    "dtype": "bfloat16",
+    "attn_implementation": "sdpa",
+    "cache_dir": "../.cache/hf"
+  },
+  "adapter": {
+    "name": "phase8-qwen3-4b-lora-v1 epoch 3 (selected on validation loss)",
+    "dir": "../runs/phase8-qwen3-4b-lora-v1/train/best_adapter",
+    "sha256": {
+      "adapter_config.json": "be32e5f23839a0f8e875e7855fd5997bd9aee7d87ae1c5c037d4487c2cfcb799",
+      "adapter_model.safetensors": "a68ff056511a59f1de9e85b36696609060bac802b7c7ba95cb21c245536caf09"
+    },
+    "source_run_manifest": "training/runs/phase8-qwen3-4b-lora-v1/train/run-manifest.json"
+  },
+  "systems": {
+    "qwen3-4b-base": "pinned base model, adapter disabled",
+    "qwen3-4b-lora-v1": "pinned base model + phase8 epoch-3 LoRA adapter"
+  },
+  "inputs": {
+    "validation-eligible": {
+      "path": "../runs/phase9-eval-inputs/validation-eligible.jsonl",
+      "sha256": "848e31bd5b3372db24af17aef4864a09015c741fafe7d81f74fe328d5e3ac799"
+    },
+    "validation-flagged": {
+      "path": "../runs/phase9-eval-inputs/validation-flagged.jsonl",
+      "sha256": "afd8bfb95d1ab3b0cc1d11941c79dce99463042ea91997edf290bc416068b21b"
+    },
+    "test-eligible": {
+      "path": "../runs/phase9-eval-inputs/test-eligible.jsonl",
+      "sha256": "629ebb43f47e9b508016297d5691f1c95e2cf9f440fda8e3f019d164cac4cdad"
+    },
+    "test-flagged": {
+      "path": "../runs/phase9-eval-inputs/test-flagged.jsonl",
+      "sha256": "e8e8b420d2c9362718f2b9409553dacc7216dd1d7162fc4941dc4f881996bc98"
+    }
+  },
+  "pass_order": [
+    "validation-eligible",
+    "validation-flagged",
+    "test-eligible",
+    "test-flagged"
+  ],
+  "generation": {
+    "decoding": "greedy (do_sample=false, num_beams=1); no repetition penalty; identical for both systems",
+    "max_new_tokens": 1024,
+    "max_new_tokens_basis": "validation-v1 reference/gpt-4o-mini outputs are at most 404 tokens (2.5x headroom); an output that hits the limit is reported as truncated, not dropped",
+    "batch_size": 8,
+    "batch_order": "ascending prompt length, then example_id; same batches for both systems",
+    "padding_side": "left",
+    "stop": "tokenizer eos ids from the pinned generation_config (<|im_end|>, <|endoftext|>)"
+  },
+  "validation_gate": {
+    "applies_before": "test-eligible",
+    "uses": "validation-eligible generations only (no references needed)",
+    "max_lora_truncated_rate": 0.1,
+    "max_empty_rate": 0.1,
+    "on_failure": "stop before any test generation and report; nothing is tuned"
+  },
+  "smoke": {
+    "examples": 4,
+    "max_new_tokens": 6,
+    "batch_size": 2,
+    "tiny_model": {
+      "hidden_size": 32,
+      "intermediate_size": 64,
+      "num_hidden_layers": 2,
+      "num_attention_heads": 4,
+      "num_key_value_heads": 2,
+      "head_dim": 8
+    },
+    "lora": {
+      "r": 4,
+      "alpha": 8,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    }
+  },
+  "hardware": {
+    "recommended": "1x NVIDIA L4 24 GB (bf16)",
+    "min_gpu_memory_gib": 20
+  },
+  "output_dir": "../runs/phase9-eval-v1"
+}

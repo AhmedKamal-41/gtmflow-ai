@@ -71,11 +71,32 @@ curl -X POST .../api/batches/{id}/push-hot \
 # -> pushed 2, skipped 0
 ```
 
-The single-lead endpoint has no skip rule (always pushes when the gates pass), but uses the same `force` flag to allow non-Hot leads through.
+The single-lead endpoint uses `force` only to let non-Hot leads through.
 
-### Why no retries
+### Delivery ledger and guarantees (Phase 11)
 
-A 5xx from Slack persists a `failed` row and the API returns 200 with `status: "failed"` in the body. The caller can re-POST (optionally with `force=true`) to retry. Real ops would want exponential-backoff + idempotency keys; out of MVP scope.
+Every Slack dispatch (single-lead route, batch route, `push_hot` background job, demo) goes through `deliver_lead_to_slack` in `backend/app/services/integration_push.py`. The delivery rules come first and are unchanged: blocked lead statuses, incomplete imports, and a current approval of the exact draft.
+
+1. **Ledger lookup** for the approved draft (its output id and content hash):
+   - already delivered → the existing row is returned with `replay: true`, and **nothing is sent**;
+   - a claim is in progress → 409, nothing is sent;
+   - the last outcome is unknown → 409, nothing is sent until an operator resolves it;
+   - the last attempt definitely failed → a new attempt may be made by a new request.
+2. **Claim:** a row with status `pending` and a unique `delivery_key` (`slack:<output id>:<content hash>:<attempt>`) is inserted and **committed before any byte is sent**. Two API requests, workers or restarted jobs racing for the same attempt hit the unique key; only one claims it, and the others send nothing.
+3. **Send**, then record the outcome with a conditional update: `success`, `mock_success`, `failed` (definitely not delivered: Slack answered 4xx/5xx, or no connection was ever made) or `unknown` (a timeout or dropped connection after the request may have left).
+4. **A claim with no outcome after 120 s** (its holder died mid-send) becomes `unknown`. It is never silently resent.
+
+**Resolving an unknown outcome:** `POST /api/pushes/{id}/resolve` with `confirmed_delivered` or `confirmed_not_delivered`, after an operator checks the channel. This is recorded as an audit event, and nothing is sent. Only `confirmed_not_delivered` (which becomes `failed`) allows a new attempt. The lead page offers both buttons.
+
+**Deliberate re-sends:** a repeat push is a replay. A second delivery of an already delivered draft needs `redeliver: true` on the single-lead route, or `force: true` on the batch route and the `push_hot` job (their existing meaning). It is serialized through the same unique key, so concurrent re-sends still produce one message per attempt.
+
+**Guarantees, stated precisely:**
+
+- **At most one send per claimed attempt**, across concurrent requests, workers and restarts. This is verified on PostgreSQL with 8 concurrent requests, and with API requests racing two workers.
+- **No automatic resend.** Nothing retries a delivery by itself. An `unknown` outcome blocks further sends of that draft until resolved.
+- **Not exactly-once.** Slack incoming webhooks accept no idempotency key, so a message whose outcome was `unknown` may still have arrived. If an operator resolves it as not delivered by mistake, the next attempt can duplicate it; if they resolve it as delivered by mistake, it can be lost. The ledger makes the situation visible and never guesses.
+- A new or edited, and newly approved, draft is a separate delivery.
+- Rows created before Phase 11 have no ledger fields and are not deduplicated retroactively.
 
 ### Why `text` and not Block Kit
 

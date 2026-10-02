@@ -76,13 +76,20 @@ def build_slack_payload(
     return {"text": "\n".join(lines)}
 
 
+# Errors raised before any byte of the request could reach Slack.
+NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout, httpx.UnsupportedProtocol)
+
+
 def send_slack_payload(
     webhook_url: str | None,
     payload: dict[str, Any],
 ) -> tuple[str, str]:
     """POST the payload; return ``(status, response_text)``.
 
-    status is one of: ``"success"``, ``"mock_success"``, ``"failed"``.
+    status is one of: ``"success"``, ``"mock_success"``, ``"failed"``
+    (definitely NOT delivered) or ``"unknown"`` (Phase 11: the request may
+    have reached Slack, e.g. a read timeout or a dropped connection after
+    sending -- the caller must not resend it automatically).
 
     Mock mode (no webhook URL configured) returns immediately without any
     network call so demos and tests work out of the box.
@@ -96,9 +103,17 @@ def send_slack_payload(
             json=payload,
             timeout=SLACK_TIMEOUT_SECONDS,
         )
-    except httpx.HTTPError:
-        # Do not forward exception text: it may embed the webhook URL.
+    except NOT_SENT_ERRORS:
+        # No connection was made, so nothing reached Slack. Do not forward
+        # exception text: it may embed the webhook URL.
         return "failed", "HTTP error: could not deliver message to Slack webhook."
+    except httpx.HTTPError as error:
+        # The request may have been sent (timeout while waiting, connection
+        # dropped): the outcome cannot be known from here.
+        return "unknown", (
+            f"Delivery outcome unknown ({type(error).__name__}): the request may have "
+            "reached Slack. Not resent automatically."
+        )
 
     if response.status_code >= 400:
         body = (response.text or "").strip()[:200]

@@ -1,0 +1,176 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 1,
+   "source_output_id": "ae63e7ed-7c3d-43c2-9a48-abbf3b3519b6",
+   "source_content_hash": "bb23f36cf73e68a48a869a1f353f449f39cacf1450f4fec928d78539dd687fd0",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported and seller_relevance is hedged ('may align'), but both hypotheses invent needs or interest (labeled unconfirmed).",
+   "issues": [
+    "invented_need_hypothesis",
+    "invented_interest_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  },
+  {
+   "position": 2,
+   "source_output_id": "83bddfc6-a164-420f-a40b-a957a7759741",
+   "source_content_hash": "1c1dc94e5e5131952789e4caea947deae24eae64d88c37fe7c411b34c3eb6f14",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invented 'synergies' and growth need ('support your growth'), '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Eric M Deutchman, D.P.M.",
+    "email_body": "Hi there,\n\nThe supplied company record lists Eric M Deutchman, D.P.M. as a medical practice in Linden, New Jersey.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  },
+  {
+   "position": 3,
+   "source_output_id": "833e12fc-9ed9-44ec-a96d-cea87afe8642",
+   "source_content_hash": "55243c54e9f8a63aa91fcb6225ec84912fc14a7044223cd97b86bdab72d8e948",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Chester MA, founded 2012, 1-10 and LinkedIn match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  },
+  {
+   "position": 4,
+   "source_output_id": "df990151-c758-4f8e-a06e-5341b4552048",
+   "source_content_hash": "62fffcea7a7c018d59f69e99bae3e33833c8ac912151d411d5eb4b7ed896dd2f",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Invented specialization ('services tailored for real estate professionals like Harvest Moon Realty'), invented goals and needs, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Harvest Moon Realty",
+    "email_body": "Hi there,\n\nThe supplied company record lists Harvest Moon Realty as a real estate company in Chester, Massachusetts.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  },
+  {
+   "position": 5,
+   "source_output_id": "e78a4c0e-33fb-42f4-a013-213555790856",
+   "source_content_hash": "4ce89c38a3ef4369d5631a3006e59735f82606d32e3184852757a0fa3c6076ad",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, website, hospital & health care ('healthcare company' is a fair reading), Richmond VA, 201-500 and founded 2015 match; seller_relevance only lists capabilities.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  },
+  {
+   "position": 6,
+   "source_output_id": "8a9e655a-945a-4567-a2c0-10db67c98538",
+   "source_content_hash": "aced134596f4ca71596fbbf50d4b992c62ce23bd4ceab4c98c4fabbd2065d869",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Invented specialization, invented growth focus and 'synergies', invented initiatives, '[Your Name]' placeholder; no demonstration label.",
+   "issues": [
+    "invented_specialization",
+    "invented_activity",
+    "invented_fit",
+    "invented_need",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Envera Health",
+    "email_body": "Hi there,\n\nThe supplied company record lists Envera Health as a company in the hospital & health care category in Richmond, Virginia.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  },
+  {
+   "position": 7,
+   "source_output_id": "a49b30f6-e9f9-49b3-969d-1c26045fa60f",
+   "source_content_hash": "3d1be5718f9ae934ddcec078a3ff89f30a4e25a1da72fee0804ab69aa22e9409",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name, website, real estate, Los Angeles CA, 1-10 and LinkedIn match; seller_relevance only lists capabilities. Stiff opening ('The lead record identifies').",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:30:06.163959+00:00"
+  }
+ ]
+}

@@ -1,0 +1,91 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "test-v1",
+ "reviews": [
+  {
+   "position": 84,
+   "source_output_id": "dd37f729-dc3a-46b6-9186-d3f8a8a3a65e",
+   "source_content_hash": "cd5a2e73e9703ed9df3cfc054f7538c28742a9013bc327ac60468c55e7d84ec3",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Specialization claim ('drafting outreach strategies tailored to company profiles like yours'), invented initiatives; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_specialization",
+    "invented_need",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Southern Iowa Real Estate",
+    "email_body": "Hi there,\n\nThe supplied company record lists Southern Iowa Real Estate as a real estate company in Ottumwa, Iowa.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:28:56.355877+00:00"
+  },
+  {
+   "position": 86,
+   "source_output_id": "c89e0127-5885-4340-9ad7-819b2d88192f",
+   "source_content_hash": "45bc9e3a658e4bdfa8630f4faa4b8eeccd97aaf7e8122af28ca1aea8e4cb7b58",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), invented fit ('innovative capabilities that may be relevant to your operations'), specialization claim, '[Your Name]'/'[Your Position]' placeholders; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_fit",
+    "invented_specialization",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Advance Gastroenterology",
+    "email_body": "Hi there,\n\nThe supplied company record lists Advance Gastroenterology as a medical practice in Union City, Tennessee.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:28:56.355877+00:00"
+  },
+  {
+   "position": 87,
+   "source_output_id": "f2d4e835-dd27-457b-b355-3c1b9b0b9e7d",
+   "source_content_hash": "0e216ca8f2bc7432bbd0083b368187ebd636388f780bb270865fde94a1af5066",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 4,
+   "missing_info_handling": "good",
+   "reason": "Name, real estate, Chicago IL, founded 2017 and 1-10 ('small') match; no speculation.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:28:56.355877+00:00"
+  }
+ ]
+}

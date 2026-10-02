@@ -10,6 +10,11 @@ class AIJSONParseError(ValueError):
     """Raised when an AI response cannot be parsed as a JSON object."""
 
 
+class AIOutputTruncated(AIJSONParseError):
+    """The provider stopped at its token limit: the reply is incomplete and
+    is rejected, never repaired (reason code `truncated_output`)."""
+
+
 def parse_json_strict(text: str) -> dict[str, Any]:
     """Parse the given text as a JSON object.
 

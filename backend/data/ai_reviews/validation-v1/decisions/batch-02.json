@@ -1,0 +1,113 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 8,
+   "source_output_id": "1a61a3f1-6c7a-4f85-a977-a64632370321",
+   "source_content_hash": "99c13431384961873688c1f7149910438e6ff28b7aba132de7f42a975d034958",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 2,
+   "missing_info_handling": "acceptable",
+   "reason": "Mentions a 'demonstration workflow' but not that it is not a commercial offer; invented fit and 'business needs'; vague 'our website' reference.",
+   "issues": [
+    "incomplete_demo_label",
+    "invented_fit",
+    "invented_need",
+    "vague_reference"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for DLB & Associates Appraisers",
+    "email_body": "Hi there,\n\nThe supplied company record lists DLB & Associates Appraisers as a real estate company in Los Angeles, California.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:30:18.486171+00:00"
+  },
+  {
+   "position": 9,
+   "source_output_id": "d9c35938-ae9d-45b0-b36c-6600bf4b9957",
+   "source_content_hash": "f42da8556af5685d3ef8555ffd1b7ce3a539ae85e813532674037291ba738165",
+   "decision": "accepted",
+   "factual_support": "supported",
+   "writing_quality": 3,
+   "missing_info_handling": "good",
+   "reason": "Name as recorded, website, hospital & health care, Menasha WI and 51-200 match; seller_relevance describes capabilities and says it is not a commercial offer.",
+   "issues": [],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "reviewed_at": "2026-09-24T05:30:18.486171+00:00"
+  },
+  {
+   "position": 10,
+   "source_output_id": "a772aacf-bd83-48a7-9188-45096d5456bb",
+   "source_content_hash": "c597d4f7f29f29a33cb9978ac24cd14595fcef969cb5aee25705b45c782149bf",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 2,
+   "missing_info_handling": "poor",
+   "reason": "Broken signature ('My name is from GTMFlow'), specialization claim, invented praise ('your strong position'), invented need, vague website reference, three signature placeholders; no demonstration label.",
+   "issues": [
+    "broken_signature",
+    "invented_specialization",
+    "invented_praise",
+    "invented_need",
+    "vague_reference",
+    "placeholder_signature",
+    "missing_demo_label"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for RLJ Dental",
+    "email_body": "Hi there,\n\nThe supplied company record lists RLJ Dental as a company in the hospital & health care category in Menasha, Wisconsin.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:30:18.486171+00:00"
+  },
+  {
+   "position": 11,
+   "source_output_id": "011aabfb-4040-4f62-994b-08fa15ce99d1",
+   "source_content_hash": "71fe4aa4ff526cc8d05307b5f6f50b05dac7559ba4d73b0d59ab29cfc40f7a3a",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents a need ('may be looking for B2B solutions'), even though labeled unconfirmed.",
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "The LinkedIn slug (united-realty-il-) does not match the company name or Arizona location; the record may mix sources.",
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:30:18.486171+00:00"
+  }
+ ]
+}

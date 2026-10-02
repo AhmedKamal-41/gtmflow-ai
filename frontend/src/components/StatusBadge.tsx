@@ -25,6 +25,12 @@ const STYLES: Record<string, { cls: string; dot: string }> = {
     dot: "bg-emerald-500",
   },
   failed: { cls: "bg-red-50 text-red-700 ring-red-600/20", dot: "bg-red-500" },
+  // Incomplete imports and blocked dispositions: excluded from routing.
+  partial: { cls: "bg-red-50 text-red-700 ring-red-600/20", dot: "bg-red-500" },
+  uploading: { cls: "bg-red-50 text-red-700 ring-red-600/20", dot: "bg-red-500" },
+  do_not_contact: { cls: "bg-red-50 text-red-700 ring-red-600/20", dot: "bg-red-500" },
+  disqualified: { cls: "bg-red-50 text-red-700 ring-red-600/20", dot: "bg-red-500" },
+  unsubscribed: { cls: "bg-red-50 text-red-700 ring-red-600/20", dot: "bg-red-500" },
 };
 
 const FALLBACK = {

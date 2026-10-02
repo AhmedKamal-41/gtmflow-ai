@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AIOutput, WorkflowEvent
+
+# Outreach needs an explicitly activated seller revision (Phase 5).
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 
@@ -21,7 +25,7 @@ def _upload_and_get_lead_id(client: TestClient) -> str:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "ai-test"}
     ).json()
-    leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()
+    leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]
     assert leads, "expected at least one lead"
     return leads[0]["id"]
 
@@ -38,7 +42,7 @@ def test_post_generate_summary_creates_ai_output(
     assert body["model_used"] == "mock"
     content = body["content"]
     assert content["company_summary"]
-    assert "detected_pain_points" in content
+    assert {"evidence", "unknowns", "hypotheses"} <= set(content)
     assert content["confidence"] in {"low", "medium", "high"}
 
     rows = (
@@ -63,8 +67,11 @@ def test_post_generate_outreach_creates_ai_output(
     content = body["content"]
     assert content["subject"]
     assert content["email_body"]
-    assert isinstance(content["personalization_points"], list)
+    assert content["lead_facts_used"]
     assert content["call_note"]
+    # The configured seller replaces the old hardcoded GTMFlow pitch.
+    assert "Synthetic Seller Co" in content["email_body"]
+    assert "GTMFlow" not in content["email_body"]
 
     rows = (
         db_session.execute(
@@ -119,7 +126,9 @@ def test_list_ai_outputs_returns_newest_first(client: TestClient) -> None:
 
     response = client.get(f"/api/leads/{lead_id}/ai-outputs")
     assert response.status_code == 200
-    body = response.json()
+    page = response.json()
+    assert page["total"] == 2
+    body = page["items"]
     assert len(body) == 2
     # outreach was created second -> appears first
     assert body[0]["output_type"] == "outreach_email"
@@ -130,7 +139,9 @@ def test_list_ai_outputs_empty_when_lead_has_none(client: TestClient) -> None:
     lead_id = _upload_and_get_lead_id(client)
     response = client.get(f"/api/leads/{lead_id}/ai-outputs")
     assert response.status_code == 200
-    assert response.json() == []
+    page = response.json()
+    assert page["items"] == []
+    assert page["total"] == 0
 
 
 def test_latest_ai_output_returns_match(client: TestClient) -> None:
@@ -169,16 +180,16 @@ def test_unknown_lead_returns_404_on_all_ai_endpoints(client: TestClient) -> Non
     )
 
 
-def test_summary_then_outreach_uses_persisted_summary(
+def test_stored_summary_is_not_used_as_outreach_evidence(
     client: TestClient, db_session: Session
 ) -> None:
-    """The outreach generator pulls the latest stored summary into its context."""
+    """Phase 5 reverses the v1 behavior: a stored summary is an earlier
+    generation's output, not evidence, so it never enters the outreach
+    context. Generating a summary first leaves the outreach input unchanged."""
     lead_id = _upload_and_get_lead_id(client)
-    summary_resp = client.post(f"/api/leads/{lead_id}/generate-summary").json()
-    detected = summary_resp["content"]["detected_pain_points"]
-    assert detected, "expected the mock summary to detect at least one pain term"
+    before = client.post(f"/api/leads/{lead_id}/generate-outreach").json()
+    client.post(f"/api/leads/{lead_id}/generate-summary")
+    after = client.post(f"/api/leads/{lead_id}/generate-outreach").json()
 
-    outreach = client.post(f"/api/leads/{lead_id}/generate-outreach").json()
-    call_note = outreach["content"]["call_note"].lower()
-    # The latest stored summary's first pain term shows up in the outreach call note.
-    assert detected[0].lower() in call_note
+    assert "latest_summary" not in after["input_snapshot"]
+    assert after["input_hash"] == before["input_hash"]

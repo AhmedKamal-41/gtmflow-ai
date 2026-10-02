@@ -12,6 +12,16 @@ backend/**/__pycache__/
 backend/.pytest_cache/
 *.py[cod]
 
+# Phase 3: large PDL source cache + generated curation artifacts. Never
+# commit the source dataset or its derived CSV/manifest/report outputs --
+# see docs/engineering-log/phase3-data-handoff.md for how to reproduce them.
+backend/.cache/
+backend/data/pdl_curated/
+backend/data/manifests/
+# AI-review exports embed cohort input snapshots; rebuild with
+# backend/scripts/phase6_ai_review.py build (decision files are committed).
+backend/data/ai_reviews/**/*.jsonl
+
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/
@@ -24,3 +34,14 @@ Thumbs.db
 .vscode/
 
 frontend/tsconfig.tsbuildinfo
+backend/.backups/
+backend/data/datasets/
+backend/data/generation_ledgers/
+
+# Phase 8 training (local venv, downloaded models, run outputs)
+training/.venv/
+training/.cache/
+training/runs/
+
+# Local Claude Code settings (machine-specific permissions)
+.claude/

@@ -9,6 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import IntegrationPush, WorkflowEvent
+from tests.conftest import approve_current_draft
+
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 
@@ -29,10 +32,16 @@ def _upload(client: TestClient, csv: str = MIXED_CSV, name: str = "push-test") -
 
 
 def _scored_setup(client: TestClient) -> tuple[str, list[dict]]:
+    """Scored leads whose current outreach drafts are approved -- delivery
+    requires that since Phase 6 (missing/stale approval is covered in
+    tests/test_delivery_review_enforcement.py)."""
     up = _upload(client)
     batch_id = up["batch_id"]
     client.post(f"/api/batches/{batch_id}/score")
-    leads = client.get(f"/api/leads?batch_id={batch_id}").json()
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
+    for lead in leads:
+        approve_current_draft(client, lead["id"])
+    leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     return batch_id, leads
 
 
@@ -83,7 +92,7 @@ def test_push_hot_lead_mock_success(
 def test_push_lead_without_score_returns_400(client: TestClient) -> None:
     # Upload only -- do NOT score the batch
     up = _upload(client)
-    leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()
+    leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]
     response = client.post(
         f"/api/leads/{leads[0]['id']}/push",
         json={"integration_type": "slack"},
@@ -199,12 +208,17 @@ def test_get_lead_pushes_returns_history(client: TestClient) -> None:
     _, leads = _scored_setup(client)
     hot = _lead_by(leads, "Cascade Modular")
     client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
-    # second push to ensure history ordering
-    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
+    # Phase 11: a plain repeat is a replay of the same delivery (no new row)...
+    replay = client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"}).json()
+    assert replay["replay"] is True
+    # ...and a second delivery must be requested explicitly.
+    client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack", "redeliver": True})
 
     response = client.get(f"/api/leads/{hot['id']}/pushes")
     assert response.status_code == 200
-    history = response.json()
+    page = response.json()
+    assert page["total"] == 2
+    history = page["items"]
     assert len(history) == 2
     assert all(row["integration_type"] == "slack" for row in history)
 
@@ -229,7 +243,9 @@ def test_get_lead_pushes_empty_returns_empty_list(client: TestClient) -> None:
     hot = _lead_by(leads, "Cascade Modular")
     response = client.get(f"/api/leads/{hot['id']}/pushes")
     assert response.status_code == 200
-    assert response.json() == []
+    page = response.json()
+    assert page["items"] == []
+    assert page["total"] == 0
 
 
 # ---------------- batch push-hot -----------------

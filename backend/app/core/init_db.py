@@ -1,8 +1,20 @@
-"""Manual database initialization helper.
+"""Manual database initialization helper -- quick local bring-up ONLY.
 
 Usage from `backend/`:
 
     python -m app.core.init_db
+
+This is a one-shot `Base.metadata.create_all`: fine for spinning up a throwaway
+local/dev database from nothing, but it has no migration history, cannot
+alter an existing table, and is not what any real (staging/production)
+deployment should use. As of Phase 2, the sanctioned path is Alembic:
+
+    alembic upgrade head                              # fresh database
+    python scripts/verify_baseline_schema.py --stamp   # adopt an existing
+    alembic upgrade head                               # database first
+
+See docs/engineering-log/decisions.md for why this distinction matters and
+docs/engineering-log/audit.md for the Phase 2 migration work itself.
 
 Tables are not auto-created at app startup because schema changes should be
 deliberate, tests must not require a running Postgres, and a process restart

@@ -6,11 +6,23 @@ const STATUS_STYLES: Record<string, string> = {
   success: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
   mock_success: "bg-brand-50 text-brand-700 ring-brand-600/20",
   failed: "bg-red-50 text-red-700 ring-red-600/20",
+  unknown: "bg-amber-50 text-amber-800 ring-amber-600/30",
+  pending: "bg-slate-100 text-slate-700 ring-slate-500/20",
 };
+
+type Resolution = "confirmed_delivered" | "confirmed_not_delivered";
 
 const FALLBACK = "bg-slate-100 text-slate-600 ring-slate-500/20";
 
-export function PushHistory({ pushes }: { pushes: IntegrationPush[] }) {
+export function PushHistory({
+  pushes,
+  onResolve,
+}: {
+  pushes: IntegrationPush[];
+  // Phase 11: when given, an unknown-outcome delivery offers the operator's
+  // two findings. Nothing is resent from here.
+  onResolve?: (pushId: string, resolution: Resolution) => void;
+}) {
   return (
     <Card padding="none">
       <ul className="divide-y divide-slate-100">
@@ -26,8 +38,13 @@ export function PushHistory({ pushes }: { pushes: IntegrationPush[] }) {
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${style}`}
                   >
-                    {p.status.replace(/_/g, " ")}
+                    {p.status === "unknown" ? "outcome unknown" : p.status.replace(/_/g, " ")}
                   </span>
+                  {p.delivery_mode && (
+                    <span className="text-xs text-slate-500">
+                      {p.delivery_mode} webhook{p.attempt ? ` · attempt ${p.attempt}` : ""}
+                    </span>
+                  )}
                   <span className="text-xs text-slate-400">
                     {new Date(p.created_at).toLocaleString()}
                   </span>
@@ -41,6 +58,39 @@ export function PushHistory({ pushes }: { pushes: IntegrationPush[] }) {
               {p.response_text && (
                 <div className="text-xs text-slate-400">
                   Response: {p.response_text}
+                </div>
+              )}
+              {p.resolution && (
+                <div className="text-xs text-slate-500">
+                  Resolved: {p.resolution.replace(/_/g, " ")}
+                  {p.resolution_note ? ` (${p.resolution_note})` : ""}
+                </div>
+              )}
+              {p.status === "unknown" && (
+                <div
+                  aria-label="Unknown delivery outcome"
+                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                >
+                  This message may or may not have reached Slack, so it is not resent
+                  automatically. Check the channel, then record what you found.
+                  {onResolve && (
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        className="rounded-md bg-white px-2 py-1 font-medium ring-1 ring-amber-300"
+                        onClick={() => onResolve(p.id, "confirmed_delivered")}
+                      >
+                        It arrived
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md bg-white px-2 py-1 font-medium ring-1 ring-amber-300"
+                        onClick={() => onResolve(p.id, "confirmed_not_delivered")}
+                      >
+                        It did not arrive
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </li>

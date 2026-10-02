@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 
 import { AppHeader } from "@/components/AppHeader";
+import { AuthProvider } from "@/components/AuthProvider";
 
 import "./globals.css";
 
@@ -31,10 +32,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-dvh font-sans antialiased">
-        <AppHeader />
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          {children}
-        </main>
+        <AuthProvider>
+          <AppHeader />
+          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            {children}
+          </main>
+        </AuthProvider>
         <footer className="mx-auto max-w-7xl px-4 pb-10 pt-6 text-xs text-slate-400 sm:px-6 lg:px-8">
           GTMFlow · runs with mock AI and Slack out of the box, so you can try
           it without any keys.

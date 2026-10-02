@@ -20,12 +20,16 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
-from app.scoring.lead_scoring import score_lead
+from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
+
+DEMO_REVIEWER_LABEL = "demo-auto-approve"
 from app.services.ai_generation import (
+    builtin_demo_seller,
     generate_outreach_for_lead,
     generate_summary_for_lead,
 )
 from app.services.csv_ingestion import parse_csv
+from app.services.draft_review import DECISION_APPROVED, apply_review
 from app.services.integration_push import SUCCESS_STATUSES, push_lead_to_slack
 
 DEMO_BATCH_NAME = "Demo: sample leads"
@@ -105,7 +109,8 @@ def _score(session: Session, lead: Lead) -> str:
         score_breakdown=persisted_breakdown,
         reasoning=result["reasoning"],
     )
-    lead.status = "scored"
+    if lead.status not in DISQUALIFIED_STATUSES:
+        lead.status = "scored"
     session.add(
         WorkflowEvent(
             lead_id=lead.id,
@@ -119,19 +124,14 @@ def _score(session: Session, lead: Lead) -> str:
     return result["priority"]
 
 
-def _approve(session: Session, lead: Lead, ai_output_id: Any) -> None:
-    session.add(
-        WorkflowEvent(
-            lead_id=lead.id,
-            event_type="outreach_approved",
-            event_data={
-                "ai_output_id": str(ai_output_id),
-                "output_type": "outreach_email",
-                "lead_id": str(lead.id),
-            },
-        )
+def _approve(session: Session, lead: Lead, outreach: Any) -> None:
+    # The same exact-content review the approve endpoint records, labeled
+    # as the demo's auto-approval rather than a human decision. It only
+    # exists for this synthetic demo batch.
+    apply_review(
+        session, lead=lead, output=outreach, decision=DECISION_APPROVED,
+        reviewer_label=DEMO_REVIEWER_LABEL,
     )
-    lead.status = "outreach_approved"
 
 
 def run_demo(session: Session) -> dict[str, Any]:
@@ -154,15 +154,20 @@ def run_demo(session: Session) -> dict[str, Any]:
             cold += 1
     batch.status = "scored"
 
+    # The demo sells GTMFlow itself through the explicitly labeled built-in
+    # demonstration profile. It is passed per call, never activated, so the
+    # demo neither needs nor changes the workspace's seller profile, and its
+    # drafts record seller_profile_kind="demo".
+    demo_seller = builtin_demo_seller()
     generated = approved = pushed = 0
     for lead in leads:
         if lead.score is None or lead.score.priority != "Hot":
             continue
-        generate_summary_for_lead(session, lead)
-        outreach = generate_outreach_for_lead(session, lead)
+        generate_summary_for_lead(session, lead, seller=demo_seller)
+        outreach = generate_outreach_for_lead(session, lead, seller=demo_seller)
         session.flush()
         generated += 1
-        _approve(session, lead, outreach.id)
+        _approve(session, lead, outreach)
         approved += 1
         push = push_lead_to_slack(session, lead)
         session.flush()

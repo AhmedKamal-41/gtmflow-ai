@@ -1,0 +1,252 @@
+{
+  "criteria_id": "heldout-criteria-v1",
+  "criteria_sha256": "1b5d3779a94dea439135911a5219d0fe1159654142ee37d48a4250ab15ada0f6",
+  "ledger": "data/generation_ledgers/heldout-v1.jsonl",
+  "ledger_sha256": "5f7bd2f2b4554d44e94b4c5480bd92889c8df1dc4d68ac72f283a851ef908833",
+  "queues": {
+    "test-v1": {
+      "candidates": 100,
+      "dataset_files": {
+        "eligible.jsonl": "9b3f89e2f8f437b9fcc777cbca0f8e831d22d41cfa0e8610da6219b270c79e86",
+        "flagged-uncertain.jsonl": "bf3e5a3c21b6f2ef54ab2d8d02c9096c5b637f0635988ad585046fb6bcc70c63"
+      },
+      "eligible_by_segment": {
+        "healthcare": 31,
+        "real_estate": 40
+      },
+      "eligible_by_task": {
+        "company_summary": 35,
+        "outreach_email": 36
+      },
+      "eligible_evaluated": 71,
+      "flagged_uncertain_positions": [
+        4,
+        5,
+        6,
+        9,
+        10,
+        17,
+        18,
+        25,
+        26,
+        29,
+        30,
+        35,
+        36,
+        42,
+        53,
+        54,
+        63,
+        64,
+        65,
+        66,
+        71,
+        72,
+        73,
+        74,
+        99,
+        100
+      ],
+      "generated": 97,
+      "generation_attempts": 106,
+      "generation_failures": [
+        {
+          "pass": 1,
+          "position": 3,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 1,
+          "position": 15,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 1,
+          "position": 41,
+          "reason_codes": [
+            "unknown_fact_reference"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 1,
+          "position": 43,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 1,
+          "position": 53,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 1,
+          "position": 85,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 2,
+          "position": 3,
+          "reason_codes": [
+            "unknown_fact_reference"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 2,
+          "position": 41,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        },
+        {
+          "pass": 2,
+          "position": 85,
+          "reason_codes": [
+            "unknown_fact_reference"
+          ],
+          "task": "company_summary"
+        }
+      ],
+      "human_verified_references": 0,
+      "reference_source": {
+        "ai": 71
+      },
+      "results": {
+        "eval-mock-eligible.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 71,
+          "sha256": "14d19060ba38b614c2a6b314cd30f7fa286b1db29c387f433393c19b808efabf",
+          "system": "mock"
+        },
+        "eval-mock-flagged-uncertain.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 26,
+          "sha256": "f8f02f9d346ef9da7a6c2ee149f183dbdbbecafa885b5a9c224fdd9077637356",
+          "system": "mock"
+        },
+        "eval-source-eligible.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 71,
+          "sha256": "e3fa1ecbf82f9745406ac16457c5f438f1d4d07fdfc7c9edb94a673771e4b274",
+          "system": "source"
+        },
+        "eval-source-flagged-uncertain.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 26,
+          "sha256": "7da6c05c1a5221c241cff5acb0aaedb12f271e726768a8bd37fda5a83c7f122a",
+          "system": "source"
+        }
+      },
+      "review_exclusions": [],
+      "unresolved_not_generated": [
+        3,
+        41,
+        85
+      ]
+    },
+    "validation-v1": {
+      "candidates": 100,
+      "dataset_files": {
+        "eligible.jsonl": "8306c8d0d8e45c188399ec1f5529533b519fa5595adee6e9ae927094e02a2de0",
+        "flagged-uncertain.jsonl": "c269e541e4a317e5344cca49d77719e6772b493a864f11d79600ced4a698da20"
+      },
+      "eligible_by_segment": {
+        "healthcare": 40,
+        "real_estate": 34
+      },
+      "eligible_by_task": {
+        "company_summary": 37,
+        "outreach_email": 37
+      },
+      "eligible_evaluated": 74,
+      "flagged_uncertain_positions": [
+        11,
+        12,
+        13,
+        14,
+        17,
+        18,
+        19,
+        20,
+        23,
+        24,
+        47,
+        48,
+        49,
+        50,
+        55,
+        56,
+        63,
+        64,
+        65,
+        66,
+        77,
+        78,
+        83,
+        84,
+        95,
+        96
+      ],
+      "generated": 100,
+      "generation_attempts": 101,
+      "generation_failures": [
+        {
+          "pass": 1,
+          "position": 29,
+          "reason_codes": [
+            "schema_invalid"
+          ],
+          "task": "company_summary"
+        }
+      ],
+      "human_verified_references": 0,
+      "reference_source": {
+        "ai": 74
+      },
+      "results": {
+        "eval-mock-eligible.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 74,
+          "sha256": "8a3d2e024f1b273a84416f0e60a95e044bf9b31144f591cfd9c9c17d0cc4a942",
+          "system": "mock"
+        },
+        "eval-mock-flagged-uncertain.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 26,
+          "sha256": "b6e943efb95a67bd6cced2dcb5058730b1c6bb4cffccad8614272ecc954dbccf",
+          "system": "mock"
+        },
+        "eval-source-eligible.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 74,
+          "sha256": "c6f9f4fb3a61e8addad6d9ca13bcfa91e7c3dff6d09b0e7157a858c2ca239a91",
+          "system": "source"
+        },
+        "eval-source-flagged-uncertain.json": {
+          "label": "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)",
+          "n": 26,
+          "sha256": "26a9f4505fd99c0ae5985e477b7d78359dcae78076263192d1bfb731f2dbd5a0",
+          "system": "source"
+        }
+      },
+      "review_exclusions": [],
+      "unresolved_not_generated": []
+    }
+  }
+}

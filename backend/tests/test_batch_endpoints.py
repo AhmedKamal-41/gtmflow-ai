@@ -46,7 +46,7 @@ def test_upload_valid_csv_returns_201_and_creates_resources(client: TestClient) 
 
     listed = client.get("/api/batches")
     assert listed.status_code == 200
-    assert any(b["id"] == batch_id for b in listed.json())
+    assert any(b["id"] == batch_id for b in listed.json()["items"])
 
     detail = client.get(f"/api/batches/{batch_id}")
     assert detail.status_code == 200
@@ -56,7 +56,9 @@ def test_upload_valid_csv_returns_201_and_creates_resources(client: TestClient) 
 
     leads = client.get(f"/api/leads?batch_id={batch_id}")
     assert leads.status_code == 200
-    leads_payload = leads.json()
+    leads_page = leads.json()
+    assert leads_page["total"] == 2
+    leads_payload = leads_page["items"]
     assert len(leads_payload) == 2
     companies = {lead["company_name"] for lead in leads_payload}
     assert companies == {"Cascade Modular Homes", "Vault Outfitters"}
@@ -126,16 +128,18 @@ def test_get_unknown_lead_returns_404(client: TestClient) -> None:
 def test_list_batches_orders_newest_first(client: TestClient) -> None:
     _upload(client, VALID_CSV, batch_name="first")
     _upload(client, VALID_CSV, batch_name="second")
-    listed = client.get("/api/batches").json()
+    listed = client.get("/api/batches").json()["items"]
     assert [b["name"] for b in listed[:2]] == ["second", "first"]
 
 
 def test_list_leads_without_batch_filter_returns_all(client: TestClient) -> None:
     r1 = _upload(client, VALID_CSV, batch_name="A").json()
     r2 = _upload(client, VALID_CSV, batch_name="B").json()
-    leads = client.get("/api/leads").json()
+    page = client.get("/api/leads").json()
+    leads = page["items"]
     batch_ids = {lead["batch_id"] for lead in leads}
     assert {r1["batch_id"], r2["batch_id"]} <= batch_ids
+    assert page["total"] == 4
     assert len(leads) == 4
 
 

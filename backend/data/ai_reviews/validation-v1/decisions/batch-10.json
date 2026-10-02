@@ -1,0 +1,116 @@
+{
+ "reviewer": "ai:claude-opus-5-5",
+ "rubric": "ai-review-rubric-v1",
+ "queue": "validation-v1",
+ "reviews": [
+  {
+   "position": 77,
+   "source_output_id": "ed49fb52-93a3-4d62-b155-87c58c3ffb78",
+   "source_content_hash": "d576d4cb5188eabfcc9283f43105eadec297ea9f93e34940b7847b1e6fe5df59",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported, but the hypothesis invents operational needs and seller_relevance asserts the demonstration 'is relevant' to 'the lead's business needs'.",
+   "issues": [
+    "invented_need_hypothesis",
+    "asserted_relevance"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A licensed clinical social worker's LLC (LICSW) is recorded as a 'medical practice'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "hypotheses": [],
+    "seller_relevance": "Compared only with the demonstration profile's stated target customers; the record shows no interest, need or budget."
+   },
+   "reviewed_at": "2026-09-24T05:34:05.446698+00:00"
+  },
+  {
+   "position": 78,
+   "source_output_id": "e733379a-0288-40ed-bb75-01ad9d3a52d8",
+   "source_content_hash": "f6fef7e2b2eecd244945e5683360d6cfac84c99a68e2abde32c06993c9986774",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Specialization claim ('we specialize in automating outreach processes'), invented alignment with 'the needs of your medical practice'; no demonstration label or not-a-commercial-offer statement.",
+   "issues": [
+    "invented_specialization",
+    "invented_fit",
+    "missing_demo_label"
+   ],
+   "uncertain": true,
+   "uncertainty_reason": "A licensed clinical social worker's LLC (LICSW) is recorded as a 'medical practice'; outputs follow the record, but the classification may be wrong.",
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Jennifer Mello LICSW LLC",
+    "email_body": "Hi there,\n\nThe supplied company record lists Jennifer Mello LICSW LLC as a medical practice in Plymouth, Massachusetts.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:05.446698+00:00"
+  },
+  {
+   "position": 79,
+   "source_output_id": "02119226-6d3e-4ce3-a643-db7931822eb0",
+   "source_content_hash": "9ca535560c49de647ae897d38beca9715d80cfd37cb7e9b02fef73f1db1822ed",
+   "decision": "corrected",
+   "factual_support": "partially_supported",
+   "writing_quality": 3,
+   "missing_info_handling": "acceptable",
+   "reason": "Facts are supported ('small' for 1-10) and seller_relevance is labeled a demonstration, but the hypothesis invents a need ('may be exploring tools').",
+   "issues": [
+    "invented_need_hypothesis"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "hypotheses": []
+   },
+   "reviewed_at": "2026-09-24T05:34:05.446698+00:00"
+  },
+  {
+   "position": 80,
+   "source_output_id": "6c03e7e9-dc45-4444-9b3b-cab1235810ea",
+   "source_content_hash": "3b0e36461e22c0eb96312568b7b912f970602ba4a59042494acf4abfad695f73",
+   "decision": "corrected",
+   "factual_support": "unsupported",
+   "writing_quality": 1,
+   "missing_info_handling": "poor",
+   "reason": "Body contains literal '\\n' escape text; says 'as a demonstration of our capabilities' but not that it is not a commercial offer; invented initiatives and goals; '[Your Name]' placeholder.",
+   "issues": [
+    "literal_escape_sequences",
+    "incomplete_demo_label",
+    "invented_need",
+    "placeholder_signature"
+   ],
+   "uncertain": false,
+   "uncertainty_reason": null,
+   "corrected_fields": {
+    "subject": "GTMFlow workflow demonstration for Gibson Spyre",
+    "email_body": "Hi there,\n\nThe supplied company record lists Gibson Spyre as a real estate company in Alexandria, Virginia.\n\nGTMFlow is a portfolio demonstration that drafts outreach from supplied company facts for a person to review before any use. This message illustrates that workflow and is not a commercial offer.\n\nWould you be interested in seeing how the workflow prepares a draft for human review?\n\nBest regards,\nGTMFlow (demonstration)",
+    "lead_facts_used": [
+     "fact-company_name",
+     "fact-industry",
+     "fact-location"
+    ],
+    "capabilities_used": [
+     "cap-3",
+     "cap-4"
+    ],
+    "claims_used": [],
+    "call_note": "Demonstration draft only; not a commercial offer. It restates the record's company facts. Buying intent, budget, current problems and tools are unknown, and no contact person is on file.",
+    "confidence": "medium"
+   },
+   "reviewed_at": "2026-09-24T05:34:05.446698+00:00"
+  }
+ ]
+}

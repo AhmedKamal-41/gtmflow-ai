@@ -1,0 +1,84 @@
+{
+  "run_name": "phase8-qwen3-4b-lora-v1",
+  "seed": 20260925,
+  "base_model": {
+    "repo": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "license": "apache-2.0",
+    "dtype": "bfloat16",
+    "attn_implementation": "sdpa",
+    "cache_dir": "../.cache/hf"
+  },
+  "data": {
+    "train": {
+      "dir": "../../backend/data/datasets/train-combined-v1",
+      "sha256": {
+        "eligible.jsonl": "a69ea0545358990021370bc2a96eafbca62a0be38de35dd9c13098d9fa416872",
+        "dataset-manifest.json": "2912ca484544bdf3afbdaf8252421174d2537220e9914d5c63fd75367fffc3cc"
+      }
+    },
+    "validation": {
+      "dir": "../../backend/data/datasets/validation-v1",
+      "sha256": {
+        "eligible.jsonl": "8306c8d0d8e45c188399ec1f5529533b519fa5595adee6e9ae927094e02a2de0",
+        "dataset-manifest.json": "23b96bb31b49eeaa51a38523b2c9f946f95fbd8d7e6e3ebafb5bf28cba02a95b"
+      }
+    },
+    "use_example_weights": true,
+    "weight_normalization": "divide by the mean training weight (objective = sum w*l / sum w)",
+    "validation_weighted": false
+  },
+  "format": {
+    "prompt_version": "grounded-v2",
+    "system_message": "app.ai.prompts.JSON_SYSTEM_MESSAGE",
+    "target": "reviewed target JSON, sort_keys=True, ensure_ascii=False",
+    "loss_on": "assistant (answer) tokens only; no truncation"
+  },
+  "lora": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "bias": "none",
+    "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  },
+  "training": {
+    "epochs": 3,
+    "learning_rate": 0.0001,
+    "lr_schedule": "linear warmup then cosine to 0",
+    "warmup_ratio": 0.05,
+    "per_device_batch_size": 1,
+    "gradient_accumulation_steps": 8,
+    "max_seq_len": 4096,
+    "weight_decay": 0.0,
+    "adam_betas": [0.9, 0.999],
+    "adam_eps": 1e-08,
+    "max_grad_norm": 1.0,
+    "gradient_checkpointing": true
+  },
+  "selection": {
+    "uses": "validation split only",
+    "metric": "mean per-example validation loss (unweighted)",
+    "evaluate_every": "epoch",
+    "keep": "best epoch adapter",
+    "min_delta": 0.0,
+    "early_stopping_patience": 0
+  },
+  "smoke": {
+    "train_examples": 6,
+    "validation_examples": 3,
+    "tiny_model": {
+      "hidden_size": 32,
+      "intermediate_size": 64,
+      "num_hidden_layers": 2,
+      "num_attention_heads": 4,
+      "num_key_value_heads": 2,
+      "head_dim": 8
+    },
+    "training_overrides": {"epochs": 2, "gradient_accumulation_steps": 2, "learning_rate": 0.01, "gradient_checkpointing": true}
+  },
+  "hardware": {
+    "recommended": "1x NVIDIA L4 24 GB (bf16), 8+ vCPU, 32+ GB RAM, 40+ GB disk",
+    "min_gpu_memory_gib": 20
+  },
+  "output_dir": "../runs/phase8-qwen3-4b-lora-v1"
+}

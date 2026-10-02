@@ -1,3 +1,20 @@
+"""Outreach draft review: approve / reject the exact draft and content shown.
+
+Every approve/reject call names the ``ai_output_id`` and the
+``content_hash`` of the content displayed. The shared service
+(app/services/draft_review.py) enforces, in order: the output exists; it
+belongs to this lead; it is an operational outreach draft (not a summary or
+a training-annotation candidate); its content is what was displayed; and no
+newer draft supersedes it. An identical repeat is an idempotent no-op; a
+changed decision (approve -> reject) is its own row and event.
+
+Phase 11 metrics count each operational draft by its latest review, so a
+changed decision cannot inflate approval_rate past 100%.
+
+Reviewer identity comes from the authenticated session (Phase 12);
+request bodies cannot supply a reviewer name.
+"""
+
 from __future__ import annotations
 
 from uuid import UUID
@@ -6,50 +23,83 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai import quality_checks
 from app.core.database import get_session
-from app.models import AIOutput, Lead, WorkflowEvent
+from app.models import AIOutputReview, Lead
+from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
 from app.schemas.outreach_review import (
+    ApproveOutreachRequest,
     OutreachReviewResponse,
     RejectOutreachRequest,
+    ReviewRead,
+    ReviewStateRead,
+    SourceInfo,
 )
+from app.schemas.pagination import Page
+from app.scoring import fit
+from app.services.draft_review import (
+    DECISION_APPROVED,
+    DECISION_REJECTED,
+    REVIEWER_LABEL,  # noqa: F401 -- kept importable for existing callers
+    ReviewError,
+    apply_review,
+    resolve_reviewable_draft,
+    review_state,
+)
+from app.services.pagination import paginate, pagination_params
 
-OUTREACH_OUTPUT_TYPE = "outreach_email"
 APPROVED_EVENT = "outreach_approved"
 REJECTED_EVENT = "outreach_rejected"
-APPROVED_STATUS = "outreach_approved"
-REJECTED_STATUS = "outreach_rejected"
 
 router = APIRouter(tags=["outreach-review"])
 
 
-def _latest_outreach(session: Session, lead_id: UUID) -> AIOutput | None:
-    return session.execute(
-        select(AIOutput)
-        .where(
-            AIOutput.lead_id == lead_id,
-            AIOutput.output_type == OUTREACH_OUTPUT_TYPE,
-        )
-        .order_by(AIOutput.created_at.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-
-
-def _require_lead_and_outreach(
-    session: Session, lead_id: UUID
-) -> tuple[Lead, AIOutput]:
+def _require_lead(session: Session, lead_id: UUID) -> Lead:
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    latest = _latest_outreach(session, lead_id)
-    if latest is None:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No outreach output exists for this lead. Generate outreach "
-                "before approving or rejecting."
-            ),
+    return lead
+
+
+def _review(session: Session, lead_id: UUID, output_id: UUID, displayed_hash: str,
+            decision: str, reason: str | None,
+            acknowledged_flags: list[str] | None = None) -> OutreachReviewResponse:
+    lead = _require_lead(session, lead_id)
+    try:
+        output = resolve_reviewable_draft(session, lead, output_id, displayed_hash)
+    except ReviewError as error:
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from None
+    acknowledged = None
+    if decision == DECISION_APPROVED:
+        # Phase 10: a flagged draft can still be approved, but only by a
+        # reviewer who acknowledges exactly the flags shown. Nothing here
+        # approves or rejects on its own.
+        codes = quality_checks.flag_codes(
+            quality_checks.check_output(output.output_type, output.content, output.input_snapshot)
         )
-    return lead, latest
+        if sorted(set(acknowledged_flags or [])) != codes:
+            raise HTTPException(status_code=409, detail=(
+                f"This draft has runtime quality flags ({quality_checks.CHECKS_VERSION}): "
+                f"{', '.join(codes) if codes else 'none'}. Review them and send "
+                "acknowledged_quality_flags listing exactly these codes to approve, "
+                "or edit or reject the draft."
+            ))
+        acknowledged = codes
+    review, was_replay = apply_review(
+        session, lead=lead, output=output, decision=decision, reason=reason,
+        acknowledged_quality_flags=acknowledged,
+    )
+    session.commit()
+    session.refresh(review)
+    verb = "approved" if decision == DECISION_APPROVED else "rejected"
+    return OutreachReviewResponse(
+        lead_id=lead.id,
+        ai_output_id=output.id,
+        review_id=review.id,
+        event_type=APPROVED_EVENT if decision == DECISION_APPROVED else REJECTED_EVENT,
+        message=f"Outreach already {verb} (no change)." if was_replay else f"Outreach {verb}.",
+        idempotent_replay=was_replay,
+    )
 
 
 @router.post(
@@ -59,30 +109,11 @@ def _require_lead_and_outreach(
 )
 def approve_outreach(
     lead_id: UUID,
+    request: ApproveOutreachRequest,
     session: Session = Depends(get_session),
 ) -> OutreachReviewResponse:
-    lead, latest = _require_lead_and_outreach(session, lead_id)
-
-    session.add(
-        WorkflowEvent(
-            lead_id=lead.id,
-            event_type=APPROVED_EVENT,
-            event_data={
-                "ai_output_id": str(latest.id),
-                "output_type": OUTREACH_OUTPUT_TYPE,
-                "lead_id": str(lead.id),
-            },
-        )
-    )
-    lead.status = APPROVED_STATUS
-    session.commit()
-
-    return OutreachReviewResponse(
-        lead_id=lead.id,
-        ai_output_id=latest.id,
-        event_type=APPROVED_EVENT,
-        message="Outreach approved.",
-    )
+    return _review(session, lead_id, request.ai_output_id, request.content_hash, DECISION_APPROVED, None,
+                   request.acknowledged_quality_flags)
 
 
 @router.post(
@@ -95,26 +126,81 @@ def reject_outreach(
     request: RejectOutreachRequest,
     session: Session = Depends(get_session),
 ) -> OutreachReviewResponse:
-    lead, latest = _require_lead_and_outreach(session, lead_id)
+    return _review(session, lead_id, request.ai_output_id, request.content_hash, DECISION_REJECTED, request.reason)
 
-    session.add(
-        WorkflowEvent(
-            lead_id=lead.id,
-            event_type=REJECTED_EVENT,
-            event_data={
-                "ai_output_id": str(latest.id),
-                "output_type": OUTREACH_OUTPUT_TYPE,
-                "lead_id": str(lead.id),
-                "reason": request.reason,
-            },
+
+def _source_info(lead: Lead) -> SourceInfo:
+    snapshot = lead.source_snapshot
+    batch_source = lead.batch.source if lead.batch is not None else None
+    if snapshot is None:
+        return SourceInfo(
+            batch_source=batch_source,
+            freshness_note=(
+                "Facts come from an uploaded file; their date and accuracy "
+                "were not verified by this application."
+            ),
         )
+    acquired = snapshot.reported_acquisition_date.isoformat() if snapshot.reported_acquisition_date else None
+    return SourceInfo(
+        batch_source=batch_source,
+        provider=snapshot.provider,
+        source_snapshot_id=snapshot.id,
+        reported_acquisition_date=acquired,
+        retrieved_at=snapshot.retrieved_at,
+        license=snapshot.retrieved_license,
+        freshness_note=(
+            f"Facts come from a {snapshot.provider} snapshot reported as acquired "
+            f"{acquired or 'on an unknown date'}. They may be outdated and were "
+            "not re-verified; nothing in this record shows current interest or need."
+        ),
     )
-    lead.status = REJECTED_STATUS
-    session.commit()
 
-    return OutreachReviewResponse(
+
+@router.get("/api/leads/{lead_id}/review-state", response_model=ReviewStateRead)
+def get_review_state(lead_id: UUID, session: Session = Depends(get_session)) -> ReviewStateRead:
+    """Current draft, its review status, and every reason an approval would
+    not (or no longer) authorize delivery -- the same state Slack delivery
+    enforces."""
+    lead = _require_lead(session, lead_id)
+    state = review_state(session, lead)
+    codes = list(dict.fromkeys(state.delivery_blockers + state.email_blockers))
+    return ReviewStateRead(
         lead_id=lead.id,
-        ai_output_id=latest.id,
-        event_type=REJECTED_EVENT,
-        message="Outreach rejected.",
+        status=state.status,
+        draft_id=state.draft.id if state.draft else None,
+        draft_content_hash=state.draft_content_hash,
+        draft_origin=state.draft.origin if state.draft else None,
+        draft_parent_output_id=state.draft.parent_output_id if state.draft else None,
+        approval_applicable=state.approval_applicable,
+        delivery_blockers=state.delivery_blockers,
+        email_blockers=state.email_blockers,
+        blocker_explanations={c: fit._GAP_EXPLANATIONS.get(c, c) for c in codes},
+        latest_review=ReviewRead.model_validate(state.review) if state.review else None,
+        source=_source_info(lead),
+        quality_checks_version=quality_checks.CHECKS_VERSION,
+        draft_quality_flags=(
+            quality_checks.check_output(state.draft.output_type, state.draft.content, state.draft.input_snapshot)
+            if state.draft else []
+        ),
     )
+
+
+@router.get("/api/leads/{lead_id}/reviews", response_model=Page[ReviewRead])
+def list_lead_reviews(
+    lead_id: UUID,
+    pagination: tuple[int, int] = Depends(pagination_params),
+    session: Session = Depends(get_session),
+) -> Page[ReviewRead]:
+    """Full operational review history, newest first -- including
+    historical approvals that no longer authorize anything."""
+    _require_lead(session, lead_id)
+    limit, offset = pagination
+    stmt = (
+        select(AIOutputReview)
+        .where(
+            AIOutputReview.lead_id == lead_id,
+            AIOutputReview.review_kind == REVIEW_KIND_OPERATIONAL_OUTREACH,
+        )
+        .order_by(AIOutputReview.created_at.desc(), AIOutputReview.id.desc())
+    )
+    return paginate(session, stmt, limit=limit, offset=offset, schema=ReviewRead)
