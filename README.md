@@ -24,7 +24,7 @@ PyTorch + PEFT for the model work · Slack incoming webhooks.
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-LoRA%20%2B%20PEFT-EE4C2C?logo=pytorch&logoColor=white)
 ![Slack](https://img.shields.io/badge/Slack-webhooks-4A154B?logo=slack&logoColor=white)
-[![Release verification](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml/badge.svg?branch=recovery%2Fphase8-20260925)](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml)
+[![Release verification](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml)
 
 **Runs entirely in mock mode by default:** no API keys are needed and no message leaves the app.
 It is not deployed; see [Local setup](#local-setup) to run it in a few minutes.
