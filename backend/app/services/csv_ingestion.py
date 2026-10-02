@@ -34,7 +34,7 @@ KNOWN_COLUMNS: set[str] = {
 }
 REQUIRED_COLUMN = "company_name"
 
-# Part E defaults (docs/upgrade's Phase 3 handoff). Enforced here (row
+# Part E defaults (docs/engineering-log's Phase 3 handoff). Enforced here (row
 # count, while parsing) and in the API layer (byte size, while reading the
 # upload) -- neither limit is trusted from a client-supplied header alone.
 DEFAULT_MAX_ROWS = 50_000

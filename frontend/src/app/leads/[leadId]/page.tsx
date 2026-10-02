@@ -829,8 +829,8 @@ function ReviewStateCard({
           </p>
         )}
         <p className="text-xs text-slate-500">
-          Reviews are recorded as &quot;local-demo-unauthenticated&quot;: this app has no sign-in,
-          so no personal identity is claimed.
+          Each review records the signed-in account that made it. Reviews made before sign-in
+          existed are labeled &quot;local-demo-unauthenticated&quot;.
         </p>
         <p className="text-xs text-slate-500" aria-label="Source freshness">
           Source: {state.source.provider ?? state.source.batch_source ?? "unknown"}

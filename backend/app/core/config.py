@@ -49,7 +49,7 @@ class Settings:
     lora_inference_api_key: str = ""
     lora_served_model: str = "qwen3-4b-lora-v1"
     lora_timeout_seconds: float = 120.0
-    # Phase 12: operator sessions (docs/upgrade/phase12-release-handoff.md).
+    # Phase 12: operator sessions (docs/engineering-log/phase12-release-handoff.md).
     session_cookie_secure: bool = True
     session_idle_minutes: int = 60
     session_absolute_hours: int = 12

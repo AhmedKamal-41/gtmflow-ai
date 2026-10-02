@@ -66,7 +66,7 @@ class Lead(Base):
 
     # -- Phase 2 additions: provenance + canonical identity ---------------
     # All nullable and untouched by the CSV-upload and demo-seed paths, so
-    # synthetic/demo leads never carry PDL provenance (docs/upgrade/audit.md
+    # synthetic/demo leads never carry PDL provenance (docs/engineering-log/audit.md
     # Part C invariant). Populated only by the Phase 3 PDL importer.
     company_identity_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),

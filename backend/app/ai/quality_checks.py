@@ -13,7 +13,7 @@ flags shown (app/api/outreach_review.py).
 Where each check comes from:
 
 * `presumed_outreach_activity`, `commercial_opportunity_framing`: the Phase 9
-  blind AI review of qwen3-4b-lora-v1 (docs/upgrade/phase9-evaluation-handoff.md
+  blind AI review of qwen3-4b-lora-v1 (docs/engineering-log/phase9-evaluation-handoff.md
   §12) -- "I would love to learn more about your current outreach strategies"
   and "Exploring Opportunities ..." / "potential collaboration" framing.
 * `invented_phrasing`: the frozen `no_invented_phrasing` lint's phrase list,

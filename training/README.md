@@ -1,6 +1,6 @@
-# GTMFlow Phase 8: LoRA fine-tuning of the grounded generator
+# LoRA fine-tuning of the grounded generator
 
-Status: **code ready. Not trained.** No paid compute has been used. The real run needs your approval (see "Recommended run").
+Status: **trained, evaluated and integration-tested once.** The adapter `qwen3-4b-lora-v1` was trained on one rented L4 (Phase 8), evaluated on the held-out test split with a blind **AI** review (Phase 9), and served once to the app on a temporary pod (Phase 10). Weights and datasets are not committed. Results: [`docs/engineering-log/phase8-training-handoff.md`](../docs/engineering-log/phase8-training-handoff.md), [`phase9-evaluation-handoff.md`](../docs/engineering-log/phase9-evaluation-handoff.md) and [`phase10-integration-handoff.md`](../docs/engineering-log/phase10-integration-handoff.md). The "Recommended run" section below is the plan as it was approved before the run.
 
 ## What it trains
 
@@ -70,7 +70,7 @@ VIRTUAL_ENV=.venv uv pip install -r requirements-lock-cpu.txt --extra-index-url 
 - a CUDA GPU is present;
 - the GPU is bf16-capable with at least 20 GiB of memory.
 
-## Recommended run (needs your approval: paid compute)
+## Recommended run (as approved before the Phase 8 run)
 
 **Hardware:** 1× NVIDIA **L4 24 GB** (bf16), 8+ vCPU, 32+ GB RAM, 40+ GB disk.
 

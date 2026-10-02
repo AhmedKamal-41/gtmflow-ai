@@ -1,6 +1,6 @@
 """Phase 7: exact-duplicate removal and structure weighting.
 
-Policy `structure-cap-v1` (documented in docs/upgrade/decisions.md):
+Policy `structure-cap-v1` (documented in docs/engineering-log/decisions.md):
 
 1. Exact duplicates are dropped, keeping the first by queue position:
    the same target content hash, or the same (task, input_hash).

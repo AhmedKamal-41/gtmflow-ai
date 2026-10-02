@@ -1,14 +1,14 @@
 # Implementation contract for Phases 2–12
 
-This document records the working rules and repository conventions that later phases must follow. It exists so that a phase started weeks from now (by a human or another agent) doesn't have to re-derive them, and so that progress claims stay honest and checkable against `docs/upgrade/phase-status.md`.
+This document records the working rules and repository conventions that later phases must follow. It exists so that a phase started weeks from now (by a human or another agent) doesn't have to re-derive them, and so that progress claims stay honest and checkable against `docs/engineering-log/phase-status.md`.
 
-This contract was established during Phase 1 (repository audit, see `docs/upgrade/audit.md`). It should be updated, not silently ignored, if a later phase needs to deviate from it — deviations get recorded in `docs/upgrade/decisions.md` with a reason.
+This contract was established during Phase 1 (repository audit, see `docs/engineering-log/audit.md`). It should be updated, not silently ignored, if a later phase needs to deviate from it — deviations get recorded in `docs/engineering-log/decisions.md` with a reason.
 
 ## 1. Carried-over working rules
 
 These were given for Phase 1 and apply to every subsequent phase unless a specific phase's scope explicitly overrides one:
 
-1. Read this file and `docs/upgrade/phase-status.md` before starting work on any phase. Read `docs/upgrade/decisions.md` before making an architecture choice that isn't already decided there.
+1. Read this file and `docs/engineering-log/phase-status.md` before starting work on any phase. Read `docs/engineering-log/decisions.md` before making an architecture choice that isn't already decided there.
 2. Preserve existing repository conventions (see section 2) and existing working code. Don't rewrite something that isn't in scope for the current phase just because you're nearby.
 3. Straightforward, readable Python and TypeScript. Match the existing style (see section 2) rather than introducing a new pattern for the same problem.
 4. Reuse existing components and services where suitable. The scorer, the AI client ABC, the Slack builder/sender split, and the service-layer/router split are all intentional and documented in `docs/architecture.md` — extend them, don't parallel them.
@@ -16,7 +16,7 @@ These were given for Phase 1 and apply to every subsequent phase unless a specif
 6. Never fabricate company information, human approvals, training results, or evaluation numbers. If a number can't be produced by an actual run, don't write it down as if it were one — write "not yet measured" or omit it.
 7. No paid GPU jobs, no paid service calls, no real Slack sends, no public deployment without the user's explicit go-ahead in that session. This includes LoRA training runs (Phase 8) and any held-out evaluation that costs money to run (Phase 9) — get sign-off before launching, not after.
 8. Record what was actually run (the command, the environment, the result) for every claim of "this works" or "this test passes." Distinguish verified behavior from assumptions and from checks that were blocked (no access, no budget, no time).
-9. Don't rewrite unrelated code or add dependencies merely to make a phase's job easier. If a new dependency is genuinely required (e.g., a training library in Phase 8), name it, justify it, and record it in `docs/upgrade/decisions.md` before adding it to `requirements.txt` / `package.json`.
+9. Don't rewrite unrelated code or add dependencies merely to make a phase's job easier. If a new dependency is genuinely required (e.g., a training library in Phase 8), name it, justify it, and record it in `docs/engineering-log/decisions.md` before adding it to `requirements.txt` / `package.json`.
 10. Finish the useful work in a phase's scope without repeatedly stopping to ask permission for routine steps; do stop and ask before anything irreversible, costly, or that touches systems outside this repo (real Slack sends, real API keys, deployment, GPU spend).
 
 ## 2. Repository conventions observed in Phase 1 (verified, not to be broken silently)
@@ -34,7 +34,7 @@ These were given for Phase 1 and apply to every subsequent phase unless a specif
 
 ## 3. The readiness ladder — mandatory for every phase from here on
 
-Every phase's status report (in `docs/upgrade/phase-status.md` and in any summary given to the user) must place its claimed work on this ladder, per component, not just declare the phase "done":
+Every phase's status report (in `docs/engineering-log/phase-status.md` and in any summary given to the user) must place its claimed work on this ladder, per component, not just declare the phase "done":
 
 ```
 code ready → needs human review → needs compute → trained → evaluated → integrated
@@ -56,8 +56,8 @@ Definitions:
 A phase is not done because code was written. A phase is done when:
 
 1. The relevant rung(s) of the readiness ladder are honestly reported for every component the phase touched.
-2. `docs/upgrade/phase-status.md` is updated with actual evidence (commands run, files changed, test results) — not a checkbox with no citation.
-3. Any new architecture decision, dependency, or unresolved question surfaced during the phase is recorded in `docs/upgrade/decisions.md`.
+2. `docs/engineering-log/phase-status.md` is updated with actual evidence (commands run, files changed, test results) — not a checkbox with no citation.
+3. Any new architecture decision, dependency, or unresolved question surfaced during the phase is recorded in `docs/engineering-log/decisions.md`.
 4. The mock demo (rule 5) still works, verified by actually running it, not assumed.
 5. Nothing from the Phase 1 audit's findings list was silently worked around instead of fixed or explicitly deferred with a reason.
 

@@ -2,7 +2,7 @@
 must never reach Slack, regardless of score, the ``force`` flag, or whether
 the push goes through the single-lead or batch route.
 
-See docs/upgrade/audit.md finding D.2 for the bug this fixes: a
+See docs/engineering-log/audit.md finding D.2 for the bug this fixes: a
 ``do_not_contact`` lead that scored Hot was previously pushed successfully
 with ``force=false`` -- nothing checked ``lead.status`` at all.
 """

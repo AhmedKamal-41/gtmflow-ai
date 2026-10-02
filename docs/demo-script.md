@@ -60,7 +60,7 @@ Open **/metrics**. A banner says the data is mock-only. The approval rate counts
 
 ## 9. The model work (talk track, no live GPU)
 
-Show `docs/upgrade/phase9-evaluation-handoff.md` and `phase10-integration-handoff.md`.
+Show `docs/engineering-log/phase9-evaluation-handoff.md` and `phase10-integration-handoff.md`.
 
 > **What to say:** "I fine-tuned Qwen3-4B with LoRA on 419 AI-reviewed examples for about 60 cents of GPU time. On held-out data, a blind AI review rated 69% of its drafts acceptable as-is, against 1% for the base model. Summaries were fine; outreach was the weak spot, and I traced its two main faults to phrasing kept in the training data. All of that is AI-evaluated, not human-verified. Then I ran the app's own client against the real model once, on a temporary GPU pod that deleted itself, and all acceptance checks passed. There's no always-on model server; the app runs on the mock by default."
 

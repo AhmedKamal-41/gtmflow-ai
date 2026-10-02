@@ -808,7 +808,7 @@ The full policy is in `phase7-correction-policy-v2.md`.
 - The evaluation label now reads "HELD-OUT evaluation -- AI-evaluated (AI-derived reference targets, not human-verified)" whenever any reference is AI-derived.
 - The 8 held-out result files were re-run to carry the label. Every metric, per-example score, criteria hash and dataset hash is identical to the previous files: 0 differences.
 
-**Evaluation record:** `docs/upgrade/phase7-heldout-evaluation-record.json` (committed; positions and counts only, no company data). It accounts for every candidate:
+**Evaluation record:** `docs/engineering-log/phase7-heldout-evaluation-record.json` (committed; positions and counts only, no company data). It accounts for every candidate:
 
 | | Validation | Test |
 |---|---|---|

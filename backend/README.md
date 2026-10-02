@@ -10,7 +10,7 @@ FastAPI + Python service for the GTMFlow AI platform.
 
 ## Setup
 
-For a fresh isolated mock demo, use the [exact release startup commands](../docs/upgrade/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode). They force mock integrations in both API and worker without changing an existing environment file. The commands below describe the general backend setup; inspect configuration before starting a working database.
+For a fresh isolated mock demo, use the [exact release startup commands](../docs/engineering-log/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode). They force mock integrations in both API and worker without changing an existing environment file. The commands below describe the general backend setup; inspect configuration before starting a working database.
 
 ```bash
 cd backend
@@ -50,7 +50,7 @@ python scripts/verify_baseline_schema.py --stamp
 alembic upgrade head
 ```
 
-`verify_baseline_schema.py` checks the target database's actual schema against what `0001_baseline` expects before stamping anything, and refuses (with a clear diff) if it doesn't match. See that script's docstring and `docs/upgrade/decisions.md` for the full rationale.
+`verify_baseline_schema.py` checks the target database's actual schema against what `0001_baseline` expects before stamping anything, and refuses (with a clear diff) if it doesn't match. See that script's docstring and `docs/engineering-log/decisions.md` for the full rationale.
 
 Migrations are never run automatically by the app process (see `app/main.py`, which wires routes, access control and HTTP protections) -- always an explicit command, never something a web worker triggers on boot.
 
@@ -303,11 +303,11 @@ tests/              # pytest suite
 
 ## Release verification
 
-The complete gate is `.github/workflows/release.yml`: Python 3.12, Node 24, a fresh PostgreSQL 16 service, both complete backend suites, frontend tests/typecheck/build, and `scripts/verify_release.py --with-frontend`. The harness requires an empty loopback PostgreSQL database named `gtmflow_phase12_*`; without a URL it uses temporary SQLite and explicitly skips migration verification. Historical migrations require PostgreSQL. Current results and audit coverage: [Phase 12 handoff](../docs/upgrade/phase12-release-handoff.md), [dependency review](../docs/dependency-security.md).
+The complete gate is `.github/workflows/release.yml`: Python 3.12, Node 24, a fresh PostgreSQL 16 service, both complete backend suites, frontend tests/typecheck/build, and `scripts/verify_release.py --with-frontend`. The harness requires an empty loopback PostgreSQL database named `gtmflow_phase12_*`; without a URL it uses temporary SQLite and explicitly skips migration verification. Historical migrations require PostgreSQL. Current results and audit coverage: [Phase 12 handoff](../docs/engineering-log/phase12-release-handoff.md), [dependency review](../docs/dependency-security.md).
 
 ## Not implemented
 
 Deployment (hosting, TLS, a persistent model server), real email sending,
 HubSpot/Salesforce/Sheets, multi-tenancy and self-service registration (by
 design). Current status and release blockers:
-`../docs/upgrade/phase-status.md` and `../docs/upgrade/phase12-release-handoff.md`.
+`../docs/engineering-log/phase-status.md` and `../docs/engineering-log/phase12-release-handoff.md`.

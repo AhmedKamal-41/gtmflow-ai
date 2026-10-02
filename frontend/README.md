@@ -6,7 +6,7 @@ Next.js 15, TypeScript and Tailwind. Use **Node 24** (verified locally with
 ## Local mock startup
 
 Start the database, API, operator account and worker using the
-[release startup commands](../docs/upgrade/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode).
+[release startup commands](../docs/engineering-log/phase12-release-handoff.md#6-exact-startup-commands-local-mock-mode).
 Then, from this directory:
 
 ```bash

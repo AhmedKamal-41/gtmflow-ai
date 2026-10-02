@@ -14,7 +14,7 @@ backend/.pytest_cache/
 
 # Phase 3: large PDL source cache + generated curation artifacts. Never
 # commit the source dataset or its derived CSV/manifest/report outputs --
-# see docs/upgrade/phase3-data-handoff.md for how to reproduce them.
+# see docs/engineering-log/phase3-data-handoff.md for how to reproduce them.
 backend/.cache/
 backend/data/pdl_curated/
 backend/data/manifests/
@@ -42,3 +42,6 @@ backend/data/generation_ledgers/
 training/.venv/
 training/.cache/
 training/runs/
+
+# Local Claude Code settings (machine-specific permissions)
+.claude/

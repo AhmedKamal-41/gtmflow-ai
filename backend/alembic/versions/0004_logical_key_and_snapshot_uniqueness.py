@@ -1,6 +1,6 @@
 """logical key uniqueness and source snapshot checksum uniqueness
 
-Phase 3 closeout (see docs/upgrade/decisions.md). Additive only -- does not
+Phase 3 closeout (see docs/engineering-log/decisions.md). Additive only -- does not
 touch 0001/0002/0003.
 
   - lead_batches.logical_key: persisted, full logical-selection key,

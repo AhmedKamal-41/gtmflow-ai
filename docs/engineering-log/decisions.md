@@ -6,7 +6,7 @@ This document records architecture decisions made so far, dependencies later pha
 
 | Decision | Reasoning | Status |
 |---|---|---|
-| No code changes during Phase 1 | Explicit scope: audit only, stop before Phase 2. | Followed — verified nothing under `backend/app` or `frontend/src` was modified this session; only `docs/upgrade/*.md` was added. |
+| No code changes during Phase 1 | Explicit scope: audit only, stop before Phase 2. | Followed — verified nothing under `backend/app` or `frontend/src` was modified this session; only `docs/engineering-log/*.md` was added. |
 | Use the existing `conftest.py` SQLite-in-memory + `TestClient` pattern to reproduce findings, rather than a throwaway script hitting a real DB | Matches repo convention, needed no new dependency, and reuses exactly the fixture pattern the real test suite uses so the reproductions are representative. | Done — trace script lives in the session scratchpad, not the repo. |
 | Verify the PDL dataset's schema via a live fetch of its Hugging Face card rather than assuming the user's description was complete | Working rule 6 ("never fabricate... training results") plus the acceptance criterion that findings reference actual evidence — the exact column names (`name` not `company_name`, no `source` field, etc.) materially affect the Phase 3 import design. | Done — confirmed: `id, website, name, founded, size, locality, region, country, industry, linkedin_url`; 32,330,231 rows; Parquet; CC-BY-4.0; no contact/intent/outreach fields. Not independently re-verified by downloading the actual parquet file. |
 
@@ -37,7 +37,7 @@ Additional engineering decisions made while implementing Phase 2 (not pre-specif
 
 ## Decisions made in Phase 3
 
-Full detail in `docs/upgrade/phase3-data-handoff.md`; summarized here so they're not re-asked.
+Full detail in `docs/engineering-log/phase3-data-handoff.md`; summarized here so they're not re-asked.
 
 | Decision | Reasoning / detail | Status |
 |---|---|---|
@@ -53,13 +53,13 @@ Additional engineering decisions made while implementing Phase 3 (not pre-specif
 |---|---|
 | `curate` and `import` are separate CLI subcommands, with `curate` writing a full-fidelity JSON manifest that `import` reads (rather than `import` re-scanning the 32M-row source, or manifest and CSV needing to agree on every field) | Directly satisfies Part D.6 ("separate import attempts from the logical dataset selection"). Also makes repeated `import` runs fast (~seconds, reading a 5.7 MB manifest) instead of repeating a ~14-minute full-corpus scan every time idempotency needs re-checking. |
 | Deterministic per-segment reservoir sampling (Algorithm R), seeded via `sha256(f"{seed}:{segment}")` rather than Python's built-in `hash()` | Python's `hash()` for strings is randomized per-process (`PYTHONHASHSEED`) by default — using it would have silently broken reproducibility across separate runs/machines, defeating the "identical source+config+seed reproduces the selection" requirement. |
-| Chose exact (case/whitespace-normalized) industry-string matching over substring or fuzzy matching for segment classification | Directly motivated by `docs/upgrade/audit.md` B.3 (the `"hospital"` ⊂ `"hospitality"` substring bug). Verified during Phase 3's own corpus scan that `hospitality` genuinely appears as a distinct real industry value and would have been wrongly captured by substring matching. |
+| Chose exact (case/whitespace-normalized) industry-string matching over substring or fuzzy matching for segment classification | Directly motivated by `docs/engineering-log/audit.md` B.3 (the `"hospital"` ⊂ `"hospitality"` substring bug). Verified during Phase 3's own corpus scan that `hospitality` genuinely appears as a distinct real industry value and would have been wrongly captured by substring matching. |
 | `Lead.source_record_id` stores the full identity key (`"id:<pdl_id>"` or `"fp:<hash>"`), not the bare PDL id | Lets one column carry both real PDL ids and the fingerprint fallback for id-less records uniformly, so the `UNIQUE(source_snapshot_id, source_record_id)` constraint (migration 0003) covers both identity-confidence cases with one mechanism rather than two. |
 | ~~A `LeadBatch` for a PDL import is found-or-created by exact name match, not by a new dedicated FK/key column~~ **Superseded by the Phase 3 closeout, see below** | The original reasoning ("keep migration 0003 minimal") traded away a real correctness/concurrency guarantee for a smaller diff. The closeout corrected this: `LeadBatch.logical_key` is now a real, persisted, uniquely-constrained column (migration `0004_logical_key`), and batch names are purely cosmetic and freely editable. | Corrected — see "Phase 3 closeout" below |
 
 ## Phase 3 closeout: gaps found in the original Phase 3 pass, and what changed
 
-A follow-up closeout pass re-inspected Phase 3's own claims (per the user's explicit instruction not to assume "the command that eventually worked" meant the underlying code was actually fixed) and found several real gaps. Full evidence and re-verification results are in `docs/upgrade/phase3-data-handoff.md` (revised in place, not left contradicting itself); summarized here as decisions.
+A follow-up closeout pass re-inspected Phase 3's own claims (per the user's explicit instruction not to assume "the command that eventually worked" meant the underlying code was actually fixed) and found several real gaps. Full evidence and re-verification results are in `docs/engineering-log/phase3-data-handoff.md` (revised in place, not left contradicting itself); summarized here as decisions.
 
 | Gap found | What was actually true | Fix | Verification |
 |---|---|---|---|
@@ -76,7 +76,7 @@ A follow-up closeout pass re-inspected Phase 3's own claims (per the user's expl
 
 ## Two Phase 2 claims re-checked in Phase 3 (Part A), before importing real data
 
-1. **`approval_rate` exceeding 100%: only a PARTIAL fix, not "fixed."** Reproduced: approve → reject → approve on one generated draft still yields `outreach_generated=1, outreach_approved=2, approval_rate=200.0`. Phase 2's idempotency check only catches an *exact* repeat of the same decision on the same output; a genuine decision change is, correctly, not treated as a repeat, so it's not caught by that mechanism and was never going to be. **`docs/upgrade/phase-status.md`'s Phase 11 row has been corrected to reflect this.** The full fix (redefine the metric) stays Phase 11 scope, as instructed.
+1. **`approval_rate` exceeding 100%: only a PARTIAL fix, not "fixed."** Reproduced: approve → reject → approve on one generated draft still yields `outreach_generated=1, outreach_approved=2, approval_rate=200.0`. Phase 2's idempotency check only catches an *exact* repeat of the same decision on the same output; a genuine decision change is, correctly, not treated as a repeat, so it's not caught by that mechanism and was never going to be. **`docs/engineering-log/phase-status.md`'s Phase 11 row has been corrected to reflect this.** The full fix (redefine the metric) stays Phase 11 scope, as instructed.
 2. **A real, previously-undetected regression was found and fixed**: `approve-outreach`/`reject-outreach` were unconditionally overwriting `Lead.status`, silently erasing a blocked disposition (`do_not_contact`/`disqualified`/`unsubscribed`) and defeating the Phase 2 push-time status check through a second path Phase 2 never tested. Reproduced before the fix (approving outreach on a blocked lead flipped its status, after which it was successfully pushed to Slack), fixed in `app/api/outreach_review.py` and `app/services/demo.py` using the same status-preserving guard Phase 2 already applied to scoring, and closed with 5 focused regression tests **before any real PDL data was imported**, per the explicit instruction to fix this class of bug first.
 
 ## Decisions made in Phase 4
@@ -283,7 +283,7 @@ and instructed Phase 5 to begin; no additional real run is asserted.
 
 ## Decisions made in Phase 10 (model integration and durable jobs, 2026-09-26)
 
-Full detail and verification evidence: `docs/upgrade/phase10-integration-handoff.md`.
+Full detail and verification evidence: `docs/engineering-log/phase10-integration-handoff.md`.
 
 | Decision | Why |
 |---|---|
@@ -302,7 +302,7 @@ Full detail and verification evidence: `docs/upgrade/phase10-integration-handoff
 
 ## Decisions made in Phase 11 (reliable Slack routing and corrected metrics, 2026-09-26)
 
-Full detail and verification: `docs/upgrade/phase11-routing-metrics-handoff.md`.
+Full detail and verification: `docs/engineering-log/phase11-routing-metrics-handoff.md`.
 
 | Decision | Why |
 |---|---|
@@ -316,7 +316,7 @@ Full detail and verification: `docs/upgrade/phase11-routing-metrics-handoff.md`.
 
 ## Decisions made in Phase 12 (access control, release checks, portfolio evidence, 2026-09-26)
 
-Full detail: `docs/upgrade/phase12-release-handoff.md`.
+Full detail: `docs/engineering-log/phase12-release-handoff.md`.
 
 | Decision | Why |
 |---|---|

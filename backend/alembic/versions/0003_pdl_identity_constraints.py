@@ -1,6 +1,6 @@
 """pdl identity confidence and import idempotency constraints
 
-Phase 3 of the GTMFlow upgrade (see docs/upgrade/decisions.md). Additive
+Phase 3 of the GTMFlow upgrade (see docs/engineering-log/decisions.md). Additive
 only -- does not touch 0001_baseline or 0002_provenance.
 
   - company_identities.identity_confidence: "source_id" | "fingerprint",

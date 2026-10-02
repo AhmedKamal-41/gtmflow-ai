@@ -58,8 +58,8 @@ criteria; runtime checks have their own version. No retraining ran.
 
 ## Evidence
 
-- [Training](upgrade/phase8-training-handoff.md)
-- [Evaluation and blind review](upgrade/phase9-evaluation-handoff.md)
-- [Temporary GPU integration](upgrade/phase10-integration-handoff.md)
+- [Training](engineering-log/phase8-training-handoff.md)
+- [Evaluation and blind review](engineering-log/phase9-evaluation-handoff.md)
+- [Temporary GPU integration](engineering-log/phase10-integration-handoff.md)
 - [Dependency findings and audit limits](dependency-security.md)
-- [Release checks and deployment blockers](upgrade/phase12-release-handoff.md)
+- [Release checks and deployment blockers](engineering-log/phase12-release-handoff.md)

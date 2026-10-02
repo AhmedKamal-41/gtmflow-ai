@@ -10,7 +10,7 @@ the actual moment these bytes finished writing to disk -- distinct from
 later) and distinct from the source's own `reported_acquisition_date`
 (PDL's claimed scrape date, unverifiable from this mirror). Conflating
 these three was a documentation error in the original Phase 3 handoff,
-corrected in the Phase 3 closeout: see docs/upgrade/phase3-data-handoff.md.
+corrected in the Phase 3 closeout: see docs/engineering-log/phase3-data-handoff.md.
 """
 from __future__ import annotations
 

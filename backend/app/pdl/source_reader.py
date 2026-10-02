@@ -1,6 +1,6 @@
 """Streaming reader for the PDL source file: gzip + JSON-Lines, one company
 object per line. Confirmed empirically (byte-range peek of the real file,
-see docs/upgrade's Phase 3 handoff) -- NOT a giant JSON array, so plain
+see docs/engineering-log's Phase 3 handoff) -- NOT a giant JSON array, so plain
 `gzip.open(..., "rt")` + line-by-line `json.loads` is sufficient; no
 incremental-JSON-array parser (e.g. ijson) is needed for this source.
 

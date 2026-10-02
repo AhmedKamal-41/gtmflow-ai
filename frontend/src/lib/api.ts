@@ -329,7 +329,7 @@ export function getPushes(
 
 // ai_output_id is required: the caller must say exactly which draft it's
 // approving/rejecting, so a stale/out-of-date UI can't silently act on a
-// different draft than the one it's showing (docs/upgrade/audit.md C.2).
+// different draft than the one it's showing (docs/engineering-log/audit.md C.2).
 // Phase 6: every review names the exact output AND the content hash shown.
 // Phase 10: a draft with runtime quality flags is approved only with
 // `acknowledgedFlags` listing exactly the flag codes that were shown.

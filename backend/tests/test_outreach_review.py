@@ -255,7 +255,7 @@ def test_repeated_identical_approval_is_idempotent(
 ) -> None:
     """Retrying the exact same approve request must not create a second
     review row, a second WorkflowEvent, or inflate approval_rate past 100%
-    (docs/upgrade/audit.md E.1)."""
+    (docs/engineering-log/audit.md E.1)."""
     lead_id, output_id = _scored_lead_with_outreach(client)
 
     first = client.post(

@@ -39,7 +39,7 @@ def apply_legacy_score(session: Session, lead: Lead) -> dict[str, Any]:
     # not a workflow stage -- scoring must not overwrite it. Otherwise a
     # lead's blocked status is silently lost the moment it's scored, and the
     # push-time status check in services/integration_push.py would never see
-    # it (see docs/upgrade/audit.md D.2).
+    # it (see docs/engineering-log/audit.md D.2).
     if lead.status not in DISQUALIFIED_STATUSES:
         lead.status = "scored"
     return result

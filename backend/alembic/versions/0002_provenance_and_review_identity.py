@@ -1,6 +1,6 @@
 """provenance, company identity, and output/review identity
 
-Phase 2 Parts C + D of the GTMFlow upgrade (see docs/upgrade/decisions.md).
+Phase 2 Parts C + D of the GTMFlow upgrade (see docs/engineering-log/decisions.md).
 
 Adds, additively, on top of the 0001 baseline:
 
@@ -269,7 +269,7 @@ def downgrade() -> None:
         entirely.
 
     Do not run this against a database that has accumulated real Phase 3+
-    data without taking a full backup first (see docs/upgrade/audit.md's
+    data without taking a full backup first (see docs/engineering-log/audit.md's
     Phase 2 handoff for the backup/recovery procedure). This downgrade was
     never run against a populated database during Phase 2 development --
     only against disposable, empty-of-new-data verification databases.

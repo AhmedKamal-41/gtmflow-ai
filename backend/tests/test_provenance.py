@@ -3,7 +3,7 @@
 These are ORM-level tests against the live SQLAlchemy models (SQLite in
 this suite). They do not exercise the Alembic migrations themselves -- that
 verification requires a disposable Postgres database and is documented
-separately in docs/upgrade/audit.md's Phase 2 handoff, since SQLite cannot
+separately in docs/engineering-log/audit.md's Phase 2 handoff, since SQLite cannot
 establish PostgreSQL migration correctness.
 """
 from __future__ import annotations

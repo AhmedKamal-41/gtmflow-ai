@@ -7,7 +7,7 @@ any real PDL data is imported.
    repeat and still produces two "outreach_approved" WorkflowEvent rows for
    one generated draft, so approval_rate can still exceed 100%. This is
    documented here as a known, intentional partial fix -- the full fix
-   (redefining the metric) is Phase 11 scope. See docs/upgrade/decisions.md.
+   (redefining the metric) is Phase 11 scope. See docs/engineering-log/decisions.md.
 
 2. Blocked-status regression: `approve-outreach`/`reject-outreach` were
    unconditionally overwriting Lead.status, which silently erased a blocked

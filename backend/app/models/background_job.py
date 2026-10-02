@@ -1,4 +1,4 @@
-"""Phase 10: durable background jobs (docs/upgrade/audit.md F.5).
+"""Phase 10: durable background jobs (docs/engineering-log/audit.md F.5).
 
 A job is one batch-level operation (fit scoring, legacy scoring, summary or
 outreach generation, Slack push of Hot leads). Its work is split into one

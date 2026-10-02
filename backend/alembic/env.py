@@ -2,7 +2,7 @@
 
 Migrations are run explicitly (``alembic upgrade head``), never
 automatically on application startup -- see app/main.py, which only wires
-CORS middleware, and docs/upgrade/decisions.md's Phase 2 notes for why.
+CORS middleware, and docs/engineering-log/decisions.md's Phase 2 notes for why.
 
 The database URL is never hardcoded here or in alembic.ini: it's read at
 runtime from the same ``app.core.config.settings.database_url`` every other

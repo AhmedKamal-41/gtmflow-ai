@@ -9,7 +9,7 @@ changed.
 minimal-edit corrections for NEW TRAINING examples only. Designed from
 training evidence only (pilot-v1 outputs, the pilot AI-review findings, and
 the human corrections of pilot #4 and #6); see
-docs/upgrade/phase7-correction-policy-v2.md. Rules:
+docs/engineering-log/phase7-correction-policy-v2.md. Rules:
 
   1. Keep every original sentence that is supported by the record or the
      seller revision, well formed, and free of prohibited content -- verbatim.

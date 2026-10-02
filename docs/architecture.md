@@ -51,5 +51,5 @@ refuses a populated target database.
 
 Hosting, TLS/proxy configuration, backups, production secrets and persistent
 model serving remain deployment work. Original database recovery is separate.
-See the [Phase 12 handoff](upgrade/phase12-release-handoff.md) for commands and
+See the [Phase 12 handoff](engineering-log/phase12-release-handoff.md) for commands and
 results, and the [AI workflow](ai-workflow.md) for model evidence.

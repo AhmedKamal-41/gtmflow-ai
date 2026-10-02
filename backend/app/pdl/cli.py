@@ -206,7 +206,7 @@ def cmd_curate(args: argparse.Namespace) -> int:
     # solely from an optional CLI flag. This is the Part B.1 fix: the
     # original --source-checksum flag was easy to forget, and forgetting it
     # silently created a duplicate SourceSnapshot on every import attempt
-    # (see docs/upgrade/decisions.md's Phase 3 closeout section). The flag
+    # (see docs/engineering-log/decisions.md's Phase 3 closeout section). The flag
     # still exists, but only as an optional cross-check assertion now.
     cache_dir = Path(args.cache_dir)
     download_result = download_source(DOWNLOAD_URL, cache_dir, SOURCE_FILENAME)

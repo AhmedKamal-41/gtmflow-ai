@@ -13,7 +13,7 @@ class ApproveOutreachRequest(BaseModel):
     ``ai_output_id`` is required: the caller must say exactly which draft it
     is approving. This is what makes a stale browser tab unable to silently
     approve a different (newer) draft than the one it has rendered -- see
-    docs/upgrade/audit.md C.2.
+    docs/engineering-log/audit.md C.2.
 
     Phase 6: ``content_hash`` is the hash of the exact content displayed
     (``AIOutputRead.content_hash``). Extra fields -- e.g. a posted reviewer

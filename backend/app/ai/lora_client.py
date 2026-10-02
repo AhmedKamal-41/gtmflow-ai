@@ -105,7 +105,7 @@ class LocalLoRAClient(AIClient):
         if self._served_model not in served:
             raise AIConfigError(
                 f"The inference server does not serve '{self._served_model}'. Start it with the Phase 8 "
-                "adapter registered under that name (see docs/upgrade/phase10-integration-handoff.md)."
+                "adapter registered under that name (see docs/engineering-log/phase10-integration-handoff.md)."
             )
         with _verified_lock:
             _verified.add(key)

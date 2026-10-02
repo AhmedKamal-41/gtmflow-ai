@@ -13,8 +13,8 @@ deployment should use. As of Phase 2, the sanctioned path is Alembic:
     python scripts/verify_baseline_schema.py --stamp   # adopt an existing
     alembic upgrade head                               # database first
 
-See docs/upgrade/decisions.md for why this distinction matters and
-docs/upgrade/audit.md for the Phase 2 migration work itself.
+See docs/engineering-log/decisions.md for why this distinction matters and
+docs/engineering-log/audit.md for the Phase 2 migration work itself.
 
 Tables are not auto-created at app startup because schema changes should be
 deliberate, tests must not require a running Postgres, and a process restart

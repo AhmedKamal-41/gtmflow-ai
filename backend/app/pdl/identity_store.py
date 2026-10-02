@@ -4,7 +4,7 @@ closeout Part C.1).
 The original implementation kept `seen_identity_hash: dict[str, str]` in a
 plain Python dict, which holds one entry per ELIGIBLE record seen (not the
 full ~32.3M-row corpus, but still ~962,000 entries on the real PDL scan --
-see docs/upgrade/phase3-data-handoff.md). That's a genuine unbounded-growth
+see docs/engineering-log/phase3-data-handoff.md). That's a genuine unbounded-growth
 concern in the general case (a future, larger, or less-filtered corpus could
 make the eligible population itself huge), so this replaces it with a
 temporary on-disk SQLite index, with a small bounded in-memory LRU cache in

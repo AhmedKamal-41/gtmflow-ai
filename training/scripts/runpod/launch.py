@@ -68,7 +68,7 @@ ENV_FILE = REPO / "backend" / ".env"
 _KEY: str | None = None
 _SERVE_TOKEN: str | None = None  # phase10-accept only; memory only
 # The acceptance driver's app database: a disposable local Postgres (see
-# docs/upgrade/phase10-integration-handoff.md §8); never the project database.
+# docs/engineering-log/phase10-integration-handoff.md §8); never the project database.
 ACCEPT_DATABASE_URL = os.environ.get(
     "GTMFLOW_ACCEPT_DATABASE_URL", "postgresql+psycopg://postgres:acceptonly@127.0.0.1:55498/gtmflow_accept")
 REST = "https://rest.runpod.io/v1"

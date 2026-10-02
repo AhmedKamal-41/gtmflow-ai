@@ -9,7 +9,7 @@ responses, push gating, Slack payloads, metrics). Nothing here touches
 ## The demonstration profile: demo-us-sectors-v1
 
 The seller's actual product and ideal-customer-profile are not yet defined
-(that's Phase 5's `docs/upgrade` scope). This profile is an explicit,
+(that's Phase 5's `docs/engineering-log` scope). This profile is an explicit,
 labeled STAND-IN so the scoring *mechanism* (weights, coverage, bands,
 versioning, storage, API/UI plumbing) can be built and verified against
 the real imported cohort now, without waiting on and without pretending to
@@ -20,7 +20,7 @@ exactly why every one of the 5,000 already-imported leads scores 100 under
 it: they already passed these same two filters at import time. That is
 EXPECTED, not a bug, and is not a claim that every healthcare business is a
 clinic or every real-estate business is a property manager -- see
-docs/upgrade/phase4-scoring-handoff.md.
+docs/engineering-log/phase4-scoring-handoff.md.
 
 Changing any weight, threshold, or mapping below is, by definition, a new
 profile version -- bump PROFILE_VERSION (and NORMALIZATION_VERSION if a

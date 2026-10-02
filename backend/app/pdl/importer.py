@@ -8,7 +8,7 @@ Idempotency is enforced at two levels:
   - Database level: uq_company_identities_snapshot_source_record and
     uq_leads_snapshot_source_record (migration 0003) make it impossible to
     double-insert even under a race, independent of the find-or-create logic
-    above -- see docs/upgrade's Phase 3 handoff for a live verification of
+    above -- see docs/engineering-log's Phase 3 handoff for a live verification of
     both layers, including what happens if the application-level check is
     bypassed.
 """

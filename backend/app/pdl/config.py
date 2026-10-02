@@ -18,7 +18,7 @@ guessed:
     exactly the kind of silent scope-broadening the brief prohibits).
     Notably, "hospitality" would have been a false positive under simple
     substring matching (it starts with "hospital") -- this is the same bug
-    class flagged in docs/upgrade/audit.md B.3, avoided here by exact
+    class flagged in docs/engineering-log/audit.md B.3, avoided here by exact
     (case/whitespace-normalized) matching, never substring matching.
   - `zcat ... | grep -oE '"country": *"[^"]*"' | sort -u` found 249 distinct
     country values; the only exact match for "United States" is the literal
@@ -71,7 +71,7 @@ MIRROR_URL = (
     "https://huggingface.co/datasets/andreaaltomani/company-dataset/"
     "resolve/main/free_company_dataset.json.gz"
 )
-# Pinned via `curl -sI` against the download URL (see docs/upgrade's Phase 3
+# Pinned via `curl -sI` against the download URL (see docs/engineering-log's Phase 3
 # handoff for the exact command/output) -- the HF repo commit the file was
 # resolved from, independent of any future `main` branch changes.
 SOURCE_REVISION = "0689a4c96cd3156b43d298860d5b6f29e82432bd"

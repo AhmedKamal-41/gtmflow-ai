@@ -71,7 +71,7 @@ class CompanyIdentity(Base):
     # Phase 3: "source_id" (the source's own record id was present and used
     # directly) or "fingerprint" (no id was present; a deterministic hash of
     # normalized name+locality+region+country stands in -- weaker evidence,
-    # honestly labeled per docs/upgrade's Phase 3 handoff Part D.2). NULL
+    # honestly labeled per docs/engineering-log's Phase 3 handoff Part D.2). NULL
     # for identities not created by the Phase 3 pipeline.
     identity_confidence: Mapped[str | None] = mapped_column(String(16), nullable=True)
     source_raw_identity: Mapped[dict[str, Any] | None] = mapped_column(
