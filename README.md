@@ -42,6 +42,7 @@ until the fine-tuned model's server is connected. It is not deployed; see [Local
 - [Key features](#key-features)
 - [Engineering highlights](#engineering-highlights)
 - [System architecture](#system-architecture)
+- [Data model](#data-model)
 - [Lead lifecycle](#lead-lifecycle)
 - [Grounded generation and review](#grounded-generation-and-review)
 - [Slack delivery ledger](#slack-delivery-ledger)
@@ -202,6 +203,106 @@ flowchart TB
 The browser only ever talks to its own origin. The Next.js server proxies `/api` to FastAPI, so the
 session cookie can stay `HttpOnly`, `SameSite=Lax` and `Secure`. The API and the worker apply the
 same gates (approval, eligibility, delivery claim) because they call the same service functions.
+
+## Data model
+
+PostgreSQL holds all state, including the job queue and the delivery ledger: 23 tables, created
+by 14 Alembic migrations. The diagram is a **conceptual** view of the core workflow. Entity and
+field names are simplified and do not match the physical tables one-to-one.
+
+```mermaid
+erDiagram
+    IMPORT ||--o{ LEAD : contains
+    LEAD ||--o{ PRIORITY_SCORE : "scored as"
+    LEAD ||--o{ FIT_SCORE : "fit-scored as"
+    LEAD ||--o{ DRAFT : has
+    DRAFT ||--o{ DRAFT : "revised into"
+    SELLER_PROFILE ||--o{ DRAFT : grounds
+    SELLER_PROFILE ||--o{ PROFILE_ACTIVATION : "activated by"
+    DRAFT ||--o{ REVIEW : "decided in"
+    DRAFT ||--o{ DELIVERY : "approved for"
+    LEAD ||--o{ DELIVERY : "routed by"
+    IMPORT ||--o{ JOB : "processed by"
+    JOB ||--o{ JOB_ITEM : contains
+    LEAD ||--o{ JOB_ITEM : "worked in"
+    ACCOUNT ||--o{ SESSION : "signs in with"
+    ACCOUNT ||--o| EMAIL_CODE : "verifies with"
+    ACCOUNT ||--o{ JOB : queues
+    LEAD ||--o{ AUDIT_EVENT : "history of"
+
+    IMPORT {
+        uuid id PK
+        string name
+        string state
+        string import_key UK
+    }
+    LEAD {
+        uuid id PK
+        uuid import_ref FK
+        string company
+        string contact
+        string disposition
+        json extra_columns
+    }
+    PRIORITY_SCORE {
+        uuid id PK
+        int points
+        string band "Hot, Warm, Cold"
+    }
+    FIT_SCORE {
+        uuid id PK
+        int fit_points
+        float evidence_coverage
+        string fit_band
+        string rubric_version
+    }
+    DRAFT {
+        uuid id PK
+        string kind "summary or outreach"
+        json body
+        string writer_model
+        string inputs_digest
+        uuid profile_ref FK
+    }
+    REVIEW {
+        uuid id PK
+        string decision
+        string body_digest "exact content approved"
+        string reviewer
+    }
+    DELIVERY {
+        uuid id PK
+        string claim_key UK "one per approved attempt"
+        string outcome "pending, delivered, failed, unknown"
+        string channel_mode "mock or real"
+    }
+    JOB {
+        uuid id PK
+        string job_kind
+        string state
+        datetime lease_until
+        string dedupe_key UK
+    }
+    ACCOUNT {
+        uuid id PK
+        string login UK
+        string role "operator, viewer, guest"
+        string password_digest
+    }
+    SESSION {
+        uuid id PK
+        string token_digest UK
+        datetime expires
+    }
+```
+
+Not shown: rate-limit counters, the company-data provenance tables (source snapshots, import runs,
+company identities) and the model-work tables (split manifests, annotation candidates, training
+annotations).
+
+The diagram's renamed fields are documentation only. What actually prevents SQL injection is that
+every query goes through SQLAlchemy with bound parameters, so user input never becomes part of the
+SQL text. Secrets such as passwords, session tokens and verification codes are stored only as hashes.
 
 ## Lead lifecycle
 
@@ -734,6 +835,6 @@ number in this README traces back to one of those documents.
 
 <div align="center">
 
-[Run it locally](#local-setup) · [Engineering log](docs/engineering-log/README.md) · [Star this repo](https://github.com/AhmedKamal-41/gtmflow-ai)
+[Run it locally](#local-setup) · [Full project record](PROJECT.md) · [Engineering log](docs/engineering-log/README.md) · [Star this repo](https://github.com/AhmedKamal-41/gtmflow-ai)
 
 </div>
