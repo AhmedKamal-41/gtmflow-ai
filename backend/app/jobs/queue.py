@@ -67,9 +67,17 @@ def enqueue(session: Session, job_type: str, batch_id: UUID, params: dict[str, A
     if session.get(LeadBatch, batch_id) is None:
         raise JobError(404, "Batch not found")
     clean = handler.validate_params(params or {})
+    if job_type == "assistant_outreach":
+        from app.jobs.handlers import validate_assistant_selection
+
+        validate_assistant_selection(session, batch_id, clean)
+        # Each selected lead gets one provider attempt in this user-confirmed job.
+        max_item_attempts = 1
     key = f"{job_type}:{batch_id}"
     existing = session.scalar(select(BackgroundJob).where(BackgroundJob.dedupe_key == key))
     if existing is not None:
+        if job_type == "assistant_outreach" and existing.params != clean:
+            raise JobError(409, "Another assistant draft job is active for this import. Wait or cancel it first.")
         return existing, False
     job = BackgroundJob(job_type=job_type, batch_id=batch_id, params=clean, status=JOB_QUEUED,
                         dedupe_key=key, attempts=0, max_attempts=max_attempts,
@@ -84,6 +92,8 @@ def enqueue(session: Session, job_type: str, batch_id: UUID, params: dict[str, A
         existing = session.scalar(select(BackgroundJob).where(BackgroundJob.dedupe_key == key))
         if existing is None:
             raise
+        if job_type == "assistant_outreach" and existing.params != clean:
+            raise JobError(409, "Another assistant draft job is active for this import. Wait or cancel it first.")
         return existing, False
     _event(session, job, "job_enqueued", params=clean)
     return job, True

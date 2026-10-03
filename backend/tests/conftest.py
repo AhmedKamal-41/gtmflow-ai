@@ -8,6 +8,7 @@ os.environ["USE_MOCK_AI"] = "true"
 os.environ["OPENAI_API_KEY"] = ""
 os.environ["SLACK_WEBHOOK_URL"] = ""
 os.environ["AI_PROVIDER"] = "openai"  # Phase 10: never a developer's inference server
+os.environ["AGENT_PROVIDER"] = "mock"
 os.environ["LORA_INFERENCE_BASE_URL"] = ""
 os.environ["LORA_INFERENCE_API_KEY"] = ""
 # Raw health clients and file-only dataset CLI tests also construct the

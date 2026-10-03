@@ -53,6 +53,10 @@ class Settings:
     # (checked before each generation, cached briefly), draft with the mock
     # generator instead of failing. Such drafts are recorded as mock.
     lora_fallback_to_mock: bool = False
+    # Tool selection is separate from drafting: the evaluated LoRA adapter
+    # was not trained for tool calling. Real planning is an explicit opt-in.
+    agent_provider: str = "mock"
+    agent_model: str = "gpt-4o-mini"
     # Phase 12: operator sessions (docs/engineering-log/phase12-release-handoff.md).
     session_cookie_secure: bool = True
     session_idle_minutes: int = 60
@@ -78,9 +82,11 @@ class Settings:
     def guest_safe(self) -> bool:
         """True when no action can send a real Slack message or call a paid,
         per-request AI API: drafts come from the mock generator or the
-        self-hosted fine-tuned model, and no Slack webhook is configured."""
+        self-hosted fine-tuned model, planning is mocked, and no Slack webhook
+        is configured."""
         drafting_is_safe = self.use_mock_ai or self.ai_provider == "qwen3-4b-lora-v1"
-        return drafting_is_safe and not self.slack_webhook_url
+        planning_is_safe = self.use_mock_ai or self.agent_provider == "mock"
+        return drafting_is_safe and planning_is_safe and not self.slack_webhook_url
 
 
 def get_settings() -> Settings:
@@ -96,6 +102,8 @@ def get_settings() -> Settings:
         lora_served_model=(os.getenv("LORA_SERVED_MODEL") or "qwen3-4b-lora-v1").strip(),
         lora_timeout_seconds=float(os.getenv("LORA_TIMEOUT_SECONDS") or 120),
         lora_fallback_to_mock=_as_bool(os.getenv("LORA_FALLBACK_TO_MOCK"), default=False),
+        agent_provider=(os.getenv("AGENT_PROVIDER") or "mock").strip().lower(),
+        agent_model=(os.getenv("AGENT_MODEL") or "gpt-4o-mini").strip(),
         session_cookie_secure=_as_bool(os.getenv("SESSION_COOKIE_SECURE"), default=True),
         session_idle_minutes=int(os.getenv("SESSION_IDLE_MINUTES") or 60),
         session_absolute_hours=int(os.getenv("SESSION_ABSOLUTE_HOURS") or 12),

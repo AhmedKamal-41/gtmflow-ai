@@ -5,6 +5,14 @@ that was measured along the way. Each figure comes from a dated record in
 [`docs/engineering-log/`](docs/engineering-log/README.md), the code itself, or a verification run;
 the source is named next to it. For a shorter tour, start with the [README](README.md).
 
+**Feature-branch addition (2026-10-03):** an outreach assistant now searches and inspects leads
+through a bounded tool loop, proposes up to five, and prepares drafts only after the user confirms.
+It reuses the existing worker and review gates. The free demo planner is deterministic; native
+OpenAI tool calling is implemented and tested with mocked responses, not live model calls.
+This addition is not deployed. See the [assistant handoff](docs/engineering-log/lead-assistant-handoff.md)
+for current verification. The figures and deployment record below retain their pre-assistant
+snapshot at main `5e56a4c`; they are not claims about agent quality.
+
 ## Contents
 
 1. [At a glance](#1-at-a-glance)

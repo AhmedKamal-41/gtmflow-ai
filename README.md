@@ -88,6 +88,11 @@ by an emailed code) or continue as a guest, when the server enables those option
 
 ## Key features
 
+- **Outreach assistant:** select an import, describe the leads you want, inspect the shortlist
+  and its tool trace, then explicitly queue up to five drafts. The bounded agent has search,
+  inspection and proposal tools; approvals and delivery stay with the user. Demo mode is a
+  labeled deterministic simulation. OpenAI tool calling is an opt-in provider, verified with
+  mocked HTTP responses so far. [Setup and verification](docs/engineering-log/lead-assistant-handoff.md).
 - **CSV import with validation:** bounded and streamed; bad rows are reported, and unknown columns
   are kept on each lead for scoring.
 - **Explainable scoring:** a 100-point priority score with the breakdown and matched signals, plus a
@@ -180,7 +185,7 @@ by an emailed code) or continue as a guest, when the server enables those option
 ```mermaid
 flowchart TB
     UI["Browser<br/>Next.js 15 pages"] -->|"session cookie<br/>+ X-CSRF-Token"| Proxy["Next.js server<br/>same-origin /api proxy"]
-    Proxy --> API["FastAPI<br/>auth · CSRF · roles<br/>64 operations"]
+    Proxy --> API["FastAPI<br/>auth · CSRF · roles<br/>66 operations"]
 
     API <-->|"data, audit events,<br/>job queue"| PG[("PostgreSQL 16")]
     PG <-->|"leased jobs,<br/>item results"| Worker["Job worker<br/>app.jobs.worker"]
@@ -467,7 +472,7 @@ Infrastructure and tooling:
 |---|---|---|
 | Database | PostgreSQL 16 (SQLite for quick tests) | All state, including the job queue |
 | CI | GitHub Actions | Backend, frontend, training and release-verification workflows |
-| Release check | `backend/scripts/verify_release.py` | 96 live checks against a fresh database |
+| Release check | `backend/scripts/verify_release.py` | 108 live checks against a fresh database (includes assistant flow) |
 
 ## Security
 
@@ -582,19 +587,21 @@ provenance under "Model details". The review applies to this exact draft.
 
 | Layer | Location | What it covers |
 |---|---|---|
-| Backend | `backend/tests/` | Scoring, ingestion, grounding validation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, the lead inbox stages, model status and fallback, sign-in, sign-up and guest access, migrations |
+| Backend | `backend/tests/` | Scoring, ingestion, grounding validation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, inbox, model status, auth, migrations, bounded tool calling and selected-lead draft jobs |
 | PostgreSQL | same suite with `TEST_DATABASE_URL` | Real concurrency (simultaneous pushes, lease races), process-kill recovery, migration preservation |
-| Frontend | `frontend/src/**/*.test.ts(x)` | Today, Leads, Imports, Settings, sidebar, lead, import, metrics and seller-profile pages; the API client (CSRF, 401 handling); auth provider, jobs panel, push history |
+| Frontend | `frontend/src/**/*.test.ts(x)` | Today, Leads, Imports, Settings, Assistant, sidebar, lead, import, metrics and seller-profile pages; the API client (CSRF, 401 handling); auth provider, jobs panel, push history |
 | Training | `training/tests/` | Weighted objective, split guards, adapter hash checks, launcher secret handling, serving limits |
-| Release harness | `backend/scripts/verify_release.py` | 96 live checks: production frontend, API, worker, sign-up and guest access on a fresh database |
+| Release harness | `backend/scripts/verify_release.py` | 108 live checks: production frontend proxy, API, worker, sign-up, guest access and the assistant on a fresh database |
 
 Tests block outbound network calls. Key safety tests were mutation-checked: the safeguard was
 removed and the test had to fail.
 
-Latest verified results (2026-10-03, local): **560 backend tests on PostgreSQL** (555 passed and 5
-skipped on SQLite), **109 frontend tests**, **96 of 96 release checks**, and a clean typecheck and
-production build. The same workflows run in [CI](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml)
-on every push.
+Latest feature-branch results (2026-10-03, local): **581 backend tests on PostgreSQL**,
+**117 frontend tests**, **108 of 108 release checks**, and a clean typecheck and production build.
+The [assistant handoff](docs/engineering-log/lead-assistant-handoff.md#verification) records the
+commands, SQLite checks and limits of mock verification. The existing
+[CI workflows](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml) cover pull
+requests and their configured release branches; these local results do not claim a new CI run.
 
 ```bash
 cd backend
@@ -610,7 +617,7 @@ Never point `TEST_DATABASE_URL` at a database whose contents matter.
 
 ## API reference
 
-64 operations. Every route except the health checks and the public account endpoints below needs a
+66 operations. Every route except the health checks and the public account endpoints below needs a
 session; state changes also need `X-CSRF-Token` and the `operator` role (or `guest` on a guest-safe
 server).
 
@@ -644,6 +651,8 @@ server).
 | `GET`, `POST` | `/api/seller-profile`, `…/activate`, `…/deactivate` | Versioned seller profiles |
 | `GET` | `/api/inbox` | Every lead with its priority and workflow stage, Hot first; filter by `stage`, `priority`, `q` |
 | `GET` | `/api/ai/status` | Which model drafts right now and whether the fine-tuned model's server is reachable |
+| `GET` | `/api/assistant/status` | Assistant mode, configuration and current user's ability to run it |
+| `POST` | `/api/assistant/plan` | Bounded read-only lead selection: `{batch_id, request, max_leads}`; never queues work |
 | `GET` | `/api/metrics/dashboard` | Adoption, delivery and mock-versus-real metrics |
 | `POST` | `/api/demo/run` | Seed and run the full demo workflow (used by the release checks) |
 
@@ -672,6 +681,7 @@ export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:5543
 export OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
 export SESSION_COOKIE_SECURE=false ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 export USE_MOCK_AI=false AI_PROVIDER=qwen3-4b-lora-v1 LORA_FALLBACK_TO_MOCK=true   # prefer the fine-tuned model
+export AGENT_PROVIDER=mock  # free, deterministic assistant demonstration
 export SELF_SIGNUP_ENABLED=true GUEST_ACCESS_ENABLED=true   # sign-up codes print in this terminal
 .venv/bin/alembic upgrade head
 .venv/bin/python -m app.auth_cli create-user admin     # optional: an operator account (prompts for a password)
@@ -685,6 +695,7 @@ cd backend
 export DATABASE_URL=postgresql+psycopg://postgres:local-demo-only@127.0.0.1:55432/gtmflow_demo
 export OPENAI_API_KEY= SLACK_WEBHOOK_URL= LORA_INFERENCE_BASE_URL= LORA_INFERENCE_API_KEY=
 export USE_MOCK_AI=false AI_PROVIDER=qwen3-4b-lora-v1 LORA_FALLBACK_TO_MOCK=true
+export AGENT_PROVIDER=mock
 .venv/bin/python -m app.jobs.worker
 ```
 
@@ -714,9 +725,10 @@ Backend (`backend/.env.example` documents each one):
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | required | `postgresql+psycopg://…`; `postgres://` URLs are rewritten automatically |
-| `USE_MOCK_AI` | `true` | Mock generation; always wins over `AI_PROVIDER` |
+| `USE_MOCK_AI` | `true` | Mock generation and planning; always wins over both provider settings |
 | `AI_PROVIDER` | `openai` | `openai` or `qwen3-4b-lora-v1` when mock is off |
-| `OPENAI_API_KEY` | empty | Only for `AI_PROVIDER=openai` (paid) |
+| `AGENT_PROVIDER`, `AGENT_MODEL` | `mock`, `gpt-4o-mini` | Lead selection: fixed mock or opt-in OpenAI tool calling; independent of drafting |
+| `OPENAI_API_KEY` | empty | Required for real OpenAI drafting or planning (paid) |
 | `LORA_INFERENCE_BASE_URL`, `LORA_INFERENCE_API_KEY` | empty | The OpenAI-compatible adapter server |
 | `LORA_SERVED_MODEL`, `LORA_TIMEOUT_SECONDS` | see the example file | Served model name and request timeout |
 | `LORA_FALLBACK_TO_MOCK` | `false` | With the fine-tuned provider selected: use the demo generator while its server is offline |

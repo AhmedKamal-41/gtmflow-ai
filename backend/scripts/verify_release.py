@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from sqlalchemy import create_engine, inspect, select
@@ -49,7 +49,7 @@ def main() -> None:
                                       and (url.database or "").startswith("gtmflow_phase12_")):
             raise SystemExit("Refusing database: use a fresh loopback PostgreSQL database named gtmflow_phase12_*.")
         env = {**os.environ, "DATABASE_URL": db_url, "USE_MOCK_AI": "true", "OPENAI_API_KEY": "",
-               "SLACK_WEBHOOK_URL": "", "AI_PROVIDER": "openai", "LORA_INFERENCE_BASE_URL": "",
+               "SLACK_WEBHOOK_URL": "", "AI_PROVIDER": "openai", "AGENT_PROVIDER": "mock", "LORA_INFERENCE_BASE_URL": "",
                "LORA_INFERENCE_API_KEY": "", "SESSION_COOKIE_SECURE": "false", "PASSWORD_HASH_N": "32768",
                "ALLOWED_ORIGINS": "http://127.0.0.1:13000", "PYTHONUNBUFFERED": "1",
                "NEXT_TELEMETRY_DISABLED": "1", "API_PROXY_TARGET": "http://127.0.0.1:18000",
@@ -283,6 +283,52 @@ def main() -> None:
                                    (f"/api/jobs/{queued['id']}/cancel", {})):
                     request("POST", path, 403, json=body)
                 request("POST", "/api/auth/logout", 204)
+
+            # Agent extension: real HTTP and worker process, entirely mocked AI.
+            with httpx.Client(base_url=base, timeout=30, trust_env=False) as assistant_client:
+                check(assistant_client.get("/api/assistant/status").status_code == 401,
+                      "assistant status requires a session")
+                login = assistant_client.post("/api/auth/login", json={"username": "release-operator", "password": password})
+                check(login.status_code == 200, "assistant operator signs in")
+                assistant_client.headers["X-CSRF-Token"] = login.json()["csrf_token"]
+                status = assistant_client.get("/api/assistant/status").json()
+                check(status["mode"] == "mock" and status["can_run"], "assistant explicitly reports mock mode")
+                uploaded = assistant_client.post("/api/batches/upload", files={"file": (
+                    "assistant.csv", b"company_name,industry\nSynthetic Assistant Clinic,Healthcare\n", "text/csv")})
+                check(uploaded.status_code == 201, "assistant synthetic import created")
+                assistant_batch = uploaded.json()["batch_id"]
+                planned = assistant_client.post("/api/assistant/plan", json={"batch_id": assistant_batch,
+                                                "request": "Find healthcare leads", "max_leads": 1})
+                check(planned.status_code == 200, "assistant plan completes over HTTP")
+                proposal = planned.json()
+                check(proposal["status"] == "proposed" and len(proposal["leads"]) == 1,
+                      "assistant returns one in-scope lead")
+                check([step["tool"] for step in proposal["steps"]] == ["search_leads", "inspect_leads", "propose_leads"],
+                      "assistant returns the three executed tool steps")
+                chosen = proposal["leads"][0]["id"]
+                chosen_uuid = UUID(chosen)
+                with Session(engine) as session:
+                    check(not session.scalars(select(AIOutput).where(AIOutput.lead_id == chosen_uuid)).all(),
+                          "planning creates no drafts")
+                queued_assistant = assistant_client.post(f"/api/batches/{assistant_batch}/jobs", json={
+                    "job_type": "assistant_outreach", "params": {"lead_ids": [chosen]}})
+                check(queued_assistant.status_code == 202, "explicit confirmation queues an assistant job")
+                assistant_job = queued_assistant.json()["id"]
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    state = assistant_client.get(f"/api/jobs/{assistant_job}").json()
+                    if state["status"] not in ("queued", "running"):
+                        break
+                    time.sleep(0.1)
+                check(state["status"] == "completed" and state["counts"].get("succeeded") == 1,
+                      "real worker completes selected draft preparation")
+                with Session(engine) as session:
+                    outputs = session.scalars(select(AIOutput).where(AIOutput.lead_id == chosen_uuid)).all()
+                    check(len(outputs) == 1 and outputs[0].model_used == "mock" and bool(outputs[0].input_hash),
+                          "assistant draft uses grounded mock generation")
+                    check(not session.scalars(select(AIOutputReview).where(AIOutputReview.lead_id == chosen_uuid)).all()
+                          and not session.scalars(select(IntegrationPush).where(IntegrationPush.lead_id == chosen_uuid)).all(),
+                          "assistant creates no approvals or deliveries")
 
             with Session(engine) as session:
                 events = session.scalars(select(WorkflowEvent).where(WorkflowEvent.id != legacy_id)).all()

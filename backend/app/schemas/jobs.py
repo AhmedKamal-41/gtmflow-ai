@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-JobType = Literal["fit_score", "legacy_score", "generate_summary", "generate_outreach", "push_hot"]
+JobType = Literal["fit_score", "legacy_score", "generate_summary", "generate_outreach", "push_hot", "assistant_outreach"]
 
 
 class JobCreate(BaseModel):

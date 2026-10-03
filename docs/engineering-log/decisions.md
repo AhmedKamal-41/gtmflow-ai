@@ -2,6 +2,16 @@
 
 This document records architecture decisions made so far, dependencies later phases will need, unresolved questions the user needs to weigh in on, and the seller-profile requirement in detail. Demonstration assumptions (things true for the mock/portfolio version of this project but not for a real deployment) are explicitly labeled as such — don't let them leak into later phases as if they were requirements.
 
+## Lead-selection assistant (2026-10-03)
+
+| Decision | Reasoning |
+|---|---|
+| Reuse `AIClient`, the existing OpenAI SDK and native function schemas. No new agent framework or dependency. | Three tools and a six-step loop do not need a separate orchestration stack. |
+| Separate `AGENT_PROVIDER` from `AI_PROVIDER`, defaulting planning to mock. | The evaluated LoRA adapter writes drafts; it was not trained or evaluated for tool selection. Real planning is an explicit configuration choice, and global mock mode overrides both. |
+| Tool execution is read-only, scoped to one import and previously discovered IDs. | Imported content and model requests are untrusted. No approval, delivery, arbitrary HTTP, SQL or shell tool is exposed. |
+| Require a separate click to queue up to five drafts through the existing worker. | Grounding, provenance, blocked-lead checks, cancellation and audit actors stay in one implementation. Existing drafts are skipped. No new tables or migrations. |
+| Mock demonstration and live-model evidence stay distinct. | The native SDK path is tested against mocked HTTP; no live agent quality or reliability claim is justified yet. The unchanged Phase 9 evaluation covers drafting, not this assistant. |
+
 ## Decisions made in Phase 1
 
 | Decision | Reasoning | Status |

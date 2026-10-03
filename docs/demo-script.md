@@ -57,3 +57,18 @@ Open **Insights**: a banner says the data is mock-only, approval counts each dra
 ## Evidence
 
 Tests, the release harness and the dated handoffs are listed in the README ("Testing strategy") and the [engineering log](engineering-log/README.md).
+
+## Optional: assistant demonstration
+
+Use the [assistant mock startup](engineering-log/lead-assistant-handoff.md#try-it-locally) so both
+planning and drafting are free. Before drafting all leads, open **Assistant**, select the sample
+import and enter **Find Hot leads for outreach**. Review the company facts, unknowns and
+**How these leads were selected**. Click **Prepare drafts**, watch the worker's progress, then
+open a lead and continue the normal review flow. Existing outreach drafts are excluded; use a
+fresh sample import if the earlier walkthrough already generated them.
+
+> **What to say:** "The assistant can request three tools: search our stored leads, inspect their
+> facts, and propose a shortlist. The server validates every request and limits its scope. This
+> demonstration chooses tools with fixed rules; the optional OpenAI provider uses native model
+> tool calling. I tested its SDK requests with mocked responses, not live model calls. Drafting
+> needs this explicit click, and approval and sending still use the existing controls."

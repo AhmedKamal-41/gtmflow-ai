@@ -59,6 +59,11 @@ class MockAIClient(AIClient):
     # shape in a way that matters for reproducing/explaining a past output.
     model_revision = "mock-deterministic-v2-grounded"
 
+    def choose_tools(self, messages: list[dict], tools: list[dict]) -> dict:
+        from app.ai.tool_calling import mock_tool_turn
+
+        return mock_tool_turn(messages)
+
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:
         facts = _facts(ctx)
         sentence, _used = _record_sentence(facts)

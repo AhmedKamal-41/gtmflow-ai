@@ -2,6 +2,20 @@
 
 FastAPI + Python service for the GTMFlow AI platform.
 
+## Lead-selection assistant
+
+`GET /api/assistant/status` reports the mode and whether the signed-in user can run it.
+`POST /api/assistant/plan` accepts `{batch_id, request, max_leads}` (1–5 leads) and returns
+company facts, unknowns and a tool trace. It writes an actor-stamped audit event, not drafts.
+After the user confirms the shortlist, `POST /api/batches/{id}/jobs` with
+`{"job_type":"assistant_outreach","params":{"lead_ids":["<lead UUID>"]}}` queues only those
+leads through the existing grounded-generation worker. Approval and delivery remain separate.
+
+`AGENT_PROVIDER=mock` is the default, a fixed demonstration without model calls. Real planning
+requires `USE_MOCK_AI=false`, `AGENT_PROVIDER=openai` and `OPENAI_API_KEY`; `AGENT_MODEL` defaults
+to `gpt-4o-mini`. `AI_PROVIDER` still selects the drafting model. Guests cannot run a paid planner.
+No migration or new dependency is needed. [Commands, limits and evidence](../docs/engineering-log/lead-assistant-handoff.md).
+
 ## Prerequisites
 
 - Python 3.12 (verified runtime)
@@ -142,8 +156,9 @@ python -m app.jobs.worker --drain    # processes every claimable job, then exits
 ```
 
 Job types: `fit_score`, `legacy_score`, `generate_summary`,
-`generate_outreach` (param `skip_existing`, default true) and `push_hot`
-(param `force`, default false; delivers only approved drafts).
+`generate_outreach` (param `skip_existing`, default true), `push_hot`
+(param `force`, default false; delivers only approved drafts), and `assistant_outreach`
+(param `lead_ids`, 1–5 distinct UUIDs in this batch; always skips existing outreach drafts).
 
 - **Progress:** `GET /api/jobs/{id}` (counts, `progress_pct`); items with
   `GET /api/jobs/{id}/items`; list with `GET /api/jobs?batch_id=`.
@@ -153,7 +168,7 @@ Job types: `fit_score`, `legacy_score`, `generate_summary`,
 - **Worker shutdown:** a stopped worker hands its job back at once. A killed
   worker's job is taken over after its lease (60 s) expires.
 - **Retries:** transient provider errors are retried up to 3 times per item;
-  Slack deliveries are never retried automatically.
+  assistant draft items have one worker-level attempt, and Slack deliveries are never retried automatically.
 
 The worker uses the same `.env` as the API. **If `.env` has
 `USE_MOCK_AI=false`, the worker makes real (possibly paid) model calls.**

@@ -37,6 +37,9 @@ class AIClient(ABC):
     # paid usage is known exactly rather than estimated.
     last_usage: dict[str, Any] | None = None
 
+    def choose_tools(self, messages: list[dict], tools: list[dict]) -> dict:
+        raise AIConfigError("This provider does not support the lead assistant's tool calling.")
+
     @abstractmethod
     def generate_company_summary(self, ctx: dict[str, Any]) -> dict[str, Any]:
         """Return the company-summary JSON object for a grounded context
@@ -110,6 +113,12 @@ class OpenAIClient(AIClient):
 
     def generate_outreach(self, ctx: dict[str, Any]) -> dict[str, Any]:
         return parse_json_strict(self._call(build_outreach_prompt(ctx)))
+
+    def choose_tools(self, messages: list[dict], tools: list[dict]) -> dict:
+        from app.ai.tool_calling import openai_tool_turn
+
+        turn, self.last_usage = openai_tool_turn(self._api_key, self._model, messages, tools)
+        return turn
 
 
 REAL_PROVIDERS = ("openai", "qwen3-4b-lora-v1")

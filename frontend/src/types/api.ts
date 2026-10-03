@@ -158,7 +158,7 @@ export type QualityFlag = {
 };
 
 // Phase 10: durable background jobs.
-export type JobType = "fit_score" | "legacy_score" | "generate_summary" | "generate_outreach" | "push_hot";
+export type JobType = "fit_score" | "legacy_score" | "generate_summary" | "generate_outreach" | "push_hot" | "assistant_outreach";
 
 export type Job = {
   id: string;

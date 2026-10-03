@@ -350,7 +350,7 @@ export function approveOutreach(
 export function createBatchJob(
   batchId: string,
   jobType: JobType,
-  params: Record<string, boolean> = {},
+  params: Record<string, boolean | string[]> = {},
 ): Promise<Job> {
   return request<Job>(`/api/batches/${batchId}/jobs`, {
     method: "POST",
@@ -364,6 +364,51 @@ export function listBatchJobs(batchId: string, limit = 10): Promise<Page<Job>> {
 
 export function cancelJob(jobId: string): Promise<Job> {
   return request<Job>(`/api/jobs/${jobId}/cancel`, { method: "POST" });
+}
+
+export function getJob(jobId: string): Promise<Job> {
+  return request<Job>(`/api/jobs/${jobId}`);
+}
+
+export type AssistantStatus = {
+  mode: "mock" | "openai";
+  configured: boolean;
+  can_run: boolean;
+  max_leads: number;
+  max_steps: number;
+};
+
+export type AssistantResult = {
+  run_id: string;
+  batch_id: string;
+  mode: "mock" | "openai";
+  model: string;
+  status: "proposed" | "no_matches" | "stopped";
+  message: string;
+  leads: {
+    id: string;
+    company_name: string;
+    industry: string | null;
+    location: string | null;
+    priority: string | null;
+    score: number | null;
+    evidence: string[];
+    unknowns: string[];
+  }[];
+  steps: { tool: string; status: "ok" | "refused"; detail: string; duration_ms: number }[];
+  duration_ms: number;
+  usage: Record<string, number>;
+};
+
+export function getAssistantStatus(): Promise<AssistantStatus> {
+  return request<AssistantStatus>("/api/assistant/status");
+}
+
+export function planOutreach(batchId: string, description: string, maxLeads: number): Promise<AssistantResult> {
+  return request<AssistantResult>("/api/assistant/plan", {
+    method: "POST",
+    body: JSON.stringify({ batch_id: batchId, request: description, max_leads: maxLeads }),
+  });
 }
 
 export function rejectOutreach(

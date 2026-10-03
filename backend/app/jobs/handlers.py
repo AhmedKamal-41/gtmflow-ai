@@ -154,6 +154,51 @@ def _generate(output_type: str):
     return process
 
 
+# ------------------------------------------------------------ Assistant selections
+
+def _assistant_params(params: dict[str, Any]) -> dict[str, Any]:
+    from app.jobs.queue import JobError
+    from app.schemas.assistant import LeadSelection
+
+    try:
+        selection = LeadSelection.model_validate(params)
+        if not selection.lead_ids or len(set(selection.lead_ids)) != len(selection.lead_ids):
+            raise ValueError("Choose one to five distinct leads")
+    except ValueError:
+        raise JobError(400, "Choose one to five distinct lead IDs; no other options are accepted.") from None
+    return {"lead_ids": sorted(str(i) for i in selection.lead_ids)}
+
+
+def validate_assistant_selection(session: Session, batch_id: UUID, params: dict) -> None:
+    from app.jobs.queue import JobError
+
+    batch = session.get(LeadBatch, batch_id)
+    if batch.status in INCOMPLETE_BATCH_STATUSES:
+        raise JobError(409, "Finish this import before preparing drafts.")
+    ids = [UUID(i) for i in params["lead_ids"]]
+    found = list(session.scalars(select(Lead.id).where(Lead.batch_id == batch_id, Lead.id.in_(ids))))
+    if set(found) != set(ids):
+        raise JobError(400, "Every selected lead must belong to this import.")
+
+
+def _assistant_leads(session: Session, job: BackgroundJob) -> list[UUID]:
+    from app.jobs.queue import JobError
+
+    try:
+        validate_assistant_selection(session, job.batch_id, job.params)
+    except JobError as error:
+        raise JobFatalError(error.detail) from None
+    return [UUID(i) for i in job.params["lead_ids"]]
+
+
+def _assistant_outreach(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
+    batch = session.get(LeadBatch, job.batch_id)
+    if batch.status in INCOMPLETE_BATCH_STATUSES:
+        return ITEM_BLOCKED, {"reason": "batch_incomplete"}
+    # Reuse grounding, provenance, existing-draft skipping and block rules.
+    return _generate("outreach_email")(session, job, lead)
+
+
 # ------------------------------------------------------------ Slack push
 
 def _hot_leads(session: Session, job: BackgroundJob) -> list[UUID]:
@@ -214,4 +259,5 @@ HANDLERS: dict[str, Handler] = {
     "generate_summary": Handler(_bool_params({"skip_existing": True}), _all_batch_leads, _generate("company_summary")),
     "generate_outreach": Handler(_bool_params({"skip_existing": True}), _all_batch_leads, _generate("outreach_email")),
     "push_hot": Handler(_bool_params({"force": False}), _hot_leads, _push),
+    "assistant_outreach": Handler(_assistant_params, _assistant_leads, _assistant_outreach),
 }

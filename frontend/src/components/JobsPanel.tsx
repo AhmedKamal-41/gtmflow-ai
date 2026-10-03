@@ -22,6 +22,7 @@ const JOB_BUTTONS: { type: JobType; label: string }[] = [
 ];
 
 const LABELS: Record<string, string> = Object.fromEntries(JOB_BUTTONS.map((b) => [b.type, b.label]));
+LABELS.assistant_outreach = "Prepare assistant drafts";
 const ACTIVE = new Set(["queued", "running"]);
 
 export function JobsPanel({

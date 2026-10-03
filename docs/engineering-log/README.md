@@ -23,5 +23,9 @@ Cross-cutting design decisions, with the reasoning behind them, are in [`decisio
 
 ## After Phase 12
 
+- **Lead-selection assistant (2026-10-03, feature branch; not deployed).** A bounded tool loop,
+  a transparent `/assistant` page and user-confirmed selected-lead jobs. Uses existing clients,
+  generation, auth, audit and worker services. No new dependencies or migrations. See
+  [the assistant handoff](lead-assistant-handoff.md) for verification and the limits of mock testing.
 - **Self-service sign-up and guest access (2026-10-02).** Migration `0014_signup_and_guest`: sign-up confirmed by an emailed 6-digit code (hashed, 10-minute expiry, 5 attempts, 60-second resend cooldown), and per-visitor guest accounts that can change data only on a mock-only server. Both are off by default. Tests: `backend/tests/test_signup_guest.py`, `frontend/src/app/login/page.test.tsx`, and live checks in `backend/scripts/verify_release.py`.
 - **Redesign around the sales rep (2026-10-03).** A sidebar app (Today, Leads, Imports, Insights, Settings) replaces the page-per-endpoint layout; the annotation and demo pages are gone (their APIs remain). New `GET /api/inbox` derives each lead's stage from `review_states()`, the same function review and delivery use, so "Ready to send" never appears for an approval dispatch would refuse ("Draft out of date" instead). New `GET /api/ai/status` and the opt-in `LORA_FALLBACK_TO_MOCK` make the fine-tuned model the drafting model with an honestly labeled demo-generator fallback. Guests may change data only on a guest-safe server (no Slack webhook, no paid per-request AI API). Tests: `backend/tests/test_workspace.py`, `frontend/src/app/workspace.test.tsx`.

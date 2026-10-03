@@ -12,6 +12,7 @@ import { Logo } from "@/components/Logo";
 const NAV: { href: string; label: string; icon: IconName; also?: string[] }[] = [
   { href: "/", label: "Today", icon: "home" },
   { href: "/leads", label: "Leads", icon: "inbox" },
+  { href: "/assistant", label: "Assistant", icon: "sparkles" },
   { href: "/imports", label: "Imports", icon: "upload", also: ["/batches", "/upload"] },
   { href: "/metrics", label: "Insights", icon: "chart" },
   { href: "/settings", label: "Settings", icon: "settings", also: ["/seller-profile"] },
