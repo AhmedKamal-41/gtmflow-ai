@@ -31,8 +31,8 @@ PyTorch + PEFT for the model work · Slack incoming webhooks.
 until the fine-tuned model's server is connected. It is not deployed; see [Local setup](#local-setup).
 
 <p align="center">
-  <a href="docs/screenshots/home.png">
-    <img src="docs/screenshots/home.png" alt="GTMFlow home page with the headline &quot;Stop hand-sorting leads. Let GTMFlow do the first pass.&quot; and buttons to run the live demo or upload a lead list" width="100%">
+  <a href="docs/screenshots/today.png">
+    <img src="docs/screenshots/today.png" alt="Today page greeting the rep with counts of drafts to review, leads ready to send, hot leads without a draft and leads sent, a Next up list ranked Hot first, and the drafting-model status" width="100%">
   </a>
 </p>
 
@@ -400,73 +400,74 @@ Only mechanisms present in the code are listed here.
 
 ## Screenshots
 
-Captured from the running application (production build, mock mode, isolated PostgreSQL) at a
-1440 px viewport after running the built-in demo. Click any image for full resolution.
+Captured from the running application (production build, isolated PostgreSQL, Slack mocked, no model
+server connected, so drafts come from the labeled demo generator) at a 1440 px viewport. Click any
+image for full resolution.
 
-### Lead workspace: scoring
+### Today
 
-The 100-point priority score with its breakdown and matched signals, and the company-fit score,
-which reports *insufficient evidence* when a CSV lacks structured fields instead of guessing.
+What needs the rep's attention: drafts to review, approved leads ready to send, Hot leads without a
+draft, and the drafting model's status. It is shown at the top of this README.
+
+### Leads
+
+Every lead from every import, ranked Hot first, with stage tabs, search and a priority filter. A
+lead is only "Ready to send" when its approval still authorizes delivery.
 
 <p align="center">
-  <a href="docs/screenshots/lead-scoring.png">
-    <img src="docs/screenshots/lead-scoring.png" alt="Lead workspace for Cascade Modular Homes showing a 94 of 100 Hot priority score with a per-category breakdown, matched signals, and a company-fit table" width="100%">
+  <a href="docs/screenshots/leads.png">
+    <img src="docs/screenshots/leads.png" alt="Leads inbox with stage tabs and counts, a search box, a priority filter, and a table of ten companies with priority, stage, drafting model and import" width="100%">
   </a>
 </p>
 
-### Lead workspace: readiness, review and the grounded draft
+### Lead workspace: the draft and the review
 
-The approval applies to this exact draft. The draft cites record facts and seller capabilities by
-id, and lists what is not known from the data. A demonstration seller profile can never make an
-email "ready", only an internal Slack handoff.
+The draft says which model wrote it, lists the facts it is based on and what is not known, and keeps
+provenance under "Model details". The review applies to this exact draft.
 
 <p align="center">
   <a href="docs/screenshots/lead-review.png">
-    <img src="docs/screenshots/lead-review.png" alt="Readiness panel, an approved review bound to a content hash, and an outreach draft with cited fact ids, seller capability ids and stated unknowns" width="100%">
+    <img src="docs/screenshots/lead-review.png" alt="Lead workspace for Northbridge Clinics with an outreach draft, the facts it is based on, the unknowns it does not assume, and a pending review with approve, edit and reject actions beside the contact card and priority breakdown" width="100%">
   </a>
 </p>
 
-### Slack delivery
+### Sending to Slack
 
 <p align="center">
-  <a href="docs/screenshots/push-history.png">
-    <img src="docs/screenshots/push-history.png" alt="Push history showing a mock Slack delivery with the Hot lead message, attempt number and mock-success status" width="100%">
+  <a href="docs/screenshots/lead-send.png">
+    <img src="docs/screenshots/lead-send.png" alt="An approved review that applies to the exact draft, the Send to Slack card, and a push history entry showing a mock Slack delivery" width="100%">
   </a>
 </p>
 
-### Batch detail
+### Imports and an import's detail
 
 <p align="center">
-  <a href="docs/screenshots/batch-detail.png">
-    <img src="docs/screenshots/batch-detail.png" alt="Batch detail with background job controls, the company-fit summary and a table of ten leads with priority, fit, routing and readiness columns" width="100%">
+  <a href="docs/screenshots/imports.png">
+    <img src="docs/screenshots/imports.png" alt="Imports page with a CSV drop zone, an optional name, a Try with sample data card, and a list of past imports" width="100%">
   </a>
 </p>
 
-### Background jobs
-
 <p align="center">
-  <a href="docs/screenshots/background-jobs.png">
-    <img src="docs/screenshots/background-jobs.png" alt="Background jobs panel with completed summary, fit-score and legacy-score jobs, each 10 of 10" width="100%">
+  <a href="docs/screenshots/import-detail.png">
+    <img src="docs/screenshots/import-detail.png" alt="One import with rescore and send-approved-Hot-leads actions, background job controls with a completed fit-score job, and a lead table with status, score and priority" width="100%">
   </a>
 </p>
 
-### Metrics
+### Insights
 
 <p align="center">
-  <a href="docs/screenshots/metrics.png">
-    <img src="docs/screenshots/metrics.png" alt="Metrics dashboard with a mock-data banner, pipeline funnel, priority split, quality rates, estimated time saved and a mock-versus-real breakdown" width="100%">
+  <a href="docs/screenshots/insights.png">
+    <img src="docs/screenshots/insights.png" alt="Insights dashboard with a mock-data banner, pipeline funnel, priority split, quality rates, estimated time saved and a mock-versus-real breakdown" width="100%">
   </a>
 </p>
 
 ### More pages
 
-| Sign in | Upload |
+| Sign in | Email verification |
 |---|---|
-| [![Sign-in form with create-account and continue-as-guest options](docs/screenshots/login.png)](docs/screenshots/login.png) | [![CSV upload form](docs/screenshots/upload.png)](docs/screenshots/upload.png) |
-| **Batches** | **Guided demo** |
-| [![Batches list](docs/screenshots/batches.png)](docs/screenshots/batches.png) | [![One-click demo page](docs/screenshots/demo.png)](docs/screenshots/demo.png) |
-| **Email verification** | **Seller profile** |
-| [![Check-your-email step with a 6-digit code field and a resend countdown](docs/screenshots/verify-email.png)](docs/screenshots/verify-email.png) | [![Seller profile editor with an active demonstration profile](docs/screenshots/seller-profile.png)](docs/screenshots/seller-profile.png) |
+| [![Sign-in form with create-account and continue-as-guest options](docs/screenshots/login.png)](docs/screenshots/login.png) | [![Check-your-email step with a 6-digit code field and a resend countdown](docs/screenshots/verify-email.png)](docs/screenshots/verify-email.png) |
+| **Settings** | |
+| [![Settings with the drafting model status, the fine-tuned model and adapter, what you sell, and the account](docs/screenshots/settings.png)](docs/screenshots/settings.png) | |
 
 ## Testing strategy
 
@@ -481,8 +482,8 @@ email "ready", only an internal Slack handoff.
 Tests block outbound network calls. Key safety tests were mutation-checked: the safeguard was
 removed and the test had to fail.
 
-Latest verified results (2026-10-02, local): **545 backend tests on PostgreSQL** (540 passed and 5
-skipped on SQLite), **112 frontend tests**, **96 of 96 release checks**, and a clean typecheck and
+Latest verified results (2026-10-03, local): **560 backend tests on PostgreSQL** (555 passed and 5
+skipped on SQLite), **109 frontend tests**, **96 of 96 release checks**, and a clean typecheck and
 production build. The same workflows run in [CI](https://github.com/AhmedKamal-41/gtmflow-ai/actions/workflows/release.yml)
 on every push.
 
