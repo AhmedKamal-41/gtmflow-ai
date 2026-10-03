@@ -65,6 +65,7 @@ export default function BatchDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<string | null>(null);
   const [scoring, setScoring] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [scoringFit, setScoringFit] = useState(false);
   const [pushing, setPushing] = useState(false);
 
@@ -249,26 +250,18 @@ export default function BatchDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Batch"
-        title={batch.name ?? "(unnamed batch)"}
-        back={{ href: "/batches", label: "Back to batches" }}
+        eyebrow="Import"
+        title={batch.name ?? "Unnamed import"}
+        back={{ href: "/imports", label: "All imports" }}
         actions={
           <>
             <Button
               variant="secondary"
-              icon="target"
+              icon="refresh"
               loading={scoring}
               onClick={handleScoreBatch}
             >
-              Score batch (legacy v1)
-            </Button>
-            <Button
-              variant="secondary"
-              icon="target"
-              loading={scoringFit}
-              onClick={handleScoreBatchFit}
-            >
-              Score company fit (v2 demo)
+              Rescore leads
             </Button>
             <Button
               variant="primary"
@@ -277,7 +270,7 @@ export default function BatchDetailPage() {
               disabled={batchIncomplete}
               onClick={handlePushHot}
             >
-              Push legacy-Hot leads
+              Send approved Hot leads
             </Button>
           </>
         }
@@ -295,8 +288,16 @@ export default function BatchDetailPage() {
         </div>
       )}
 
-      {fitSummary && (
-        <Card title="Company fit (v2 demo)" icon="target">
+      {showDetails && fitSummary && (
+        <Card
+          title="Company fit (v2 demo)"
+          icon="target"
+          actions={
+            <Button variant="secondary" size="sm" loading={scoringFit} onClick={handleScoreBatchFit}>
+              Score company fit (v2 demo)
+            </Button>
+          }
+        >
           {fitSummary.scored_leads === 0 ? (
             <p className="text-sm text-slate-600">
               No lead in this batch has been fit-scored under the current
@@ -351,12 +352,21 @@ export default function BatchDetailPage() {
         <div className="text-sm text-slate-500">
           Showing {leads.length.toLocaleString()} of {leadTotal.toLocaleString()} leads
         </div>
+        <button
+          type="button"
+          aria-pressed={showDetails}
+          onClick={() => setShowDetails((value) => !value)}
+          className="text-sm font-medium text-brand-700 hover:underline"
+        >
+          {showDetails ? "Hide scoring details" : "Show scoring details"}
+        </button>
       </div>
       <LeadTable
         leads={leads}
         scores={scores}
         fitScores={fitScores}
         readiness={readiness}
+        showDetails={showDetails}
       />
       {hasMoreLeads && (
         <div className="flex justify-center">

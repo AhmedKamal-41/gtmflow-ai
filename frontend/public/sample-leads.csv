@@ -1,0 +1,11 @@
+company_name,website,industry,contact_name,contact_email,contact_title,company_size,location,source,notes,pain_points
+Cascade Modular Homes,cascademodular.com,Housing,Sarah Chen,sarah.chen@cascademodular.com,VP Operations,240,USA,referral,high tenant maintenance request volume and leasing tour scheduling delays,"maintenance, leasing, scheduling"
+Northbridge Clinics,northbridgehealth.com,Healthcare,Anika Rao,anika.rao@northbridgehealth.com,Practice Manager,1200,USA,webinar,"patient appointment scheduling, intake forms, and front desk call volume","appointment, intake, call volume"
+Meridian Diagnostics,meridiandx.com,Healthcare,Tom Whitaker,tom@meridiandx.com,Head of Commercial,410,Canada,inbound,diagnostic order intake bottlenecks during peak weeks,intake
+Bluepine Property Partners,bluepine.io,Housing,Marcus Bell,m.bell@bluepine.io,Director of Acquisitions,85,USA,referral,acquisition pipeline tracking and follow-up gaps,follow-up
+Loopline Software,loopline.dev,SaaS,Daniel Park,dan@loopline.dev,Founder,22,UK,inbound,customer onboarding paperwork and forms automation,"paperwork, forms, automation"
+Quanta Analytics,quanta.ai,SaaS,Priya Iyer,priya.iyer@quanta.ai,VP Sales,95,USA,inbound,support call volume and follow-up forms,"support, call volume, follow-up"
+Vault Outfitters,vaultoutfitters.com,Retail,Jamie Russo,jamie.russo@vaultoutfitters.com,COO,560,USA,outbound,in-store staffing during holiday peaks,
+Sunday Pantry Co,sundaypantry.co,Retail,Lena Okafor,lena@sundaypantry.co,Head of Marketing,130,USA,inbound,D2C subscription churn and email open rates,
+Brightline Academy Network,brightline.edu,Education,Robert Klein,rklein@brightline.edu,Superintendent,780,USA,event,district-level budget cycles and procurement timelines,
+Latitude Learning,latitudelearn.com,Education,Mei Tanaka,mei.tanaka@latitudelearn.com,Director of Partnerships,60,Singapore,outbound,cross-border partnership pipeline tracking,

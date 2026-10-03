@@ -1,297 +1,221 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
+import { useAIStatus } from "@/components/AIStatusProvider";
+import { useAuth } from "@/components/AuthProvider";
+import { Button } from "@/components/Button";
+import { Card } from "@/components/Card";
+import { ErrorMessage } from "@/components/ErrorMessage";
 import { Icon, type IconName } from "@/components/Icon";
+import { LoadingState } from "@/components/LoadingState";
+import { PriorityBadge } from "@/components/PriorityBadge";
+import { StageBadge } from "@/components/StageBadge";
+import { APIError, getInbox, getSellerProfileStatus, type InboxItem, type InboxPage, type LeadStage } from "@/lib/api";
+import { SAMPLE_CSV_URL, loadSampleLeads } from "@/lib/sampleData";
 
-const STEPS: { title: string; body: string; icon: IconName }[] = [
-  {
-    title: "Upload",
-    body: "Drop in your lead CSV. Bad rows get flagged so you can fix them.",
-    icon: "upload",
-  },
-  {
-    title: "Score",
-    body: "Each lead gets a 0–100 fit score, with the reasons shown.",
-    icon: "target",
-  },
-  {
-    title: "Draft",
-    body: "A short summary and a starting outreach email, written from the lead's own details.",
-    icon: "sparkles",
-  },
-  {
-    title: "Send",
-    body: "Approve the good ones and they go straight to Slack, logged for later.",
-    icon: "send",
-  },
-];
+// Today: what needs the rep's attention, in workflow order.
 
-const FEATURES: { title: string; body: string; icon: IconName }[] = [
-  {
-    title: "Clean CSV import",
-    body: "Upload a messy export and it sorts out the columns, flags bad rows, and keeps any extra fields you had.",
-    icon: "file",
-  },
-  {
-    title: "Scoring you can explain",
-    body: "A simple 0–100 fit score with the breakdown shown, so you always know why a lead landed where it did.",
-    icon: "target",
-  },
-  {
-    title: "First-draft summaries & emails",
-    body: "Each lead gets a short write-up and an outreach draft to start from. It's grounded in the lead's own data.",
-    icon: "sparkles",
-  },
-  {
-    title: "One-click send to Slack",
-    body: "Approved hot leads post to your Slack channel, and every send is logged so nothing gets lost.",
-    icon: "send",
-  },
-  {
-    title: "See what it saved you",
-    body: "A small dashboard tracks how many drafts were approved, how many got sent, and the time it saved.",
-    icon: "chart",
-  },
-  {
-    title: "Made for non-engineers",
-    body: "Clear pages, plain badges, and one-click actions, so your revenue team can run the whole thing themselves.",
-    icon: "users",
-  },
-];
+const ACTIONABLE: LeadStage[] = ["to_review", "approved", "outdated", "needs_draft"];
 
-const GUARDRAILS: { title: string; body: string; icon: IconName }[] = [
-  {
-    title: "Works without any keys",
-    body: "AI and Slack both run in a built-in mock mode, so you can try the whole flow before wiring anything up.",
-    icon: "shield",
-  },
-  {
-    title: "Nothing made up",
-    body: "Every draft separates what it read from the lead from what it's guessing, with no invented facts or fake metrics.",
-    icon: "check",
-  },
-  {
-    title: "Honest about the numbers",
-    body: "Time saved is a rough estimate (about 5 minutes a lead), not a promise of real revenue.",
-    icon: "clock",
-  },
-];
+const NEXT_STEP: Partial<Record<LeadStage, string>> = {
+  to_review: "Review the draft",
+  approved: "Send to Slack",
+  needs_draft: "Write a draft",
+  outdated: "Write a new draft",
+};
 
-const STACK = ["FastAPI", "Next.js 15", "PostgreSQL", "OpenAI / mock AI", "Slack"];
-
-export default function HomePage() {
-  return (
-    <div className="space-y-16">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 shadow-card sm:p-12">
-        <div
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-100/50 blur-3xl"
-          aria-hidden="true"
-        />
-        <div className="relative max-w-2xl space-y-5">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-            Lead list → Slack, in a few clicks
-          </span>
-          <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            Stop hand-sorting leads.
-            <span className="text-brand-600"> Let GTMFlow do the first pass.</span>
-          </h1>
-          <p className="text-lg leading-relaxed text-slate-600">
-            Drop in a CSV and GTMFlow scores every lead, writes a first-draft
-            summary and outreach email, and sends the hottest ones to Slack once
-            you&apos;ve approved them. You stay in control; it just does the
-            tedious part.
-          </p>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Link
-              href="/demo"
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700"
-            >
-              <Icon name="play" className="h-4 w-4" filled />
-              Run the live demo
-            </Link>
-            <Link
-              href="/upload"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
-            >
-              <Icon name="upload" className="h-4 w-4" />
-              Upload a lead list
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Problem & Solution */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-7 shadow-card">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-600">
-            <Icon name="alert" className="h-4 w-4" />
-            The problem
-          </div>
-          <p className="mt-3 text-base leading-relaxed text-slate-700">
-            Lead lists pile up and go stale. Figuring out who&apos;s worth
-            contacting, writing a decent first email, and getting the good ones
-            in front of the right person eats hours every week, and afterwards
-            nobody can say{" "}
-            <span className="font-medium text-slate-900">
-              how much of it actually got used.
-            </span>
-          </p>
-        </div>
-        <div className="rounded-2xl border border-brand-200 bg-brand-50/50 p-7 shadow-card">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand-600">
-            <Icon name="check" className="h-4 w-4" />
-            The solution
-          </div>
-          <p className="mt-3 text-base leading-relaxed text-slate-700">
-            GTMFlow takes the CSV, scores each lead, and drafts a summary and
-            outreach email. You approve the ones you like, it sends them to
-            Slack, and it{" "}
-            <span className="font-medium text-slate-900">
-              keeps track of every step
-            </span>{" "}
-            so you can see what the team actually used.
-          </p>
-        </div>
-      </section>
-
-      {/* Workflow */}
-      <section>
-        <SectionHeading eyebrow="How it works" title="Four steps, start to finish" />
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((s, i) => (
-            <div
-              key={s.title}
-              className="group relative rounded-xl border border-slate-200 bg-white p-5 shadow-card transition-shadow hover:shadow-card-hover"
-            >
-              <div className="flex items-center justify-between">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-50 text-brand-600">
-                  <Icon name={s.icon} className="h-5 w-5" />
-                </span>
-                <span className="tabular text-sm font-semibold text-slate-300">
-                  0{i + 1}
-                </span>
-              </div>
-              <div className="mt-4 text-base font-semibold text-slate-900">
-                {s.title}
-              </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                {s.body}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Capabilities */}
-      <section>
-        <SectionHeading eyebrow="What's inside" title="What it does" />
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((f) => (
-            <div
-              key={f.title}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-card transition-shadow hover:shadow-card-hover"
-            >
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-50 text-brand-600">
-                <Icon name={f.icon} className="h-5 w-5" />
-              </span>
-              <div className="mt-4 text-sm font-semibold text-slate-900">
-                {f.title}
-              </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                {f.body}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Honest by design */}
-      <section className="rounded-2xl border border-slate-200 bg-slate-900 p-8 shadow-card sm:p-10">
-        <div className="text-xs font-semibold uppercase tracking-wider text-brand-300">
-          Honest by design
-        </div>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight text-white">
-          No magic tricks
-        </h2>
-        <div className="mt-6 grid gap-6 sm:grid-cols-3">
-          {GUARDRAILS.map((g) => (
-            <div key={g.title}>
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-white/10 text-brand-300">
-                <Icon name={g.icon} className="h-5 w-5" />
-              </span>
-              <div className="mt-3 text-sm font-semibold text-white">
-                {g.title}
-              </div>
-              <p className="mt-1 text-sm leading-relaxed text-slate-300">
-                {g.body}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Stack */}
-      <section>
-        <SectionHeading eyebrow="Built with" title="Stack" />
-        <div className="mt-4 flex flex-wrap gap-2">
-          {STACK.map((s) => (
-            <span
-              key={s}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-card"
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="relative overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-600 to-brand-800 p-8 text-center shadow-card sm:p-12">
-        <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-          Try it with one click
-        </h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-brand-100">
-          The demo loads a sample lead list and runs the whole thing (score,
-          draft, approve, send), then shows you the numbers at the end. No setup
-          needed.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link
-            href="/demo"
-            className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition-colors hover:bg-brand-50"
-          >
-            <Icon name="play" className="h-4 w-4" filled />
-            Run the live demo
-          </Link>
-          <Link
-            href="/metrics"
-            className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
-          >
-            <Icon name="chart" className="h-4 w-4" />
-            View metrics
-          </Link>
-        </div>
-      </section>
-    </div>
-  );
+function greeting(): string {
+  const hour = new Date().getHours();
+  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-function SectionHeading({
-  eyebrow,
-  title,
-}: {
-  eyebrow: string;
-  title: string;
-}) {
-  return (
+export default function TodayPage() {
+  const router = useRouter();
+  const { session } = useAuth();
+  const { status } = useAIStatus();
+  const [inbox, setInbox] = useState<InboxPage | null>(null);
+  const [hotNeedingDraft, setHotNeedingDraft] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingSample, setLoadingSample] = useState(false);
+  // undefined = unknown (lookup pending or failed): no setup prompt is shown.
+  const [sellerActive, setSellerActive] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    getSellerProfileStatus()
+      .then((status) => setSellerActive(status.state === "active"))
+      .catch(() => setSellerActive(undefined));
+  }, []);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [all, hot] = await Promise.all([
+        getInbox({ limit: 200 }),
+        getInbox({ priority: "Hot", stage: "needs_draft", limit: 1 }),
+      ]);
+      setInbox(all);
+      setHotNeedingDraft(hot.total);
+    } catch (e) {
+      setError(e instanceof APIError ? (e.detail ?? e.message) : "Could not load your leads.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function trySample() {
+    setLoadingSample(true);
+    setError(null);
+    try {
+      await loadSampleLeads();
+      router.push("/leads");
+    } catch (e) {
+      setError(e instanceof APIError ? (e.detail ?? e.message) : "Could not load the sample leads.");
+      setLoadingSample(false);
+    }
+  }
+
+  const name = session?.role === "guest" ? "" : session?.username.split("@")[0];
+  const header = (
     <div className="space-y-1">
-      <div className="text-xs font-semibold uppercase tracking-wider text-brand-600">
-        {eyebrow}
+      <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+        {greeting()}{name ? `, ${name}` : ""}
+      </h1>
+      <p className="text-sm text-slate-600">Here is what needs your attention.</p>
+    </div>
+  );
+
+  if (error && !inbox) return <div className="space-y-6">{header}<ErrorMessage>{error}</ErrorMessage></div>;
+  if (!inbox) return <div className="space-y-6">{header}<LoadingState /></div>;
+
+  if (inbox.counts.all === 0) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <Card>
+          <div className="mx-auto max-w-xl space-y-5 py-8 text-center">
+            <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-brand-50 text-brand-600">
+              <Icon name="upload" className="h-6 w-6" />
+            </span>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-slate-900">Start with your lead list</h2>
+              <p className="text-sm text-slate-600">
+                Import a CSV of the companies you are working. GTMFlow ranks them, then drafts outreach
+                with its fine-tuned model for you to review before anything is sent.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button icon="upload" onClick={() => router.push("/imports")}>Import leads</Button>
+              <Button variant="secondary" loading={loadingSample} onClick={() => void trySample()}>
+                Try with sample data
+              </Button>
+            </div>
+            <a href={SAMPLE_CSV_URL} download className="inline-block text-xs font-medium text-brand-700 hover:underline">
+              Download the CSV template
+            </a>
+            {error && <ErrorMessage>{error}</ErrorMessage>}
+          </div>
+        </Card>
       </div>
-      <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-        {title}
-      </h2>
+    );
+  }
+
+  const counts = inbox.counts;
+  const next = inbox.items.filter((item) => ACTIONABLE.includes(item.stage) && !item.blocked).slice(0, 6);
+  const tiles: { label: string; value: number; href: string; icon: IconName; tone: string }[] = [
+    { label: "Drafts to review", value: counts.to_review, href: "/leads?stage=to_review", icon: "file", tone: "text-amber-600 bg-amber-50" },
+    { label: "Ready to send", value: counts.approved, href: "/leads?stage=approved", icon: "send", tone: "text-emerald-600 bg-emerald-50" },
+    { label: "Hot leads without a draft", value: hotNeedingDraft, href: "/leads?stage=needs_draft&priority=Hot", icon: "flame", tone: "text-red-600 bg-red-50" },
+    { label: "Sent to Slack", value: counts.sent, href: "/leads?stage=sent", icon: "check", tone: "text-brand-600 bg-brand-50" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {header}
+      {sellerActive === false && (
+        <div className="flex flex-wrap items-center gap-4 rounded-xl border border-brand-200 bg-brand-50 p-4">
+          <span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-white text-brand-600">
+            <Icon name="target" className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="font-semibold text-slate-900">One step before drafting: tell GTMFlow what you sell</div>
+            <div className="text-slate-600">Drafts may only describe your product the way your seller profile does.</div>
+          </div>
+          <Link href="/seller-profile" className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+            Set up seller profile
+          </Link>
+        </div>
+      )}
+      {counts.delivery_unknown > 0 && (
+        <div role="alert" className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <Icon name="alert" className="h-4 w-4 flex-none" />
+          <span className="flex-1">
+            {counts.delivery_unknown} Slack {counts.delivery_unknown === 1 ? "delivery has" : "deliveries have"} an
+            unknown outcome. Check the channel and confirm on the lead page.
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {tiles.map((tile) => (
+          <Link key={tile.label} href={tile.href}
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-card transition-colors hover:border-brand-300">
+            <span className={`grid h-8 w-8 place-items-center rounded-lg ${tile.tone}`}>
+              <Icon name={tile.icon} className="h-4 w-4" />
+            </span>
+            <div className="mt-3 text-2xl font-bold tabular text-slate-900">{tile.value}</div>
+            <div className="text-sm text-slate-600">{tile.label}</div>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+        <Card title="Next up" subtitle="Highest-priority leads that need you, Hot first."
+          actions={<Link href="/leads" className="text-sm font-medium text-brand-700 hover:underline">All leads</Link>}
+          padding="none">
+          {next.length === 0 ? (
+            <p className="p-5 text-sm text-slate-600">You are all caught up.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {next.map((item: InboxItem) => (
+                <li key={item.id}>
+                  <Link href={`/leads/${item.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-slate-900">{item.company_name}</div>
+                      <div className="truncate text-xs text-slate-500">
+                        {[item.contact_name, item.contact_title].filter(Boolean).join(" · ") || item.industry || "No contact"}
+                      </div>
+                    </div>
+                    {item.priority && <PriorityBadge priority={item.priority} />}
+                    <StageBadge stage={item.stage} />
+                    <span className="hidden w-32 text-right text-sm font-medium text-brand-700 sm:block">
+                      {NEXT_STEP[item.stage]} →
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Drafting model" icon="cpu">
+          {status ? (
+            <div className="space-y-2 text-sm">
+              <div className="font-medium text-slate-900">{status.label}</div>
+              <p className="text-slate-600">{status.detail}</p>
+              <Link href="/settings" className="inline-block text-sm font-medium text-brand-700 hover:underline">
+                Model settings
+              </Link>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Checking the model…</p>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

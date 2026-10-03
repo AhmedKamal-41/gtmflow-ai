@@ -121,9 +121,9 @@ beforeEach(async () => {
 
 describe("BatchDetailPage", () => {
   it.each([
-    ["scoreBatch", /score batch/i],
+    ["scoreBatch", /rescore leads/i],
     ["scoreBatchFit", /score company fit/i],
-    ["pushHotLeads", /push legacy-hot leads/i],
+    ["pushHotLeads", /send approved hot leads/i],
   ] as const)("a late %s action cannot replace the newly selected batch", async (method, button) => {
     const api = await import("@/lib/api");
     let finish: () => void = () => {};
@@ -143,6 +143,10 @@ describe("BatchDetailPage", () => {
     }));
     const { rerender } = render(<BatchDetailPage />);
     await screen.findByRole("heading", { name: "Real cohort" });
+    // Company-fit scoring lives behind the scoring-details toggle.
+    if (!screen.queryByRole("button", { name: button })) {
+      fireEvent.click(screen.getByRole("button", { name: "Show scoring details" }));
+    }
     await act(async () => fireEvent.click(screen.getByRole("button", { name: button })));
     useParamsMock.mockReturnValue({ batchId: "batch-2" });
     rerender(<BatchDetailPage />);
@@ -170,6 +174,9 @@ describe("BatchDetailPage", () => {
   it("shows v2 fit, coverage, current readiness and eligibility beside labeled legacy scores", async () => {
     render(<BatchDetailPage />);
     await screen.findByText("Company A");
+    // The rep view hides scoring internals until asked.
+    expect(screen.queryByText("Company fit (v2 demo)", { selector: "th" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show scoring details" }));
 
     expect(screen.getByText("Legacy score (v1)")).toBeInTheDocument();
     expect(screen.getByText("Legacy priority (v1)")).toBeInTheDocument();
@@ -196,7 +203,7 @@ describe("BatchDetailPage", () => {
     render(<BatchDetailPage />);
     await screen.findByText("Company A");
     expect(screen.getByText(/import is incomplete \(status 'uploading'\)/)).toBeInTheDocument();
-    const push = screen.getByRole("button", { name: /push legacy-hot leads/i });
+    const push = screen.getByRole("button", { name: /send approved hot leads/i });
     expect(push).toBeDisabled();
     await act(async () => fireEvent.click(push));
     expect(api.pushHotLeads).not.toHaveBeenCalled();
@@ -208,7 +215,7 @@ describe("BatchDetailPage", () => {
     await screen.findByText("Company A");
     fixtures.batch.status = "partial"; // changed after the page loaded
     await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: /push legacy-hot leads/i })),
+      fireEvent.click(screen.getByRole("button", { name: /send approved hot leads/i })),
     );
     // Both the refreshed banner and the action error say so.
     await waitFor(() =>

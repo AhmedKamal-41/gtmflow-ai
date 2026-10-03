@@ -364,7 +364,7 @@ describe("out-of-order responses after navigation", () => {
       rerender(<LeadDetailPage />);
       await within(await currentDraftSection()).findByText("Beta Co current draft");
       await screen.findByText("Weak match");
-      await screen.findByText("Cold");
+      await screen.findAllByText("Cold");
 
       // Lead A's held responses now arrive, late and out of order.
       await release("getPushes", "lead-a@0");
@@ -376,7 +376,7 @@ describe("out-of-order responses after navigation", () => {
       expect(within(draftCard).getByText("Beta Co current draft")).toBeInTheDocument();
       expect(screen.queryByText("Alpha Co current draft")).not.toBeInTheDocument();
       expect(screen.queryByText("Hot")).not.toBeInTheDocument(); // A's legacy score
-      expect(screen.getByText("Cold")).toBeInTheDocument();
+      expect(screen.getAllByText("Cold").length).toBeGreaterThan(0); // header badge and score card
       expect(screen.queryByText("Strong match")).not.toBeInTheDocument(); // A's fit
       expect(screen.getByText("Weak match")).toBeInTheDocument();
       expect(screen.queryByText(/LEAD-A-ONLY/)).not.toBeInTheDocument(); // A's readiness

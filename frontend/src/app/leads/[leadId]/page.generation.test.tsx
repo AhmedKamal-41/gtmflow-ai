@@ -171,7 +171,8 @@ describe("lead page grounded generation", () => {
     expect(provenance).toHaveTextContent("Seller profile: version 2 · c0ffee200000");
     expect(provenance).toHaveTextContent("Prompt grounded-v2 · output schema v2 · model mock/mock-deterministic-v2-grounded");
     expect(screen.getByText("Grounded body.", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("fact-company_name")).toBeInTheDocument();
+    // Cited facts read as words; the exact id stays available as the tooltip.
+    expect(screen.getByTitle("fact-company_name")).toHaveTextContent("company name");
     expect(screen.queryByText("not from active seller revision")).not.toBeInTheDocument();
   });
 

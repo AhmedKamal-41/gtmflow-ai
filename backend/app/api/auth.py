@@ -5,7 +5,7 @@ so every route -- including any added later -- requires a live session
 unless its path is listed in PUBLIC_PATHS. State-changing methods also need
 the session's CSRF token (header X-CSRF-Token) and the `operator` role;
 `viewer` accounts are read-only, and `guest` accounts may change data only
-while the server is mock-only (no real AI provider, no Slack webhook).
+while the server is guest-safe (no Slack webhook, no paid per-request AI API).
 Sign-up, email verification and guest access are public but share login's
 protections: JSON only, an allowed Origin, a bounded body, peer throttling. The authenticated user becomes the actor
 recorded in labels and on every WorkflowEvent (app/core/actor.py).
@@ -99,7 +99,7 @@ async def authenticate(request: Request, session: Session = Depends(get_session)
         if not hmac.compare_digest(sent.encode(), resolved.csrf_token.encode()):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing or invalid CSRF token.")
         if request.url.path != "/api/auth/logout" and not _may_write(resolved.role):
-            detail = ("Guest accounts can change data only while the server runs in mock mode."
+            detail = ("Guest accounts are read-only on this server (it can send real messages or call a paid AI API)."
                       if resolved.role == ROLE_GUEST else "This account is read-only (viewer role).")
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
     request.state.auth = resolved
@@ -113,7 +113,7 @@ async def authenticate(request: Request, session: Session = Depends(get_session)
 
 
 def _may_write(role: str) -> bool:
-    return role == ROLE_OPERATOR or (role == ROLE_GUEST and settings.mock_only)
+    return role == ROLE_OPERATOR or (role == ROLE_GUEST and settings.guest_safe)
 
 
 def _set_cookie(response: Response, token: str, hours: int | None = None) -> None:
@@ -206,7 +206,7 @@ def logout(request: Request, session: Session = Depends(get_session)) -> Respons
 def auth_options() -> AuthOptions:
     """Which sign-in paths this server offers (public; no account data)."""
     return AuthOptions(self_signup=settings.self_signup_enabled, guest_access=settings.guest_access_enabled,
-                       email_delivery=email_sender.delivery_mode(), guest_can_edit=settings.mock_only)
+                       email_delivery=email_sender.delivery_mode(), guest_can_edit=settings.guest_safe)
 
 
 @router.post("/register", response_model=CodeSent, status_code=status.HTTP_202_ACCEPTED)

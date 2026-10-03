@@ -12,7 +12,8 @@ import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
-import { APIError, getMetricsDashboard, runDemo } from "@/lib/api";
+import { APIError, getMetricsDashboard } from "@/lib/api";
+import { loadSampleLeads } from "@/lib/sampleData";
 import type { MetricsDashboard } from "@/types/api";
 
 export default function MetricsPage() {
@@ -42,11 +43,11 @@ export default function MetricsPage() {
     setSeeding(true);
     setError(null);
     try {
-      await runDemo();
+      await loadSampleLeads();
       await load();
     } catch (e) {
       setError(
-        e instanceof APIError ? (e.detail ?? e.message) : "Failed to run demo",
+        e instanceof APIError ? (e.detail ?? e.message) : "Could not load the sample leads.",
       );
     } finally {
       setSeeding(false);
@@ -58,9 +59,8 @@ export default function MetricsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Adoption & ROI"
-        title="Metrics"
-        description="A quick read on how the tool is being used: how many leads got scored, how many drafts you approved, how many went to Slack, and roughly how much time that saved. The time figure is a rough estimate (about 5 minutes a lead), not real revenue."
+        title="Insights"
+        description="How your pipeline is moving: leads scored, drafts approved, and hot leads sent to Slack. Time saved is a rough estimate (about 5 minutes a lead), not a measurement."
         actions={
           metrics && !isEmpty ? (
             <Button variant="secondary" icon="refresh" onClick={load}>
@@ -83,11 +83,16 @@ export default function MetricsPage() {
               No data yet
             </div>
             <p className="max-w-sm text-sm text-slate-600">
-              Run the demo to load a sample list and fill in these numbers.
+              Import a lead list to see how your pipeline moves, or start with sample data.
             </p>
-            <Button icon="play" loading={seeding} onClick={handleSeed}>
-              Run the demo
-            </Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button icon="upload" onClick={() => router.push("/imports")}>
+                Import leads
+              </Button>
+              <Button variant="secondary" loading={seeding} onClick={handleSeed}>
+                Try with sample data
+              </Button>
+            </div>
           </div>
         </Card>
       )}

@@ -24,7 +24,12 @@ type IconName =
   | "database"
   | "code"
   | "users"
-  | "zap";
+  | "zap"
+  | "inbox"
+  | "settings"
+  | "cpu"
+  | "search"
+  | "menu";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <path d="M3 10.5 12 4l9 6.5M5 9.5V20h5v-6h4v6h5V9.5" />,
@@ -113,6 +118,26 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   zap: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />,
+  inbox: <path d="M3 13h5l1.5 3h5L16 13h5M5.5 5h13L21 13v6H3v-6l2.5-8Z" />,
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+    </>
+  ),
+  cpu: (
+    <>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <path d="M9.5 9.5h5v5h-5zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </>
+  ),
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
 };
 
 type Props = {
