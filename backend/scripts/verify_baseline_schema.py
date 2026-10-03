@@ -26,10 +26,15 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from sqlalchemy import inspect
 
-from app.core.database import get_engine
+# Run as `python scripts/verify_baseline_schema.py` from backend/: Python puts
+# scripts/ (not backend/) on the import path, so add backend/ for `app`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.database import get_engine  # noqa: E402
 
 # The exact table -> column set created by alembic/versions/0001_baseline.py.
 # Deliberately hardcoded and independent of the current app/models/*.py --
