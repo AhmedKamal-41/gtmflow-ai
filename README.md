@@ -4,10 +4,10 @@
 
 # GTMFlow AI - Lead-to-Outreach Workflow
 
-An internal go-to-market tool for one sales team. It imports a lead list, scores every company with
-transparent rules, drafts outreach grounded only in the company's own record, requires a signed-in
-person to approve the exact draft, and routes approved Hot leads to Slack through a delivery ledger
-that cannot double-send. Every state change is audited, and the dashboard reports adoption without
+An internal go-to-market tool for a sales team's reps. It imports a lead list, ranks every company
+with transparent rules, drafts outreach grounded only in the company's own record, requires a
+signed-in person to approve the exact draft, and routes approved Hot leads to Slack through a
+delivery ledger that cannot double-send. Every state change is audited, and the dashboard reports adoption without
 mixing mock and real activity.
 
 Drafts are written by **`qwen3-4b-lora-v1`**, a Qwen3-4B model fine-tuned with LoRA for this project
@@ -65,12 +65,13 @@ until the fine-tuned model's server is connected. It is not deployed; see [Local
 GTMFlow answers a revenue team's everyday question: *which of these leads matter, what do we say to
 them, and how do we get the good ones to the right rep without anything going out by mistake?*
 
-An operator uploads a CSV of companies. Each company gets two scores: a deterministic 100-point
-priority score (Hot, Warm or Cold, with the reasons shown) and a versioned company-fit score that
-reports how much evidence it actually had. The operator then generates a short company summary and
-an outreach draft. The model receives only the company's own facts and an explicitly activated
-seller profile, and it must cite the id of every fact it uses. A draft that cites anything outside
-that context is rejected and never saved.
+A rep imports a CSV of companies (or starts with sample data). Each company is scored straight away:
+a deterministic 100-point priority score (Hot, Warm or Cold, with the reasons shown), plus a
+versioned company-fit score that reports how much evidence it actually had. **Today** shows what
+needs attention and **Leads** ranks everything Hot first by workflow stage. On a lead, the rep
+generates an outreach draft written by the fine-tuned model. The model receives only the company's
+own facts and an explicitly activated seller profile, and it must cite the id of every fact it uses.
+A draft that cites anything outside that context is rejected and never saved.
 
 A person approves or rejects the exact draft on screen. The approval is tied to that draft's
 content hash, so editing the draft, changing the company's data or switching seller profiles voids
@@ -159,6 +160,11 @@ by an emailed code) or continue as a guest, when the server enables those option
   fails mid-way is never silently retried on another model. Without the fallback, real providers fail
   closed. An empty `SLACK_WEBHOOK_URL` routes to a mock webhook, and the URL is never logged or returned.
 
+- **One source of truth for "ready to send".** The lead list derives each lead's stage from the same
+  `review_states()` function that review and delivery enforce. If a lead's facts, fit score or seller
+  profile change after approval, the list shows "Draft out of date" instead of promising a send that
+  dispatch would refuse.
+
 - **Explicit, verified migrations.** Fourteen Alembic migrations, never run automatically on boot.
   A baseline verifier refuses to stamp a database whose live schema does not match, and the release
   harness checks that the migrations preserve existing data and audit columns.
@@ -183,11 +189,11 @@ flowchart TB
     API --> Ledger
     Worker --> Ledger
 
-    subgraph Gen["Generator (one selected)"]
+    subgraph Gen["Drafting model"]
         direction LR
-        Mock["Mock (default)"]
-        OpenAI["OpenAI (opt-in)"]
-        LoRA["qwen3-4b-lora-v1"]
+        LoRA["Fine-tuned qwen3-4b-lora-v1<br/>(preferred)"]
+        Mock["Demo generator<br/>(labeled fallback)"]
+        OpenAI["OpenAI<br/>(opt-in)"]
     end
 
     Ledger["Delivery ledger<br/>claim before send"] --> Slack["Slack webhook<br/>(mock when unset)"]
@@ -211,7 +217,7 @@ flowchart TD
     F --> G{"Server validation<br/>ids in context, schema"}
     G -->|fail| G1["Nothing saved"]
     G -->|pass| H["Draft + runtime quality flags"]
-    H --> I{"Operator review"}
+    H --> I{"Rep review"}
     I -->|reject| I1["Rejected with reason"]
     I -->|edit| H
     I -->|"approve exact hash<br/>(acknowledge flags)"| J["Approved"]
@@ -232,7 +238,7 @@ flowchart TB
 
     subgraph Pipeline["Generation and checks"]
         direction LR
-        P["Prompt grounded-v2<br/>+ output schema v2"] --> M["Generator<br/>mock · OpenAI · LoRA"]
+        P["Prompt grounded-v2<br/>+ output schema v2"] --> M["Drafting model<br/>fine-tuned · demo · OpenAI"]
         M --> V{"Cited ids ⊆<br/>context ids?"}
         V -->|no| X["Rejected,<br/>not stored"]
         V -->|yes| Q["Runtime checks<br/>runtime-checks-v1"]
@@ -294,6 +300,7 @@ webhooks have no idempotency key; that is why an uncertain outcome becomes a per
 | Held-out test | Factual support 0.986, missing-information handling 1.000, automated writing checks 1.000 |
 | Blind AI review | 49 of 71 drafts (69%) acceptable as-is: summaries 35 of 35, outreach 14 of 36. Base model: 1 of 71 |
 | Integration | The app's own client against a temporary L4 pod: all 8 acceptance criteria passed, median 22.6 s per request; the pod deleted itself |
+| In the app | The selected drafting model (`AI_PROVIDER=qwen3-4b-lora-v1`). A 3-second reachability check before each draft; with `LORA_FALLBACK_TO_MOCK=true`, the labeled demo generator is used while the server is offline |
 
 ```mermaid
 flowchart TB
@@ -346,10 +353,11 @@ AI and model work:
 
 | Concern | Technology | Purpose |
 |---|---|---|
-| Default generator | Deterministic mock | Full workflow without keys or cost |
-| Hosted generator | OpenAI (opt-in) | Paid alternative to the fine-tuned model |
+| Drafting model | `qwen3-4b-lora-v1` (Qwen3-4B + LoRA) | Grounded summaries and outreach |
+| Serving | OpenAI-compatible server (`serve.py`) | Adapter inference for the app's `LocalLoRAClient` |
+| Fallback | Deterministic demo generator | Labeled drafts while no model server is connected; full workflow without keys or a GPU |
+| Hosted alternative | OpenAI (opt-in) | Paid, per-request alternative |
 | Fine-tuning | PyTorch, transformers, PEFT | LoRA training of Qwen3-4B |
-| Serving | OpenAI-compatible server (`serve.py`) | Adapter inference for the app's `LoraClient` |
 | GPU runs | RunPod, self-deleting pods | Training, evaluation and the acceptance test |
 
 Infrastructure and tooling:
@@ -473,7 +481,7 @@ provenance under "Model details". The review applies to this exact draft.
 
 | Layer | Location | What it covers |
 |---|---|---|
-| Backend | `backend/tests/` | Scoring, ingestion, grounding validation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, auth, migrations |
+| Backend | `backend/tests/` | Scoring, ingestion, grounding validation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, the lead inbox stages, model status and fallback, sign-in, sign-up and guest access, migrations |
 | PostgreSQL | same suite with `TEST_DATABASE_URL` | Real concurrency (simultaneous pushes, lease races), process-kill recovery, migration preservation |
 | Frontend | `frontend/src/**/*.test.ts(x)` | Today, Leads, Imports, Settings, sidebar, lead, import, metrics and seller-profile pages; the API client (CSRF, 401 handling); auth provider, jobs panel, push history |
 | Training | `training/tests/` | Weighted objective, split guards, adapter hash checks, launcher secret handling, serving limits |
@@ -548,8 +556,8 @@ Full schemas are at `/docs` once signed in. Curl examples are in [`backend/READM
 | Node.js | 24 |
 | Docker | Any recent version, for a disposable PostgreSQL |
 
-No API keys are needed. These commands use a separate demo database and explicit mock overrides,
-and never touch an existing `.env`.
+No API keys or GPU are needed. These commands use a separate demo database and explicit
+overrides (Slack mocked, no paid AI), and never touch an existing `.env`.
 
 **Terminal 1: database and API** (from the repository root)
 
@@ -629,16 +637,17 @@ Frontend (read at build time):
 
 ## Deployment
 
-**Not deployed.** The plan, with estimated costs, required configuration and the open items, is in
-[`docs/deployment.md`](docs/deployment.md).
+**No public deployment yet.** A Railway instance exists but still needs its migrations run and its
+settings completed (same-origin API proxy, guest access). The plan, with estimated costs, required
+configuration and the open items, is in [`docs/deployment.md`](docs/deployment.md).
 
 | Goal | Shape | Estimated cost |
 |---|---|---|
-| Mock portfolio demo | API, worker, frontend and managed PostgreSQL on one PaaS (Render recommended) | about $27/month |
-| Real fine-tuned model | The same app plus a GPU inference server for the adapter | about $358/month always-on, or usage-based serverless |
+| Showcase (demo generator, mock Slack) | API, worker, frontend and managed PostgreSQL on one PaaS | about $10–15/month on Railway, about $27/month on Render |
+| With the fine-tuned model | The same app plus a GPU inference server for the adapter | about $358/month always-on, or usage-based serverless |
 
-Migrations run as an explicit one-off step (`alembic upgrade head`), never on boot, and operator
-accounts are created with the CLI.
+Migrations run as an explicit one-off step (`alembic upgrade head`), never on boot. Visitors can
+use guest access or sign up; operator accounts are created with the CLI.
 
 ## Project structure
 
@@ -647,17 +656,17 @@ gtmflow-ai/
 ├── backend/
 │   ├── app/
 │   │   ├── ai/              Generators (mock, OpenAI, LoRA), prompts, grounding validation, runtime checks
-│   │   ├── api/             FastAPI routers: auth, batches, leads, scoring, AI, review, push, jobs, metrics, demo
+│   │   ├── api/             FastAPI routers: auth, inbox and model status, batches, leads, scoring, AI, review, push, jobs, metrics
 │   │   ├── core/            Settings, database, actor context, HTTP security, hashing
 │   │   ├── datasets/        Dataset building, deduplication, correction policy (model work)
 │   │   ├── evaluation/      Held-out evaluation criteria and metrics
-│   │   ├── integrations/    Slack payloads and sender
+│   │   ├── integrations/    Slack payloads and sender; verification email (SMTP or local mock)
 │   │   ├── jobs/            Job queue, leases, handlers and the worker
 │   │   ├── models/          SQLAlchemy models, including the audit hook
 │   │   ├── pdl/             Streaming company-dataset (PDL) import with provenance
 │   │   ├── schemas/         Pydantic request and response models
 │   │   ├── scoring/         Legacy priority score and versioned company fit
-│   │   ├── services/        Business logic: ingestion, generation, review, delivery, metrics, auth
+│   │   ├── services/        Business logic: ingestion, generation, review, delivery, inbox, metrics, auth, sign-up
 │   │   ├── auth_cli.py      Account management CLI
 │   │   └── main.py          App factory, deny-by-default dependency, middleware
 │   ├── alembic/             14 migrations
@@ -666,10 +675,11 @@ gtmflow-ai/
 │   ├── tests/               Backend test suite
 │   └── requirements-lock.txt
 ├── frontend/
+│   ├── public/              Sample CSV served for "Try with sample data"
 │   └── src/
 │       ├── app/             Pages: Today, sign-in, Leads, lead workspace, Imports, Insights, Settings, seller profile
-│       ├── components/      UI components (cards, badges, jobs panel, push history, auth provider)
-│       └── lib/             Typed API client with CSRF handling
+│       ├── components/      Sidebar shell, model status, stage and priority badges, cards, jobs panel, push history
+│       └── lib/             Typed API client with CSRF handling; sample-data loader
 ├── training/
 │   ├── gtmflow_training/    Data loading, weighted LoRA training, generation, serving
 │   ├── configs/             Pinned training and evaluation configs
@@ -690,7 +700,8 @@ gtmflow-ai/
   small (71 examples, 36 of them outreach). Outreach drafts still need a person's review.
 - **Real integrations are unexercised:** Slack delivery has only run against the mock webhook and
   test doubles; OpenAI generation is implemented but paid and opt-in.
-- **Single workspace:** no multi-tenancy or self-service registration, by design.
+- **One shared workspace:** everyone who signs in, guests included, works on the same leads. There
+  is no multi-tenancy, so a public showcase should be reset regularly.
 - **No MFA or password reset yet.** Sign-up is verified by email, but a forgotten password needs
   the CLI (`set-password`), and old guest accounts are not cleaned up automatically.
 - **The company-fit profile is a broad demonstration,** not a calibrated ideal-customer profile, and
@@ -712,7 +723,7 @@ gtmflow-ai/
 ## Engineering log
 
 The project was built in twelve phases, each ending with a handoff that records what was verified
-and what was still open. The [engineering log](docs/engineering-log/README.md) indexes them; every
+and what was still open, followed by sign-up, guest access and the rep-centered redesign. The [engineering log](docs/engineering-log/README.md) indexes them; every
 number in this README traces back to one of those documents.
 
 ## Author
