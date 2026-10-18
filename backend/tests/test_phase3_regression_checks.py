@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from tests.conftest import review_json
+from tests.conftest import review_json, rank_batch
 
 # These tests generate outreach, which needs an explicitly activated
 # seller revision (Phase 5). The fixture activates a synthetic one.
@@ -45,7 +45,7 @@ def _upload_score_generate(client: TestClient, csv: str, batch_name: str) -> tup
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": batch_name}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     lead = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
     output = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
     return lead, output
@@ -81,7 +81,7 @@ def test_blocked_status_survives_approve_outreach(client: TestClient) -> None:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "phase3-a2-approve"}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     lead = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
     assert lead["status"] == "do_not_contact"
 
@@ -110,7 +110,7 @@ def test_blocked_status_survives_reject_outreach(client: TestClient) -> None:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "phase3-a2-reject"}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     lead = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
 
     output = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
@@ -129,7 +129,7 @@ def test_blocked_status_survives_ai_generation(client: TestClient) -> None:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "phase3-a2-generate"}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     lead = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
     assert lead["status"] == "unsubscribed"
 
@@ -145,6 +145,6 @@ def test_blocked_status_survives_demo_auto_approve(client: TestClient) -> None:
     uses the same status-preserving guard, even though demo data never
     actually contains a blocked lead -- defense in depth, verified directly
     against the service function rather than requiring blocked demo data."""
-    from app.services.demo import DISQUALIFIED_STATUSES
+    from app.models.lead import DISQUALIFIED_STATUSES
 
     assert "do_not_contact" in DISQUALIFIED_STATUSES  # sanity: same constant reused

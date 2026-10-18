@@ -11,7 +11,7 @@ from app.models import Lead
 from app.schemas.lead import LeadRead
 from app.schemas.pagination import Page
 from app.scoring import fit as fit_module
-from app.services.fit_queries import latest_fit_subquery
+from app.services.fit_queries import current_ranking_profile, latest_fit_subquery
 from app.services.pagination import pagination_params, paginate
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
@@ -20,12 +20,7 @@ SORT_FIT_DESC = "fit_score_desc"
 SORT_FIT_ASC = "fit_score_asc"
 SORT_CREATED_DESC = "created_at_desc"
 VALID_SORTS = (SORT_CREATED_DESC, SORT_FIT_DESC, SORT_FIT_ASC)
-VALID_BANDS = (
-    fit_module.BAND_STRONG,
-    fit_module.BAND_PARTIAL,
-    fit_module.BAND_WEAK,
-    fit_module.BAND_INSUFFICIENT_EVIDENCE,
-)
+VALID_BANDS = fit_module.BANDS
 
 
 @router.get("", response_model=Page[LeadRead])
@@ -34,14 +29,15 @@ def list_leads(
     fit_band: str | None = Query(
         None,
         description=(
-            "Filter to leads whose latest v2 fit score has this band "
+            "Filter to leads whose current ranking (against the active seller "
+            "profile's target customers) has this band "
             "(strong_match/partial_match/weak_match/insufficient_evidence). "
-            "Excludes leads never fit-scored."
+            "Excludes leads without a current ranking."
         ),
     ),
     min_fit_score: int | None = Query(
         None, ge=0, le=100,
-        description="Filter to leads whose latest v2 fit score is >= this value. Excludes leads never fit-scored.",
+        description="Filter to leads whose current ranking score is >= this value. Excludes leads without a current ranking.",
     ),
     sort: str = Query(SORT_CREATED_DESC, description=f"One of {VALID_SORTS}"),
     pagination: tuple[int, int] = Depends(pagination_params),
@@ -59,9 +55,9 @@ def list_leads(
     filtering_by_fit = fit_band is not None or min_fit_score is not None
 
     if needs_fit_join:
-        # Latest applicable fit row per lead -- the same definition every
-        # fit endpoint uses (app/services/fit_queries.py).
-        latest_fit = latest_fit_subquery()
+        # Latest current ranking per lead -- the same definition every
+        # reader uses (app/services/fit_queries.py).
+        latest_fit = latest_fit_subquery(current_ranking_profile(session))
         join_on = Lead.id == latest_fit.c.lead_id
         # Filtering by fit requires an INNER join (an unscored lead has no
         # fit_score/band to compare against, so it's correctly excluded).

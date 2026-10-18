@@ -8,21 +8,20 @@ import { JobsPanel } from "@/components/JobsPanel";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { ErrorMessage } from "@/components/ErrorMessage";
-import { FitBandBadge } from "@/components/FitBandBadge";
 import { Icon } from "@/components/Icon";
 import { LeadTable } from "@/components/LeadTable";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
+import { RankingBadge } from "@/components/PriorityBadge";
+import { RankingBanner } from "@/components/RankingBanner";
 import {
   APIError,
   getBatch,
   getBatchFitScores,
   getBatchFitSummary,
   getBatchReadiness,
-  getBatchScores,
   getLeads,
   pushHotLeads,
-  scoreBatch,
   scoreBatchFit,
 } from "@/lib/api";
 import type {
@@ -31,7 +30,6 @@ import type {
   Lead,
   LeadBatch,
   LeadFitScore,
-  LeadScore,
 } from "@/types/api";
 
 const PAGE_SIZE = 50;
@@ -41,7 +39,6 @@ const PAGE_SIZE = 50;
 const INCOMPLETE_BATCH_STATUSES = new Set(["partial", "uploading"]);
 
 type PageExtras = {
-  scores: Record<string, LeadScore | null>;
   fitScores: Record<string, LeadFitScore>;
   readiness: Record<string, CurrentReadiness>;
 };
@@ -57,14 +54,12 @@ export default function BatchDetailPage() {
   // Per-lead data for the loaded pages. Each is fetched with ONE bounded
   // request per page of leads (never one request per lead), keyed by
   // lead id so it can't be misattributed even if two pages overlap.
-  const [scores, setScores] = useState<Record<string, LeadScore | null>>({});
   const [fitScores, setFitScores] = useState<Record<string, LeadFitScore>>({});
   const [readiness, setReadiness] = useState<Record<string, CurrentReadiness>>({});
-  // Distinct-lead fit counts for the whole batch (latest score per lead).
+  // Distinct-lead ranking counts for the whole batch (current ranking per lead).
   const [fitSummary, setFitSummary] = useState<BatchFitSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<string | null>(null);
-  const [scoring, setScoring] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [scoringFit, setScoringFit] = useState(false);
   const [pushing, setPushing] = useState(false);
@@ -75,14 +70,11 @@ export default function BatchDetailPage() {
   const fetchPageExtras = useCallback(
     async (leadPage: Lead[], offset: number): Promise<PageExtras> => {
       const page = { limit: leadPage.length || 1, offset };
-      const [scorePage, fitPage, readinessPage] = await Promise.all([
-        getBatchScores(batchId, page),
+      const [fitPage, readinessPage] = await Promise.all([
         getBatchFitScores(batchId, page),
         getBatchReadiness(batchId, page),
       ]);
-      const extras: PageExtras = { scores: {}, fitScores: {}, readiness: {} };
-      for (const lead of leadPage) extras.scores[lead.id] = null;
-      for (const s of scorePage.items) extras.scores[s.lead_id] = s;
+      const extras: PageExtras = { fitScores: {}, readiness: {} };
       for (const f of fitPage.items) extras.fitScores[f.lead_id] = f;
       for (const r of readinessPage.items) extras.readiness[r.lead_id] = r;
       return extras;
@@ -107,7 +99,6 @@ export default function BatchDetailPage() {
       setLeadTotal(leadPage.total);
       setHasMoreLeads(leadPage.has_more);
       setFitSummary(summary);
-      setScores(extras.scores);
       setFitScores(extras.fitScores);
       setReadiness(extras.readiness);
     } catch (e) {
@@ -129,7 +120,6 @@ export default function BatchDetailPage() {
       if (generationRef.current !== generation) return; // stale
       setLeads((prev) => [...(prev ?? []), ...leadPage.items]);
       setHasMoreLeads(leadPage.has_more);
-      setScores((prev) => ({ ...prev, ...extras.scores }));
       setFitScores((prev) => ({ ...prev, ...extras.fitScores }));
       setReadiness((prev) => ({ ...prev, ...extras.readiness }));
     } catch (e) {
@@ -146,7 +136,6 @@ export default function BatchDetailPage() {
     generationRef.current += 1;
     setBatch(null);
     setLeads(null);
-    setScoring(false);
     setScoringFit(false);
     setPushing(false);
     setLoadingMoreLeads(false);
@@ -154,30 +143,6 @@ export default function BatchDetailPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId]);
-
-  async function handleScoreBatch() {
-    const generation = generationRef.current;
-    setScoring(true);
-    setActionResult(null);
-    setError(null);
-    try {
-      const res = await scoreBatch(batchId);
-      if (generationRef.current !== generation) return;
-      setActionResult(
-        `Legacy v1 scoring: scored ${res.scored_leads} leads. Hot ${res.hot} · Warm ${res.warm} · Cold ${res.cold} · avg ${res.average_score}.`,
-      );
-      await load();
-    } catch (e) {
-      if (generationRef.current !== generation) return;
-      setError(
-        e instanceof APIError
-          ? (e.detail ?? e.message)
-          : "Failed to score batch",
-      );
-    } finally {
-      if (generationRef.current === generation) setScoring(false);
-    }
-  }
 
   async function handleScoreBatchFit() {
     const generation = generationRef.current;
@@ -188,8 +153,8 @@ export default function BatchDetailPage() {
       const res = await scoreBatchFit(batchId);
       if (generationRef.current !== generation) return;
       setActionResult(
-        `Company fit (v2 demo): ${res.newly_scored} of ${res.attempted} leads newly scored` +
-          ` · ${res.skipped_unchanged} unchanged since their last score (skipped)` +
+        `Ranked against seller profile version ${res.profile_version}: ${res.newly_scored} of ${res.attempted} leads newly ranked` +
+          ` · ${res.skipped_unchanged} already current (skipped)` +
           ` · ${res.failed} failed.`,
       );
       await load();
@@ -198,7 +163,7 @@ export default function BatchDetailPage() {
       setError(
         e instanceof APIError
           ? (e.detail ?? e.message)
-          : "Failed to score batch fit",
+          : "Failed to rank leads",
       );
     } finally {
       if (generationRef.current === generation) setScoringFit(false);
@@ -226,7 +191,7 @@ export default function BatchDetailPage() {
       const res = await pushHotLeads(batchId);
       if (generationRef.current !== generation) return;
       setActionResult(
-        `Pushed ${res.pushed} of ${res.hot_leads_found} legacy-Hot leads (${res.skipped} skipped, ${res.failed} failed).`,
+        `Pushed ${res.pushed} of ${res.hot_leads_found} Hot leads (${res.skipped} skipped, ${res.blocked} blocked, ${res.failed} failed).`,
       );
       await load();
     } catch (e) {
@@ -258,10 +223,10 @@ export default function BatchDetailPage() {
             <Button
               variant="secondary"
               icon="refresh"
-              loading={scoring}
-              onClick={handleScoreBatch}
+              loading={scoringFit}
+              onClick={handleScoreBatchFit}
             >
-              Rescore leads
+              Rank leads
             </Button>
             <Button
               variant="primary"
@@ -284,58 +249,38 @@ export default function BatchDetailPage() {
         <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-sm text-red-800">
           This batch&apos;s import is incomplete (status &apos;{batch.status}&apos;).
           Every lead in it is excluded from routing until the upload is
-          resumed and finishes -- scoring does not change that.
+          resumed and finishes -- ranking does not change that.
         </div>
       )}
 
-      {showDetails && fitSummary && (
-        <Card
-          title="Company fit (v2 demo)"
-          icon="target"
-          actions={
-            <Button variant="secondary" size="sm" loading={scoringFit} onClick={handleScoreBatchFit}>
-              Score company fit (v2 demo)
-            </Button>
-          }
-        >
+      <RankingBanner refreshKey={leads.length} onRecalculated={() => void load()} />
+
+      {fitSummary && fitSummary.ranking_state === "ready" && (
+        <Card title={`Ranking against seller profile version ${fitSummary.profile_version}`} icon="target">
           {fitSummary.scored_leads === 0 ? (
             <p className="text-sm text-slate-600">
-              No lead in this batch has been fit-scored under the current
-              profile yet.
+              No lead in this import is ranked against the active seller profile yet. Use Rank leads.
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="flex items-center gap-1.5"><RankingBadge priority="Hot" band="strong_match" /> {fitSummary.hot}</span>
+              <span className="flex items-center gap-1.5"><RankingBadge priority="Warm" band="partial_match" /> {fitSummary.warm}</span>
+              <span className="flex items-center gap-1.5"><RankingBadge priority="Cold" band="weak_match" /> {fitSummary.cold}</span>
               <span className="flex items-center gap-1.5">
-                <FitBandBadge band="strong_match" /> {fitSummary.strong_match}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <FitBandBadge band="partial_match" /> {fitSummary.partial_match}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <FitBandBadge band="weak_match" /> {fitSummary.weak_match}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <FitBandBadge band="insufficient_evidence" />{" "}
-                {fitSummary.insufficient_evidence}
+                <RankingBadge priority={null} band="insufficient_evidence" /> {fitSummary.insufficient_evidence}
               </span>
               {fitSummary.average_fit_score !== null && (
-                <span className="text-slate-500">
-                  avg {fitSummary.average_fit_score} / 100
-                </span>
+                <span className="text-slate-500">avg {fitSummary.average_fit_score} / 100</span>
               )}
             </div>
           )}
           <p className="mt-2 text-xs text-slate-500">
-            {fitSummary.scored_leads.toLocaleString()} of{" "}
-            {fitSummary.total_leads.toLocaleString()} leads scored
-            {fitSummary.unscored_leads > 0 &&
-              ` (${fitSummary.unscored_leads.toLocaleString()} not yet)`}
-            ; each lead counted once, by its latest score
-            {fitSummary.score_rows > fitSummary.scored_leads &&
-              ` (${fitSummary.score_rows.toLocaleString()} stored score rows incl. history)`}
-            . Broad demonstration profile -- exact industry/country match
-            only, not a calibrated ICP, and not the same signal as legacy
-            Hot/Warm/Cold. A strong match is not approval to contact.
+            {fitSummary.scored_leads.toLocaleString()} of {fitSummary.total_leads.toLocaleString()} leads ranked
+            {fitSummary.outdated_leads > 0 && ` (${fitSummary.outdated_leads.toLocaleString()} only against earlier target customers)`}
+            ; each lead counted once, by its current ranking
+            {showDetails && fitSummary.score_rows > fitSummary.scored_leads &&
+              ` (${fitSummary.score_rows.toLocaleString()} stored rows incl. history)`}
+            . A ranking compares recorded company facts with your target customers; it is not approval to contact.
           </p>
         </Card>
       )}
@@ -358,12 +303,11 @@ export default function BatchDetailPage() {
           onClick={() => setShowDetails((value) => !value)}
           className="text-sm font-medium text-brand-700 hover:underline"
         >
-          {showDetails ? "Hide scoring details" : "Show scoring details"}
+          {showDetails ? "Hide ranking details" : "Show ranking details"}
         </button>
       </div>
       <LeadTable
         leads={leads}
-        scores={scores}
         fitScores={fitScores}
         readiness={readiness}
         showDetails={showDetails}

@@ -17,8 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import IntegrationPush, WorkflowEvent
-from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
-from tests.conftest import approve_current_draft
+from app.models.lead import DISQUALIFIED_STATUSES
+from tests.conftest import approve_current_draft, rank_batch
 
 # Same shape as the Hot-scoring row used in test_push_endpoints.py, plus a
 # blocked `status` column (a real CSV column the ingestion pipeline already
@@ -53,7 +53,7 @@ def _upload_blocked_hot_lead(client: TestClient, status: str) -> str:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "blocked-test"}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]
     lead = leads[0]
     assert lead["status"] == status, "CSV status column must round-trip onto Lead.status"
@@ -68,7 +68,7 @@ def test_blocked_status_scores_hot_but_is_blocked(
     the lead genuinely reaches the Hot band despite the blocked status
     (Part A must not rely on the score also being low)."""
     _, lead_id = _upload_blocked_hot_lead(client, status)
-    score = client.get(f"/api/leads/{lead_id}/score").json()
+    score = client.get(f"/api/leads/{lead_id}/fit-score").json()
     assert score["priority"] == "Hot", (
         "test fixture must score Hot so the blocked-status check, not the "
         "Hot/force gate, is what's actually being exercised"
@@ -199,7 +199,7 @@ def test_batch_push_mixes_blocked_and_deliverable_leads(
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "mixed-blocked"}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     # Delivery needs a current approval of the exact draft (Phase 6); the
     # blocked lead is approved too, to prove approval can't unblock it.
     for lead in client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]:

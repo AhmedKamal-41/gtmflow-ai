@@ -10,10 +10,19 @@ the code itself (file and constant named), or a count taken from this repository
 figures are **AI-evaluated, not human-verified** (section 17). For a shorter tour, start with
 the [README](README.md).
 
-**Snapshot.** Branch `codex/lead-agent` at commit `4e1af36` (2026-10-03), which is `main`
-(`5e56a4c`) plus the outreach assistant. The assistant (section 14) is implemented and tested
-with mock integrations, but it is **not deployed** and has no live-model quality evidence.
-Deployment facts in section 25 describe `main`.
+**Snapshot.** `main` at commit `e9da2e6` (2026-10-03, which includes the outreach assistant) plus
+**profile-based lead ranking**, implemented and verified locally on 2026-10-18 (section 8). Both
+the assistant (section 14) and profile-based ranking are implemented and tested with mock
+integrations only; **neither is deployed**. Deployment facts in section 25 describe the earlier
+deployed `main` (which still ranks with the retired fixed-term scorer) until a new release is made.
+
+**What changed on 2026-10-18.** Leads used to be ranked by two fixed rubrics: a legacy 100-point
+"priority" score built on hard-coded healthcare and property-management terms, and a
+demonstration "company fit" profile (`demo-us-sectors-v1`). Both are gone from every workflow.
+The seller profile now says *who* the seller wants as customers (industries, locations, company
+sizes, contact roles, keywords) as well as *what* they sell, and one deterministic scorer ranks
+every lead against the active profile's target customers. Drafts are generated from that same
+profile revision. Historical scores of both retired rubrics are kept in the database.
 
 ## Contents
 
@@ -64,9 +73,10 @@ Deployment facts in section 25 describe `main`.
 | Backend | Python 3.12, FastAPI 0.141, SQLAlchemy 2.1, Pydantic 2.13, Alembic 1.20, psycopg 3, httpx, Uvicorn |
 | Frontend | Next.js 15 (App Router), React 19, TypeScript 5 (strict), Tailwind CSS 3, Vitest |
 | Model work | PyTorch 2.14, transformers 5.17, PEFT 0.21, accelerate 1.15, on RunPod pods that delete themselves |
-| Database | PostgreSQL (16 tested; 18.6 on Railway); 23 tables, 14 Alembic migrations; no Redis or broker |
-| API | 66 operations, deny-by-default (64 on `main`; the assistant added 2) |
-| Tests (feature branch, 2026-10-03) | 581 backend on PostgreSQL, 117 frontend, 23 training, 108 of 108 live release checks |
+| Lead ranking | Deterministic, no LLM: each lead compared with the active seller profile's target customers; weighted 0–100 score, Hot ≥ 75 / Warm ≥ 45 / Cold, "needs data" under 50% evidence (section 8) |
+| Database | PostgreSQL (16 tested; 18.6 on Railway); 23 tables, 15 Alembic migrations; no Redis or broker |
+| API | 63 operations, deny-by-default (66 before 2026-10-18: four legacy scoring routes and the fixed fit-profile route were removed, two ranking routes added) |
+| Tests (2026-10-18, local) | 611 backend on PostgreSQL, 122 frontend, 107 of 107 live release checks; training suite not re-run (no training code changed) |
 | Real data | 32,330,231 company records streamed; 5,000 US companies imported (2,500 healthcare, 2,500 real estate) |
 | Model data | 419 training, 74 validation and 71 test examples, split by company group and frozen by sha256 |
 | Total recorded spend | about $1.74 across OpenAI and RunPod (section 26) |
@@ -87,8 +97,8 @@ do we get the good ones to the right rep without anything going out by mistake?
 
 | User | What they do |
 |---|---|
-| Sales rep / SDR (daily user) | Works the Today page and the Leads list, generates and reviews drafts, sends approved Hot leads to Slack |
-| RevOps lead or founder | Writes and activates the seller profile (what is sold), reads Insights |
+| Sales rep / SDR (daily user) | Works the Today page and the Leads list, selects ranked leads to draft, reviews drafts, sends approved Hot leads to Slack |
+| RevOps lead or founder | Writes and activates the seller profile (what is sold and who the target customers are), recalculates rankings, reads Insights |
 | Operator (admin) | Creates accounts with the CLI, resolves uncertain deliveries, runs batch jobs |
 | Viewer | Read-only access (an auditor, a manager) |
 | Visitor to the showcase | Uses a guest account, when the server allows it |
@@ -110,40 +120,43 @@ The app is a sidebar layout: **Today, Leads, Imports, Assistant, Insights, Setti
 | Page | Route | What it does |
 |---|---|---|
 | Sign in | `/login` | Sign in with email or username, create an account (confirmed by an emailed 6-digit code), or **Continue as guest**. Returns only to same-site `next` paths |
-| Today | `/` | Greeting; counts of drafts to review, leads ready to send, Hot leads without a draft and leads sent; a "Next up" list ranked Hot first; the drafting model's live status; a setup prompt until a seller profile is active; **Try with sample data** on an empty workspace |
-| Leads | `/leads` | Every lead across imports, ranked Hot first, with stage tabs and counts, search and a priority filter |
-| Lead workspace | `/leads/[id]` | The current draft (which model wrote it, the facts it is based on, what is unknown, provenance under "Model details"); the review (approve, edit into a revision, reject with a reason; acknowledge any quality flags); Send to Slack with delivery history and "It arrived" / "It did not arrive" buttons for uncertain outcomes; the contact card and the priority breakdown. Company fit, eligibility, the review record and the full AI history sit in a collapsed "Technical details" |
-| Imports | `/imports` | CSV upload (scored on import), **Try with sample data** (10 companies through the normal path), the CSV template, past imports |
-| Import detail | `/batches/[id]` | One import's leads; background job controls (fit-score, legacy-score, summaries, outreach drafts, push approved Hot leads) with live progress and cancel; optional scoring details |
+| Today | `/` | Greeting; counts of drafts to review, leads ready to send, Hot leads without a draft and leads sent; a "Next up" list ranked Hot first; the drafting model's live status; a setup prompt until a seller profile is active; a ranking banner (setup required, or outdated rankings with **Recalculate rankings**); **Try with sample data** on an empty workspace |
+| Leads | `/leads` | Every lead across imports, ranked by its current match with the seller profile's target customers (Hot first), each with its score and a one-line reason; stage tabs and counts, search, a priority filter (Hot, Warm, Cold, Needs data); the ranking banner; **select up to 25 ranked leads and Draft outreach for selected** (blocked and unranked leads cannot be selected) |
+| Lead workspace | `/leads/[id]` | The current draft (which model wrote it, the facts it is based on, what is unknown, provenance under "Model details"); the review (approve, edit into a revision, reject with a reason; acknowledge any quality flags); Send to Slack with delivery history and "It arrived" / "It did not arrive" buttons for uncertain outcomes; the contact card and **Why this ranking**: score, priority, matches / doesn't match / missing information, each criterion's explanation, an outdated notice, and Rank again. Eligibility, the review record and the full AI history sit in a collapsed "Technical details" |
+| Imports | `/imports` | CSV upload (ranked on import; if no target customers are set the import is kept and the page says ranking needs setup), **Try with sample data** (10 companies through the normal path), the CSV template, past imports |
+| Import detail | `/batches/[id]` | One import's leads with their rankings; a ranking summary (Hot / Warm / Cold / Needs data, outdated count); Rank leads; background job controls (rank all leads, summaries, outreach drafts, push approved Hot leads) with live progress and cancel; optional ranking details (coverage, missing fields, readiness, eligibility) |
 | Assistant | `/assistant` | Pick an import, describe the leads you want, inspect a shortlist of up to five with its tool trace, then click **Prepare drafts** to queue them (section 14) |
 | Insights | `/metrics` | The metrics dashboard (section 16), with a data-mode banner |
 | Settings | `/settings` | Drafting model status and how to connect the fine-tuned model; what you sell; the account |
-| Seller profile | `/seller-profile` | Versioned seller profile editor with explicit, reviewed activation |
+| Seller profile | `/seller-profile` | Versioned editor in two parts, **What you sell** (offer, capabilities, sourced claims, exclusions) and **Who you want to sell to** (target customers in words, plus industries, locations, company-size ranges, contact roles and optional keywords used for ranking, with an explanation of the ranking rules); explicit, reviewed activation; the ranking banner |
 
 The redesign (2026-10-03) retired the separate annotation and demo pages; their APIs remain for
 the model-work tools and the release checks. `/upload` and `/batches` remain as routes.
 
 **Sample data.** `sample_data/leads_sample.csv` (also served as
-`frontend/public/sample-leads.csv`) holds 10 fictional companies tuned to score **2 Hot, 4 Warm,
-4 Cold**:
+`frontend/public/sample-leads.csv`) holds 10 fictional companies across healthcare, housing,
+software, retail and education. How they rank now depends entirely on the active seller profile.
+Two measured examples (2026-10-18):
 
-| Band | Companies |
-|---|---|
-| Hot | Cascade Modular Homes (housing, VP Operations, referral, tenant and maintenance pain); Northbridge Clinics (healthcare, Practice Manager, webinar, patient and intake pain) |
-| Warm | Meridian Diagnostics, Bluepine Property Partners, Loopline Software, Quanta Analytics |
-| Cold | Vault Outfitters, Sunday Pantry Co, Brightline Academy Network, Latitude Learning |
+| Seller profile | Hot | Warm | Cold |
+|---|---|---|---|
+| Built-in demonstration profile (B2B software, 11–200 staff, founders and sales leaders) | Loopline Software, Quanta Analytics (100 each) | none | the other 8 (three match on size only, 33) |
+| A US healthcare seller (healthcare/hospital, United States, 201+ staff, practice managers, "intake"/"appointment"), entered through the UI | Northbridge Clinics (100), Meridian Diagnostics (80) | Brightline Academy Network, Cascade Modular Homes, Vault Outfitters (45: size and location only) | the other 5 |
+
+Before 2026-10-18 the same file was "tuned to score 2 Hot, 4 Warm, 4 Cold" under the retired
+fixed-term scorer.
 
 ## 4. The workflow end to end
 
 ```mermaid
 flowchart TD
+    S["Seller profile (active revision)<br/>what we sell + who we want to sell to"] --> C
     A["Upload CSV<br/>bounded, streamed, row-level errors"] --> B["Leads stored<br/>unknown columns kept"]
-    B --> C["Priority score (v1)<br/>100 points → Hot / Warm / Cold"]
-    B --> D["Company fit (v2)<br/>versioned profile + evidence coverage"]
-    C --> E{"Seller profile<br/>activated?"}
-    D --> E
-    E -->|no| E1["Summary only;<br/>outreach unavailable"]
-    E -->|yes| F["Generate summary + outreach<br/>grounded context, cited ids"]
+    B --> C{"Target customers<br/>set?"}
+    C -->|no| C1["Setup required;<br/>leads stay unranked"]
+    C -->|yes| D["Ranking against target customers<br/>0–100, Hot / Warm / Cold / needs data"]
+    D --> E["Rep selects ranked leads"]
+    E --> F["Generate summary + outreach<br/>same seller revision, grounded context, cited ids"]
     F --> G{"Server validation<br/>ids in context, schema"}
     G -->|fail| G1["Nothing saved (502)"]
     G -->|pass| H["Draft + runtime quality flags"]
@@ -159,15 +172,20 @@ flowchart TD
 
 1. **Import.** A CSV is streamed to disk, parsed row by row and committed in chunks of 500.
    Bad rows are reported; unknown columns are kept on the lead.
-2. **Rank.** Each lead gets a deterministic 100-point priority score with reasons, and a
-   versioned company-fit score that reports how much evidence it had.
-3. **Draft.** On a lead, the rep generates a summary and an outreach email. The model sees only
-   the company's own facts and the activated seller profile, and must cite the id of every fact
-   it uses. Output that cites anything else is rejected and never saved.
+2. **Rank.** Each lead is compared with the active seller profile's target customers: a
+   deterministic 0–100 score with Hot / Warm / Cold (or "needs data" when too little of the record
+   could be compared) and a breakdown of matches, mismatches and missing information. Without
+   target customers nothing is ranked and the app says setup is required.
+3. **Draft.** The rep selects ranked leads (or opens one) and generates outreach. The model sees
+   only the company's own facts, the active seller revision (the same one that ranked the lead)
+   and that ranking, labeled as not evidence of need or intent, and must cite the id of every fact,
+   capability and claim it uses. Output that cites anything else is rejected and never saved.
 4. **Approve.** A person approves or rejects the exact draft on screen. The approval is bound to
-   the draft's content hash, the hash of the company inputs and the seller-profile revision.
-5. **Route.** Only a current approval lets a Hot, eligible lead go to Slack, through a ledger
-   that claims a row before sending, so repeats are replays and timeouts become `unknown`.
+   the draft's content hash, the hash of its inputs (company facts, ranking, seller content) and
+   the seller-profile revision; changing the target customers makes it stop applying.
+5. **Route.** Only a current approval lets a currently Hot (or explicitly forced), eligible lead
+   go to Slack, through a ledger that claims a row before sending, so repeats are replays and
+   timeouts become `unknown`. A blocked lead is refused at any score.
 6. **Measure.** The dashboard counts each draft once by its latest review and keeps mock and
    real activity apart.
 
@@ -208,7 +226,8 @@ flowchart TB
 **Layering convention** (from the [implementation contract](docs/engineering-log/implementation-contract.md)):
 `api/` routers validate requests and call a service → `services/` own writes and audit events →
 `models/` (SQLAlchemy) and `schemas/` (Pydantic v2). `scoring/` and `ai/` are pure layers that
-know nothing about the database. The scorer is a pure function of any duck-typed lead.
+know nothing about the database. The ranking scorer is a pure function of any duck-typed lead
+and a seller profile's target preferences.
 
 **Repository layout.**
 
@@ -217,7 +236,7 @@ gtmflow-ai/
 ├── backend/
 │   ├── app/
 │   │   ├── ai/           Clients (mock, OpenAI, LoRA), prompts, grounding validation, runtime checks, tool calling, model status
-│   │   ├── api/          Routers: auth, workspace (inbox, model status), batches, leads, scoring, fit, AI, review, push, jobs, assistant, metrics, demo, annotation
+│   │   ├── api/          Routers: auth, workspace (inbox, model status), batches, leads, ranking (fit), AI, review, push, jobs, assistant, metrics, demo, annotation
 │   │   ├── core/         Settings, database, actor context, HTTP security, hashing, init_db
 │   │   ├── datasets/     Dataset checks, deduplication, correction policy, pilot export (model work)
 │   │   ├── evaluation/   Frozen held-out criteria, metrics and lints, Phase 9 report and blind review
@@ -226,7 +245,7 @@ gtmflow-ai/
 │   │   ├── models/       SQLAlchemy models, including the audit hook
 │   │   ├── pdl/          Streaming company-dataset import with provenance
 │   │   ├── schemas/      Pydantic request and response models
-│   │   ├── scoring/      Priority score (v1) and versioned company fit (v2)
+│   │   ├── scoring/      Ranking against the seller profile's target customers (fit.py), readiness, eligibility
 │   │   ├── services/     Business logic
 │   │   ├── auth_cli.py   Account management
 │   │   ├── dataset_cli.py, annotation_cli.py   Model-work tools
@@ -256,9 +275,9 @@ gtmflow-ai/
 
 | Group | Tables | Notable constraints and columns |
 |---|---|---|
-| Leads and imports | `lead_batches`, `leads`, `lead_scores`, `lead_fit_scores` | `lead_batches.logical_key` unique; `leads.cleaned_data` keeps unknown CSV columns; fit scores are append-only and versioned |
+| Leads and imports | `lead_batches`, `leads`, `lead_scores`, `lead_fit_scores` | `lead_batches.logical_key` unique; `leads.cleaned_data` keeps unknown CSV columns; rankings (`lead_fit_scores`) are append-only and scoped to a seller-profile revision and a `targeting_hash`; `lead_scores` is frozen history of the retired v1 score (nothing reads or writes it) |
 | Drafts and review | `ai_outputs`, `ai_output_reviews` | Outputs carry full provenance and `parent_output_id` for revisions; reviews carry the approved content hash |
-| Seller profiles | `seller_profiles`, `seller_profile_activations` | Immutable versions; race-safe activation |
+| Seller profiles | `seller_profiles`, `seller_profile_activations` | Immutable versions (target preferences live in the `profile` JSON); race-safe activation |
 | Delivery | `integration_pushes` | The ledger: unique `delivery_key`, approved output id and hash, attempt, `delivery_mode`, claim, outcome and resolution |
 | Background jobs | `background_jobs`, `background_job_items` | Unique `dedupe_key` per active job; one item per job and lead; lease and heartbeat columns |
 | Audit | `workflow_events` | `actor` on every new event, `actor_user_id` when a user is known |
@@ -284,10 +303,13 @@ gtmflow-ai/
 | 0012 | `operator_auth` | Users, sessions, actors |
 | 0013 | `auth_hardening` | Login throttle table, job creator user id |
 | 0014 | `signup_and_guest` | Email verification and guest accounts |
+| 0015 | `profile_based_ranking` | `lead_fit_scores.seller_profile_id` (FK, nullable) and `targeting_hash` (nullable) with indexes; additive, existing rows keep every value and stay as history (2026-10-18) |
 
 A baseline verifier (`backend/scripts/verify_baseline_schema.py`) adopts a database created before
 migrations existed: it compares the live schema first and stamps it only on an exact match.
-Every migration was tested up, down and up again with `alembic check` on PostgreSQL. Each one
+Every migration was tested up, down and up again with `alembic check` on PostgreSQL (`0015` on
+PostgreSQL 16 on 2026-10-18, plus a restored-fixture test that keeps a retired-rubric score row
+intact through `0015` up and down). Each one
 that touched the real development database was first applied to a restored copy of a verified
 backup. The first attempt at `0009` failed on PostgreSQL's identifier-length limit on that copy
 and was fixed before the real database was touched.
@@ -465,7 +487,122 @@ label pass rate 0.00, no-placeholder 0.25, no-invented-phrasing 0.28.
 
 ## 8. Scoring
 
-### 8.1 Priority score (legacy v1): 100 points, deterministic, no LLM (`app/scoring/lead_scoring.py`)
+Since 2026-10-18 there is **one** ranking, `app/scoring/fit.py`, and it compares each lead with
+the **active seller profile's target customers**. It is deterministic (no LLM call), pure, and
+used by every reader through one query module (`app/services/fit_queries.py`): the lead list and
+its sort and filters, the inbox and Today, import pages, the dashboard, batch jobs, the
+assistant, draft context and approval checks, and Slack delivery eligibility.
+
+### 8.1 What the seller profile says
+
+The seller profile has two halves (section 11):
+
+- **What we sell:** company and product name, value proposition, capabilities, approved claims
+  with sources, exclusions. Only these may appear in a draft.
+- **Who we want to sell to:** `target_customer` (free text, passed to drafting as context only)
+  and `target_preferences`, the structured criteria ranking uses:
+
+| Field | Shape | Limits |
+|---|---|---|
+| `industries` | phrases | up to 20, 80 characters each |
+| `locations` | countries, states or cities | up to 20 |
+| `company_sizes` | `{min_employees, max_employees or null}` ranges | up to 8; UI presets 1–10, 11–50, 51–200, 201–500, 501–1,000, 1,001–5,000, 5,001+, plus custom ranges |
+| `contact_roles` | job-title phrases | up to 20 |
+| `keywords` | optional phrases searched in notes/description columns | up to 20 |
+
+An empty list means "no preference" and that criterion does not count. With every list empty,
+**ranking is refused with "setup required"** (HTTP 409 with a message; banners in the UI) rather
+than falling back to any built-in targets.
+
+### 8.2 Formula, weights and thresholds
+
+| Criterion | Default weight | Lead fields compared |
+|---|---|---|
+| Industry | 35 | `industry` |
+| Company size | 25 | `company_size` (a count, a range such as `51-200`, or `1000+`) |
+| Location | 20 | `location`, and `cleaned_data` locality / region / country (PDL leads) |
+| Contact role | 15 | `contact_title` |
+| Keywords | 5 | free-text `cleaned_data` values (notes, descriptions); import labels, places, dates and URLs are excluded |
+
+Each **configured** criterion gets a result: `match` (full weight), `partial` (half weight; company
+size only, when the recorded range overlaps a target range without lying inside it), `mismatch`
+(the lead has a value outside the targets: 0) or `unknown` (no usable value: 0, reported as
+**missing information, not a mismatch**). Criteria the profile does not set are `not_configured`,
+weight 0, and listed so their absence is visible.
+
+```
+fit_score = round(100 × earned weight ÷ configured weight)        0–100
+coverage  = 100 × weight with a known result ÷ configured weight
+```
+
+Weights are rescaled over the configured criteria (a profile with only industry and size ranks
+on those two: 58.3 and 41.7 of 100). Because unknown criteria earn nothing, a high score always
+rests on evidence.
+
+| Band | Rule | Shown as |
+|---|---|---|
+| `insufficient_evidence` | coverage < 50%, whatever the score | **Needs data** |
+| `strong_match` | score ≥ 75 | **Hot** |
+| `partial_match` | 45–74 | **Warm** |
+| `weak_match` | < 45 | **Cold** |
+
+Size is a preference, not a ladder: an 8-person company scores 100 for a seller targeting 1–10
+and 0 for one targeting 1,001+, and the reverse for a 10,001+ company (unit-tested).
+
+**Matching** is whole-word after normalization: case, punctuation, `&`/`and`, a few stopwords,
+simple plurals, and a small rewrite table (health care = healthcare, USA = US = U.S. = United
+States, UK = United Kingdom, VP = Vice President, CEO/COO/CFO/CTO/CMO/CRO spelled out, Sr, Mgr,
+Dir, Ops). So "Hospital" does **not** match "Hospitality", "Clinic" matches "Clinics", and "Soft"
+does not match "Software". It is not semantic and does not geocode: "Austin, TX" is not
+recognized as being in "United States" (the mismatch explanation says so). The assistant's
+industry filter uses the same whole-word rule (it used a substring check before).
+
+**Breakdown.** Every ranking returns its criteria (targets, matched targets, points, an
+explanation sentence), a summary grouped into matched / partly matched / mismatched / missing /
+not configured, and a one-line `explanation` used in lists and Slack, for example "Target-customer
+fit: matches industry, company size; no data for location." or "Not enough information to rank
+confidently: …".
+
+**Kept separate from fit.** Contact completeness (`missing_contact_email`) and permission to
+contact (blocked statuses `do_not_contact`, `disqualified`, `unsubscribed`; incomplete imports)
+are reported as readiness and eligibility, never added to the score. `compute_eligibility` takes
+no score, so no ranking can override a block; ranking never writes `Lead.status` or
+`LeadBatch.status`. **Readiness gaps**, recomputed live: no seller profile, demonstration seller
+profile, missing contact email, no outreach draft, draft not reviewed, draft rejected, lead
+excluded from routing, draft not from the active profile, draft inputs changed since generation,
+approval does not identify content.
+
+### 8.3 Versioning, outdated rankings and recalculation
+
+- Every ranking is a new append-only `lead_fit_scores` row stamped with the seller-profile
+  revision (`seller_profile_id`, `profile_id`, `profile_version`), `scorer_version`
+  `fit-scorer-v2`, `normalization_version` `fit-norm-v2`, an input fingerprint and a
+  **`targeting_hash`**: SHA-256 of the canonical target preferences (normalized words, so case and
+  order do not matter), the weights, the thresholds and both versions.
+- A row is **current** only while its `targeting_hash` and versions equal the active profile's.
+  Activating a revision with different target customers makes earlier rankings **outdated**:
+  they stay in the table (history is never deleted or edited), the API returns them with
+  `is_current: false`, lists show "Outdated", and they count as neither ranked nor Hot anywhere. A
+  revision that changes only what is sold keeps the same hash, so rankings stay current.
+- **Recalculating:** `POST /api/scoring/recalculate` ranks the whole workspace in committed chunks
+  of 500 and records `rankings_recalculated`; `POST /api/batches/{id}/fit-score` and the
+  `fit_score` background job do one import; `POST /api/leads/{id}/fit-score` one lead. Leads whose
+  current row has the same fingerprint are skipped, so repeating is safe. `GET
+  /api/scoring/profile` reports the state (`ready`, `no_active_profile`, `setup_required`), the
+  active targets, weights, thresholds and counts of current, outdated and never-ranked leads; the
+  UI's **Recalculate rankings** banner uses it. Imports are ranked right after upload when a
+  profile is set up.
+- Single workspace, as before: rankings are scoped to the lead and the profile revision; every
+  write needs an operator (or a guest on a guest-safe server) and records its actor.
+
+### 8.4 History: the two retired rubrics
+
+Kept for the record; neither runs anymore. Their stored rows remain: `lead_scores` (frozen, no
+code path) and `demo-us-sectors-v1` rows in `lead_fit_scores` (no `targeting_hash`, so never
+current). The `legacy_score` job type is refused at enqueue, and a job queued before the upgrade
+fails cleanly without writing anything.
+
+#### Retired: priority score (legacy v1), 100 points (`app/scoring/lead_scoring.py`, deleted 2026-10-18)
 
 | Category | Max | How it earns points |
 |---|---|---|
@@ -492,7 +629,7 @@ booking, front desk, follow-up, forms).
 Leads with a blocked disposition (`do_not_contact`, `disqualified`, `unsubscribed`) can never reach
 Slack in any mode, whatever their score.
 
-### 8.2 Company fit (v2, `app/scoring/fit.py`)
+#### Retired: company fit with the demonstration profile `demo-us-sectors-v1` (Phase 4)
 
 | Item | Value |
 |---|---|
@@ -507,11 +644,6 @@ Slack in any mode, whatever their score.
 The profile is a broad demonstration, not a calibrated ideal-customer profile, and generation
 labels it "not evidence of interest". CSV leads without structured country data score as
 insufficient evidence.
-
-**Readiness gaps** recomputed live on every request: no seller profile, demonstration seller
-profile, missing contact email, no outreach draft, draft not reviewed, draft rejected, lead
-excluded from routing, draft not from the active profile, draft inputs changed since generation,
-approval does not identify content.
 
 **Real cohort (Phase 4):** 5,000 of 5,000 scored (0 failures), all strong match at 100% coverage,
 as expected for companies imported on the same two criteria; a rerun skipped all 5,000 as
@@ -533,7 +665,7 @@ flowchart TB
         P["Prompt grounded-v2<br/>+ output schema v2"] --> M["Drafting model"]
         M --> V{"Cited ids ⊆<br/>context ids?"}
         V -->|no| X["Rejected, not stored"]
-        V -->|yes| Q["Runtime checks<br/>runtime-checks-v1"]
+        V -->|yes| Q["Runtime checks<br/>runtime-checks-v2"]
     end
     Context --> Pipeline
 ```
@@ -542,6 +674,18 @@ flowchart TB
 and approved claim gets an id. Unknowns (buying intent, budget, current problems, current tools)
 are always passed explicitly. Free text is bounded (at most 20 fields of 500 characters).
 Imported data sits inside an escaped `<untrusted_data>` fence in the `grounded-v2` prompt.
+
+**Ranking in the context (2026-10-18).** The `company_fit` block is the lead's current ranking
+under the **same seller revision the draft uses** (for the built-in demo profile, under its
+targets): `fit_score`, `band`, `evidence_coverage_pct` and `targeting_hash`, plus a `meaning`
+line: "How well the company's recorded attributes (industry, size, location, contact role,
+keywords) match the seller's stated target customers. It is not evidence of interest, need,
+budget or intent to buy; do not say or imply that the company needs the product or plans to buy."
+The structured target preferences themselves are not sent to the model (the seller block's
+keys are unchanged, so the fine-tuned model's input format only changed in this block). Buying
+intent, budget, current problems and tools stay in `unknowns` for every lead. Because the
+block and its meaning changed, drafts generated before 2026-10-18 no longer reproduce their
+`input_hash`: their approvals stop applying and they show as "Draft out of date" (intended).
 
 **Validation** (output schema `v2`). The draft must list the ids it relied on. Any id outside the
 context (`unknown_fact_reference`, `unknown_capability_reference`, `unapproved_claim_reference`),
@@ -565,8 +709,9 @@ reason on the generation event.
 `GET /api/ai/status` reports which model drafts right now and whether the fine-tuned server is
 reachable; Today and Settings show it.
 
-**Runtime quality checks** (`app/ai/quality_checks.py`, `runtime-checks-v1`). Pure functions of
-the stored output and its input snapshot. Every flag asks for review; none blocks by itself.
+**Runtime quality checks** (`app/ai/quality_checks.py`, `runtime-checks-v2` since 2026-10-18;
+v1 plus `presumed_need_or_intent`). Pure functions of the stored output and its input snapshot.
+Every flag asks for review; none blocks by itself.
 
 | Check | Source |
 |---|---|
@@ -576,8 +721,10 @@ the stored output and its input snapshot. Every flag asks for review; none block
 | `missing_demo_label` | `ai-review-rubric-v1` (demonstration sellers only) |
 | `placeholder_text`, `literal_escape_text`, `prospect_web_as_own` | `ai-review-rubric-v1` |
 | `need_or_interest_hypothesis` (summaries; a hypothesis that only states an unknown is exempt) | `ai-review-rubric-v1` |
+| `presumed_need_or_intent` (outreach subject and body: "since you need…", "you are looking for…", "your need for…", "ready to buy"; a question or a sentence with whether / if / may / might / could is exempt) | The ranking rule that a strong match is not a need or intent (2026-10-18) |
 
-What is and is not shown about these checks: on the 71 test drafts they were tuned on, flags
+What is and is not shown about these checks (`presumed_need_or_intent` is covered only by unit
+tests with written examples, and the mock drafts carry no flags): on the 71 test drafts they were tuned on, flags
 coincide with the blind reviewer's rejections on all 71 (regression coverage only). They flagged
 0 of 100 untouched validation references (false positives on those references only). **Detection
 of new problem wording is untested.**
@@ -587,7 +734,10 @@ of new problem wording is untested.**
 - **Exact-draft approval.** `POST /api/leads/{id}/approve-outreach` takes `{ai_output_id,
   content_hash, acknowledged_quality_flags}`. The approval stores the SHA-256 of the content shown,
   plus the input hash and seller-profile revision. It authorizes delivery only while all three are
-  unchanged, so a stale browser tab cannot approve a newer draft.
+  unchanged, so a stale browser tab cannot approve a newer draft. The input hash includes the
+  lead's ranking under that seller revision, so activating different target customers (a new
+  revision) or a changed company fact that changes the ranking makes the approval stop applying;
+  re-ranking with identical inputs and targets does not (tested).
 - **Flags.** Approving a flagged draft needs `acknowledged_quality_flags` equal to the flags shown,
   otherwise 409 and nothing is recorded. The acknowledgement is stored on the `outreach_approved`
   event.
@@ -602,15 +752,22 @@ of new problem wording is untested.**
 
 ## 11. Seller profiles
 
-A seller profile describes what is sold: capabilities and approved claims. It is the only source
-of claims a draft may make.
+A seller profile describes **what is sold** (capabilities and approved claims, the only source of
+claims a draft may make) and, since 2026-10-18, **who it is sold to**: the target preferences that
+rank every lead (section 8.1). The editor separates the two, explains every target field and the
+ranking rules, keeps saved custom size ranges, and warns when a saved draft has no target
+customers.
 
 - One global profile with **immutable versions** (`seller_profiles`); each save is a new version.
 - **Activation is explicit** (`seller_profile_activations`): it needs a review confirmation, uses
   an optimistic sequence and a race-safe unique constraint, and writes its audit event atomically.
 - A **demonstration profile** also needs an explicit acknowledgement. Its drafts carry a
   "not a commercial offer" label and can never make an email "ready".
-- Without an active profile, only summaries can be generated.
+- Without an active profile, only summaries can be generated, and nothing is ranked.
+- The built-in GTMFlow demonstration template now includes illustrative target preferences (B2B
+  software, 11–200 staff, founders and sales leaders), used only where that profile is chosen:
+  the standalone demo, or a workspace that activates the template. It is labeled as not a
+  validated segment.
 - The seller revision is resolved once per request, so a profile change mid-request cannot mix
   versions.
 
@@ -623,7 +780,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Slack as Slack webhook
     Op->>API: push lead
-    API->>API: check Hot, eligible, approval current
+    API->>API: check current ranking Hot (or forced), eligible, approval current
     API->>DB: INSERT claim (unique delivery_key) and commit
     alt claim already exists
         DB-->>API: existing claim
@@ -644,8 +801,11 @@ sequenceDiagram
 Every dispatch (single-lead route, batch route, `push_hot` job, demo) goes through one function,
 `deliver_lead_to_slack` (`app/services/integration_push.py`).
 
-1. **Gates first:** Hot (or forced), not blocked, import complete, and a current approval of the
-   exact draft. Blocked and unapproved leads are refused **before** any claim row exists.
+1. **Gates first:** a current ranking against the active profile that is Hot (or `force`; the
+   single-lead route refuses a lead with no current ranking), not blocked, import complete, and a
+   current approval of the exact draft. Blocked and unapproved leads are refused **before** any
+   claim row exists, whatever the score. The batch route and the `push_hot` job select leads whose
+   current ranking is Hot; a lead re-ranked out of Hot after queueing is skipped.
 2. **Ledger lookup:** already delivered → replay, nothing sent; claim in progress → 409; last
    outcome unknown → 409 until resolved; last attempt definitely failed → a new attempt is allowed.
 3. **Claim:** insert `slack:<output id>:<content hash>:<attempt>` (unique) and **commit before any
@@ -673,8 +833,10 @@ manual resolution can still duplicate or lose a message.
 delivery per lead; a restarted job item never re-sent. With a non-unique claim key, the
 concurrency test fails (mutation check).
 
-**Message.** Plain Slack `text` (no Block Kit): company, score and band, industry, contact, why
-now, pain points, suggested subject, call note, and a link back to the lead. An empty
+**Message.** Plain Slack `text` (no Block Kit): company, "Target-customer match: N/100 (band)",
+industry, contact, "Why it fits" (the ranking explanation, or the summary's reasoning), pain points,
+suggested subject, call note, and a link back to the lead. The "🔥 Hot" heading appears only for
+Hot leads. An empty
 `SLACK_WEBHOOK_URL` routes to a mock webhook. The URL is read at send time and never logged or
 returned; transport errors are sanitized so they cannot echo it.
 
@@ -682,7 +844,7 @@ returned; transport errors are sanitized so they cannot echo it.
 
 | Item | Value |
 |---|---|
-| Job types | `fit_score`, `legacy_score`, `generate_summary`, `generate_outreach`, `push_hot`, plus `assistant_outreach` (section 14) |
+| Job types | `fit_score` (rank against the active profile; fails with the setup message when there are no target customers), `generate_summary`, `generate_outreach`, `push_hot` (current Hot rankings), `assistant_outreach` (section 14) and `selected_outreach` (1–25 leads a rep selected on the Leads page; each must still have a current ranking, otherwise `ranking_not_current`; blocked leads `blocked`; never approves). `legacy_score` is retired: refused at enqueue, and a pre-upgrade queued one fails cleanly |
 | Storage | `background_jobs` and `background_job_items` in PostgreSQL (migration `0010`); no new dependency |
 | Worker | `python -m app.jobs.worker [--drain]`; polls every 2 s; 60-second lease |
 | Leasing | Each item's effect, its status, the progress counts and a **fenced lease renewal** commit in one transaction. A worker that lost its lease cannot commit, and committed items are never repeated |
@@ -744,12 +906,20 @@ not prove that prompt injection cannot distort which leads are chosen.
 **Providers.** `AGENT_PROVIDER` is separate from `AI_PROVIDER`, because the fine-tuned adapter
 writes drafts and was never trained for tool selection.
 
-- `mock` (default): a deterministic demonstration that recognizes Hot / Warm / Cold and
-  healthcare / real-estate terms; the page says other instructions are not interpreted.
+- `mock` (default): a deterministic demonstration that recognizes Hot / Warm / Cold and any of the
+  active profile's target industries named in the request (it used to recognize fixed
+  healthcare / real-estate terms); the page says other instructions are not interpreted.
+
+**Ranking (2026-10-18).** Search results are ordered by each lead's current ranking against the
+active profile (Hot, Warm, Cold, needs data, unranked), the priority filter uses it, inspection
+shows "Target-customer match: N/100 (band)" with the explanation and "not evidence of need,
+interest or intent", and the planner's request includes the profile's target industries,
+locations and roles. The industry filter is whole-word.
 - `openai`: native function calling with `AGENT_MODEL` (default `gpt-4o-mini`). Tested only
   against mocked HTTP; no live calls were made.
 
-**The draft job.** `assistant_outreach` takes 1 to 5 lead ids and nothing else. It rechecks import
+**The draft job.** `assistant_outreach` takes 1 to 5 lead ids and nothing else (it shares its
+validation with `selected_outreach`). It rechecks import
 membership and completeness, skips existing drafts, respects blocked statuses and uses the normal
 grounding, provenance and quality checks. A different selection while another assistant job is
 active returns 409. Each item gets one worker-level attempt on provider failure.
@@ -779,16 +949,20 @@ function the lead page and delivery enforce (`app/services/inbox.py`):
 
 | Stage | Meaning |
 |---|---|
-| Not scored | No priority score yet |
-| Needs a draft | Scored, no outreach draft |
+| Not ranked | No current ranking (never ranked, or only against earlier target customers) |
+| Needs a draft | Ranked, no outreach draft |
 | To review | The current draft awaits a decision and is still current |
-| Draft out of date | The draft's inputs changed (facts, fit score or seller profile), so approving or sending it would be refused |
+| Draft out of date | The draft's inputs changed (facts, ranking or seller profile), so approving or sending it would be refused |
 | Draft rejected | The current draft was rejected |
 | Ready to send | Approved, and the approval authorizes delivery |
 | Sent | A Slack delivery succeeded for this lead |
 
-Leads also carry `delivery_unknown` and `blocked`. The list is ranked Hot, Warm, Cold, then
-unscored, in memory, bounded to 5,000 leads; filters are `stage`, `priority` and `q`.
+Leads also carry `delivery_unknown`, `blocked`, and their current ranking (`priority`, `score`,
+`band`, `evidence_coverage_pct`, `ranking_reason`, `ranking_outdated`). The list is ordered Hot,
+Warm, Cold, needs data, unranked, then by score, in memory, bounded to 5,000 leads; filters are
+`stage`, `priority` (Hot, Warm, Cold, `needs_data`) and `q`. The response's `ranking` object gives
+the state (`ready`, `no_active_profile`, `setup_required`) and profile version, and `counts`
+include `needs_data` and `ranking_outdated`.
 
 ## 16. Metrics dashboard: every field
 
@@ -801,18 +975,21 @@ at zero; no path returns NaN or infinity.
 | Field | Definition |
 |---|---|
 | `total_leads_uploaded` | All leads |
-| `total_leads_processed` | Leads with a priority score |
-| `hot_leads`, `warm_leads`, `cold_leads` | Scores per band |
+| `total_leads_processed` | Leads with a current ranking against the active profile |
+| `hot_leads`, `warm_leads`, `cold_leads` | Leads per band of their current ranking (needs-data leads are in `fit_insufficient_evidence`) |
 | `automation_coverage` | processed ÷ uploaded × 100 |
-| `average_lead_score` | Mean priority score, 2 decimals |
+| `average_lead_score` | Mean current ranking score, 1 decimal |
 | `missing_data_rate` | Leads missing contact email or website ÷ uploaded × 100 |
 
-**Company fit**
+**Ranking** (since 2026-10-18 the same source as the pipeline counts above; the retired
+`lead_scores` table is not read)
 
 | Field | Definition |
 |---|---|
-| `fit_scored_leads` | Distinct leads with a current fit score |
-| `fit_strong_match`, `fit_partial_match`, `fit_weak_match`, `fit_insufficient_evidence` | Leads per band, each counted once by its latest score |
+| `ranking_state`, `ranking_profile_version` | Whether leads can be ranked, and against which profile version |
+| `fit_scored_leads` | Distinct leads with a current ranking |
+| `fit_strong_match`, `fit_partial_match`, `fit_weak_match`, `fit_insufficient_evidence` | Leads per band, each counted once by its latest current ranking |
+| `fit_outdated_leads` | Leads ranked only against earlier target customers (not counted as ranked) |
 
 **Outreach review** (cohort: distinct operational outreach drafts, each classified by its latest
 review, ordered by `created_at` then `id`; human revisions included; annotation outputs excluded)
@@ -853,10 +1030,13 @@ review, ordered by `created_at` then `id`; human revisions included; annotation 
 | `estimated_time_saved_minutes` | processed leads × 5 (`MINUTES_SAVED_PER_PROCESSED_LEAD`) |
 | `estimated_time_saved_hours` | minutes ÷ 60, 2 decimals |
 
-**Worked example** (sample CSV scored, outreach for 3 leads, 2 approved, 1 rejected, Hot leads
-pushed): 10 uploaded and processed, 2 / 4 / 4 Hot / Warm / Cold, approval rate 66.67%, 2 pushed,
-2 unique, success 100%, 50 minutes (0.83 hours) saved, average score 56.1, missing data 0%,
-coverage 100%.
+**Worked example** (recorded before 2026-10-18 with the retired scorer: sample CSV scored, outreach
+for 3 leads, 2 approved, 1 rejected, Hot leads pushed): 10 uploaded and processed, 2 / 4 / 4 Hot /
+Warm / Cold, approval rate 66.67%, 2 pushed, 2 unique, success 100%, 50 minutes (0.83 hours)
+saved, average score 56.1, missing data 0%, coverage 100%. The ranking figures now depend on the
+active profile (section 3). Note that the standalone demo ranks with its own built-in profile, so
+on a workspace with no active profile the dashboard reports no ranked leads after a demo run
+(tested); activating the demonstration template makes those rankings current.
 
 **History of the approval metric.** Before Phase 11, `approved` counted events and `generated`
 counted every outreach row, so approve → reject → approve on one draft reported 200%. The fix and
@@ -1065,8 +1245,9 @@ every new event and `actor_user_id` when a user is known, including jobs a user 
 (`job:user:<name>`). Historical labels such as `local-demo-unauthenticated` and
 `demo-auto-approve` are kept as they were.
 
-Event types include: `batch_uploaded`, `batch_upload_partial`, `batch_scored`, `lead_scored`,
-`lead_fit_scored`, `pdl_import_chunk_committed`, `seller_profile_draft_saved` and activation
+Event types include: `batch_uploaded`, `batch_upload_partial`, `batch_scored` and `lead_scored`
+(retired scorer; historical rows, plus `batch_scored` from the demo), `lead_fit_scored` (now with
+`targeting_hash` and `priority`), `rankings_recalculated`, `pdl_import_chunk_committed`, `seller_profile_draft_saved` and activation
 events, `ai_generation_rejected`, `ai_output_revised`, `outreach_approved`, `outreach_rejected`,
 `lead_pushed`, `lead_push_blocked`, `batch_hot_leads_pushed`, `push_outcome_unknown`,
 `push_outcome_resolved`, `push_late_outcome`, the six `job_*` events, `assistant_run_finished`,
@@ -1083,27 +1264,51 @@ the models package, a subprocess regression test was added (mutation-checked), a
 
 ### 21.1 Current results
 
-| Suite | Result (feature branch, 2026-10-03, local) |
+| Suite | Result (profile-based ranking, 2026-10-18, local, mock integrations only) |
 |---|---|
-| Backend, isolated PostgreSQL 16.15 | **581 passed** |
-| Backend, SQLite (before the final SDK round-trip test was added) | 575 passed, 5 PostgreSQL-only skips |
-| Assistant tests | 21 passed |
-| Frontend (Vitest, jsdom), 18 files | **117 passed** |
-| Training (CPU) | 23 passed (Phase 12 record) |
-| TypeScript `tsc --noEmit` and `next build` | Clean; `/assistant` compiled |
-| Live release harness | **108 of 108** checks |
-| Migrations | Upgrade, downgrade, re-upgrade and model/schema parity; historical sentinels preserved |
-| OpenAPI | 66 operations; `git diff --check` clean |
+| Backend, disposable PostgreSQL 16 (Docker) | **611 passed** |
+| Backend, SQLite | **606 passed**, 5 PostgreSQL-only skips |
+| New end-to-end ranking tests (`tests/test_profile_ranking.py`) | 17 passed |
+| Frontend (Vitest, jsdom), 18 files | **122 passed** |
+| TypeScript `tsc --noEmit` and `next build` | Clean |
+| Live release harness (PostgreSQL, API + worker + production frontend proxy) | **107 of 107** checks |
+| Migrations on PostgreSQL 16 | `alembic upgrade head` (0001→0015), `downgrade -1`, `upgrade head`, `alembic check` clean each time |
+| Browser walk-through (Playwright, Chromium, local stack) | Passed: import before setup (kept, "not ranked"), setup banner, profile with target customers saved and activated, recalculation, ranked list with reasons, lead breakdown, two selected leads drafted by the worker, approval, target customers changed (10 rankings outdated, recalculated: software companies Hot, clinics Cold, the approved draft "out of date" and Push to Slack disabled), dashboard |
+| Training (CPU) | Not re-run: no training code or prompt builder changed (23 passed at the Phase 12 record) |
+| OpenAPI | 63 operations; `git diff --check` clean |
 
-On `main` (2026-10-03): 560 backend on PostgreSQL (555 + 5 skipped on SQLite), 109 frontend, 96 live
-checks, CI green. The last recorded CI release run passed on 2026-09-27; the feature-branch results
-above are local and do not claim a new CI run.
+The 107 live checks are one fewer than 108 because the retired `legacy_score` job (an enqueue
+check and a worker-completion check) was replaced by one check that it is refused. Backend test
+functions went from 508 to 513 across 48 files: the legacy scorer's two test files were deleted
+with the scorer, the fit-scorer unit tests were rewritten for the new rules, and new tests cover
+profile-based ranking, setup required, outdated rankings and recalculation, `selected_outreach`,
+the `presumed_need_or_intent` check, migration `0015` and the retired job. No CI run is claimed for
+these results.
+
+Earlier records: assistant branch (2026-10-03) 581 backend on PostgreSQL, 117 frontend, 108 live
+checks; `main` before it 560 / 109 / 96 with CI green; the last recorded CI release run passed on
+2026-09-27.
+
+**What the new tests show** (`tests/test_profile_ranking.py`, `tests/test_fit_scoring.py` and
+updates elsewhere): the same companies rank differently for a clinic seller and a small-software
+seller in the inbox, sorting and filters; a small company ranks well for a small-company seller;
+"Hospitality" is a mismatch for a "Hospital" target; missing data is reported as missing (and
+"needs data") rather than as a mismatch; with no target preferences every ranking route answers
+409 and nothing is written; a lead carrying a retired v1 "Hot" score and a demo-rubric "strong"
+row is unranked until recalculated and then ranked only by the new targets in the inbox,
+dashboard, lead filters, single push, `push_hot` job and assistant; changing target customers
+marks rankings outdated, recalculation adds rows and preserves the old ones, and a revision with
+the same targets keeps rankings current; a profile change makes an approved draft's approval stop
+applying, refuses delivery, and a new draft uses the new revision and new ranking together;
+selected drafting uses the active revision, skips blocked leads and refuses leads whose ranking is
+outdated; exact-draft approval, replayed (not duplicated) delivery and blocked-at-any-score still
+hold.
 
 ### 21.2 What each layer covers
 
 | Layer | Location | Coverage |
 |---|---|---|
-| Backend unit and API tests | `backend/tests/` (51 files, 508 test functions, 11,471 lines) | Scoring, ingestion, grounding, generation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, inbox, model status, auth, sign-up and guests, migrations, the PDL pipeline, datasets, evaluation, the assistant |
+| Backend unit and API tests | `backend/tests/` (48 files, 513 test functions) | Ranking, ingestion, grounding, generation, review and revisions, seller profiles, jobs and leases, the delivery ledger, metrics, inbox, model status, auth, sign-up and guests, migrations, the PDL pipeline, datasets, evaluation, the assistant |
 | PostgreSQL-only tests | Same suite with `TEST_DATABASE_URL` | Real concurrency (simultaneous pushes, lease races, parallel lockout), process kills, worker takeover |
 | Frontend | `frontend/src/**/*.test.ts(x)` (18 files) | Today, Leads, Imports, Settings, Assistant, sidebar, lead page (generation, review, interactions), import page, metrics, seller profile and activation, login; API client (CSRF only on writes, cookies always sent, 401 hand-off); auth provider; jobs panel; push history; paginated history; review timer |
 | Training | `training/tests/` | Weighted objective and gradient scaling, split guards, test-split refusal, adapter hash checks, launcher secret handling and per-profile state, serving request limits, bundle allowlists |
@@ -1113,7 +1318,7 @@ Backend test files by area:
 
 | Area | Files |
 |---|---|
-| Scoring and fit | `test_lead_scoring`, `test_scoring_endpoints`, `test_fit_scoring`, `test_fit_scoring_cli`, `test_fit_scoring_endpoints`, `test_fit_consistency`, `test_leads_fit_sort_filter` |
+| Ranking | `test_fit_scoring`, `test_profile_ranking`, `test_fit_scoring_cli`, `test_fit_scoring_endpoints`, `test_fit_consistency`, `test_leads_fit_sort_filter` (`test_lead_scoring` and `test_scoring_endpoints` were removed with the legacy scorer) |
 | Ingestion and import | `test_csv_ingestion`, `test_csv_upload_bounds`, `test_csv_upload_retry`, `test_csv_upload_interrupted_chunk`, `test_batch_endpoints`, `test_partial_import_recovery`, `test_reimport_preserves_workflow_state`, `test_pdl_curation_fixtures`, `test_pdl_identity_idempotency`, `test_provenance` |
 | Generation | `test_ai_generation`, `test_ai_endpoints`, `test_grounded_generation`, `test_lora_client`, `test_quality_checks`, `test_budgeted_generation` |
 | Review and seller | `test_outreach_review`, `test_exact_draft_review`, `test_seller_profiles`, `test_seller_activation`, `test_seller_profile_migration` |
@@ -1147,13 +1352,14 @@ frontend (`next start`), and refuses non-loopback or non-empty PostgreSQL target
 migration preservation of synthetic legacy data and audit columns through `0011 → head → 0011 →
 head` plus `alembic check`; CLI account creation; anonymous refusal; generic login errors; sign-in
 through the proxy with correct cookie flags; CSRF refusal; viewer denial; logout revocation;
-sign-up and verification; guest access; all job types including enqueue dedupe and cancellation;
+sign-up and verification; guest access; ranking jobs against the activated demonstration
+profile (two Hot leads) and refusal of the retired `legacy_score` job; the other job types including enqueue dedupe and cancellation;
 exact-draft approval and rejection; mock delivery, replay, unknown-outcome resolution and explicit
 redelivery; bounded mock metrics; authenticated worker actors; and the assistant flow. All child
 processes are stopped on success or failure.
 
 Growth: 27 checks (initial Phase 12) → 81 (SQLite) / 84 (PostgreSQL) → 96 (sign-up and guests) →
-108 (assistant).
+108 (assistant) → 107 (profile-based ranking: the retired job's two checks replaced by one refusal check).
 
 ### 21.5 CI (`.github/workflows/`)
 
@@ -1180,7 +1386,8 @@ Growth: 27 checks (initial Phase 12) → 81 (SQLite) / 84 (PostgreSQL) → 96 (s
 | Phase 12 | 521 (PostgreSQL) | 107 | 84 |
 | Sign-up and guest access | 545 (PostgreSQL) | 112 | 96 |
 | Redesign (`main`) | 560 (PostgreSQL) | 109 | 96 |
-| Assistant (this branch) | 581 (PostgreSQL) | 117 | 108 |
+| Assistant | 581 (PostgreSQL) | 117 | 108 |
+| Profile-based ranking (2026-10-18, local) | 611 (PostgreSQL) | 122 | 107 |
 
 The frontend count dipped in the redesign because the retired annotation page's tests were removed.
 
@@ -1202,6 +1409,8 @@ The frontend count dipped in the redesign because the retired annotation page's 
 | Phase 10 | The job fence mutation survived the SQLite-only suite | A PostgreSQL takeover test added |
 | Phase 12 | 16 worker events had no actor | Hook installed with the models |
 | Phase 12 | A CPU-bound frontend test exceeded 5 s under parallel load | A 20 s limit for that one test, assertions unchanged |
+| Ranking (2026-10-18) | The assistant's industry filter used a substring check ("health" matched "Healthcare"; "hospital" would match "Hospitality") | Whole-word matching shared with ranking; the SDK round-trip test now asks for "healthcare" |
+| Ranking (2026-10-18) | An identical re-ranking from a revision with the same targets invalidated approvals, because the draft's ranking block carried the revision id | The block carries the `targeting_hash` instead (the seller block already names the revision); caught by the inbox stage test |
 
 ### 21.8 Running the tests
 
@@ -1222,7 +1431,7 @@ Never point `TEST_DATABASE_URL` at a database whose contents matter: fixtures dr
 
 ## 22. API
 
-66 operations (`/docs` once signed in). Every route except the public ones needs a session; state
+63 operations (`/docs` once signed in). Every route except the public ones needs a session; state
 changes also need `X-CSRF-Token` and the `operator` role (or `guest` on a guest-safe server).
 
 | Group | Endpoints |
@@ -1230,15 +1439,15 @@ changes also need `X-CSRF-Token` and the `operator` role (or `guest` on a guest-
 | Health (public) | `GET /health`, `GET /api/health` |
 | Auth | `GET /api/auth/options`; `POST /api/auth/login`, `/register`, `/verify-email`, `/resend-code`, `/guest` (public); `GET /api/auth/session`; `POST /api/auth/logout` |
 | Imports | `POST /api/batches/upload`; `GET /api/batches`, `/api/batches/{id}` |
-| Leads | `GET /api/leads` (paginated, fit sort and band filters), `/api/leads/{id}` |
-| Scoring and fit | `POST /api/leads/{id}/score`, `/api/batches/{id}/score`, `/api/leads/{id}/fit-score`, `/api/batches/{id}/fit-score` |
+| Leads | `GET /api/leads` (paginated, sort by current ranking score and filter by band or minimum score), `/api/leads/{id}` |
+| Ranking | `GET /api/scoring/profile` (state, targets, weights, thresholds, counts); `POST /api/scoring/recalculate` (whole workspace); `POST`/`GET /api/leads/{id}/fit-score` (GET returns an outdated ranking with `is_current: false`); `POST /api/batches/{id}/fit-score`; `GET /api/batches/{id}/fit-summary`, `/fit-scores`. All ranking writes answer 409 "setup required" without target customers. Removed 2026-10-18: `POST`/`GET /api/leads/{id}/score`, `POST /api/batches/{id}/score`, `GET /api/batches/{id}/scores`, `GET /api/scoring/fit-profile` |
 | Readiness | `GET /api/leads/{id}/readiness`, `/api/batches/{id}/readiness` |
 | Generation | `POST /api/leads/{id}/generate-summary`, `/generate-outreach`; history and `latest-ai-output` reads; `POST /api/leads/{id}/ai-outputs/{output_id}/revisions` |
 | Review | `POST /api/leads/{id}/approve-outreach`, `/reject-outreach`; `GET /api/leads/{id}/review-state` |
 | Delivery | `POST /api/leads/{id}/push` (`force`, `redeliver`), `/api/batches/{id}/push-hot`, `/api/pushes/{id}/resolve`; push history |
-| Jobs | `POST /api/batches/{id}/jobs`; `GET /api/jobs`, `/api/jobs/{id}`, `/api/jobs/{id}/items`; `POST /api/jobs/{id}/cancel` |
+| Jobs | `POST /api/batches/{id}/jobs` (including `selected_outreach` with `{"lead_ids": [...]}`, 1–25); `GET /api/jobs`, `/api/jobs/{id}`, `/api/jobs/{id}/items`; `POST /api/jobs/{id}/cancel` |
 | Seller profiles | `GET`, `POST /api/seller-profile`, `…/activate`, `…/deactivate` |
-| Workspace | `GET /api/inbox`, `GET /api/ai/status` |
+| Workspace | `GET /api/inbox` (with ranking fields and state), `GET /api/ai/status` |
 | Assistant | `GET /api/assistant/status`, `POST /api/assistant/plan` (never queues work) |
 | Metrics | `GET /api/metrics/dashboard` |
 | Demo | `POST /api/demo/run` (seeds and runs the labeled demo; used by the release checks) |
@@ -1327,6 +1536,12 @@ server is not guest-safe).
 Note: the README and `docs/deployment.md` were written before this fix and still say "not
 deployed"; this section is the later record. The assistant branch is not deployed.
 
+**Profile-based ranking is not deployed.** Production still runs the code with the retired scorer
+and has not applied migration `0015`. Deploying it would run `0015` (additive) in pre-deploy;
+after release, production's existing scores read as outdated history, every lead needs its seller
+profile to state target customers before it can be ranked, and drafts approved under the old
+context show as out of date until regenerated and re-reviewed.
+
 **Hosting estimates** (checked 2026-10-02; [`docs/deployment.md`](docs/deployment.md)):
 
 | Option | Estimated cost |
@@ -1371,7 +1586,8 @@ output tokens (checked 2026-09-24). The RunPod balance went from $10.00 to $8.59
 | 2026-09-26 | Phase 9 evaluation; Phase 10 model integration and jobs; Phase 11 delivery ledger and metrics |
 | 2026-09-27 | Phase 12 access control, dependency audit, release verification |
 | 2026-10-02 | Sign-up with email verification and guest access |
-| 2026-10-03 | Rep-centered redesign; Railway production fixed; outreach assistant (feature branch) |
+| 2026-10-03 | Rep-centered redesign; Railway production fixed; outreach assistant (merged to `main`, not deployed) |
+| 2026-10-18 | Profile-based lead ranking: target customers in the seller profile, one ranking for every workflow, legacy and demo rubrics retired, migration `0015`, selected-lead drafting (implemented and verified locally; not deployed) |
 
 Commits per day: 2026-06-04: 2 · 09-22: 6 · 09-23: 10 · 09-24: 11 · 09-25: 20 · 09-26: 12 ·
 09-27: 2 · 10-02: 7 · 10-03: 5.
@@ -1381,7 +1597,8 @@ trained → evaluated → integrated`); no component skipped a rung in its statu
 
 ## 28. Codebase statistics
 
-Counted on `codex/lead-agent` at `4e1af36`:
+Counted on `codex/lead-agent` at `4e1af36` (not recounted for the 2026-10-18 change, except: 15
+migrations, 48 backend test files with 513 test functions, 63 API operations):
 
 | Area | Files | Lines |
 |---|---|---|
@@ -1404,8 +1621,8 @@ Commits: 75 on this branch, 74 on `main`.
 | No migration framework (`create_all` only) | Phase 2: Alembic and a baseline verifier |
 | PDL columns do not match the CSV columns | Phase 3: a dedicated importer and mapping |
 | No upload cap, no pagination | Phase 3: 20 MiB / 50,000 rows, streamed; paginated lists |
-| Company-only records cap near 41 of 100 and are always Cold | Phase 4: the separate company-fit score |
-| Substring false positives in industry and keywords | Phase 3 and 4: exact matching in the fit profile |
+| Company-only records cap near 41 of 100 and are always Cold | Phase 4: the separate company-fit score; 2026-10-18: one ranking that only counts configured criteria and reports missing data separately |
+| Substring false positives in industry and keywords | Phase 3 and 4: exact matching in the fit profile; since 2026-10-18 whole-word matching in ranking and the assistant filter |
 | Disqualified leads could score Hot and be pushed | Phase 2 (routing gate), Phase 4 (eligibility) |
 | No seller profile; the mock pitched GTMFlow itself | Phase 5: versioned seller profiles |
 | Stale tab approves the wrong draft | Phase 2 and 6: `ai_output_id` and content hash |
@@ -1415,13 +1632,17 @@ Commits: 75 on this branch, 74 on `main`.
 | No protection against concurrent pushes | Phase 11: the delivery ledger |
 | Mock and real merged on the dashboard | Phase 11: mode breakdowns |
 | No auth, permissive CORS, synchronous long operations | Phase 10 (jobs), Phase 12 (auth, CORS) |
-| No frontend tests | Phases 4–12: Vitest suite, now 117 tests |
+| No frontend tests | Phases 4–12: Vitest suite, now 122 tests |
 
 ## 30. Key design decisions
 
 | Decision | Why |
 |---|---|
 | Deterministic scoring, no LLM | A "this is Hot" claim must be defensible and reproducible |
+| Rank against the seller's own target customers, with no fallback rubric | A fixed rubric ranks for someone else's market; "setup required" is more honest than silently reusing demo targets |
+| Unknown earns nothing, under 50% coverage is "needs data" | A high score must rest on evidence, and missing data must not look like a mismatch |
+| Scores scoped by a hash of the target preferences, history kept | Changing who you sell to outdates rankings without destroying them, while a wording change to the offer does not force a re-rank |
+| Ranking in the draft context is labeled not evidence of need, plus a runtime flag | A strong match is an attribute match; it must never become "you need this" |
 | Grounding enforced by the server | A prompt instruction is a request; a validator is a rule |
 | Approval bound to content, inputs and seller revision | So nothing can be sent that a person did not see, as it was |
 | Claim before send | The only way to stop duplicates when the receiver has no idempotency key; uncertainty becomes a person's decision |
@@ -1451,10 +1672,22 @@ The full record with reasoning is in [`decisions.md`](docs/engineering-log/decis
 - **Sign-up needs an SMTP provider** before visitors can receive codes.
 - **No MFA or password reset;** old guest accounts, sessions, job items and throttle rows are not
   cleaned up automatically.
-- **The company-fit profile is a demonstration,** pain matching is plain substring, and time saved
-  is an estimate. Metrics have no time-window filter.
+- **Ranking is lexical, not semantic.** Matching is whole-word with a small synonym table: it does
+  not know that "Medical Practice" is healthcare unless the seller lists both, does not resolve a
+  city or state to its country, and cannot read verbal sizes ("small"). Weights and thresholds are
+  fixed in code (documented, not editable per profile) and were chosen by reasoning, not
+  calibrated against outcomes; a ranking is not a purchase probability. Recalculation is manual
+  (a banner prompts it) and the workspace endpoint runs synchronously, which is fine at the
+  5,000-lead inbox bound but is not tested at larger sizes. Selected drafting allows one active
+  selection job per import (up to 25 leads). The fine-tuned model was trained before the
+  ranking block's wording changed; its behavior with the new block is not evaluated.
+- **Profile-based ranking is not deployed**, and README, `docs/scoring-model.md`, `docs/metrics.md`
+  and the screenshots still describe the retired scoring until they are updated.
+- Time saved is an estimate. Metrics have no time-window filter.
 - **Datasets:** held-out sets are 26 and 29 short of 100; 180 uncertain records unresolved;
-  training is 47 / 53 healthcare / real estate; two segments and one seller profile only.
+  training is 47 / 53 healthcare / real estate; two segments and one seller profile only. The 5,000
+  imported PDL companies were selected with the retired demo criteria; their stored rankings are
+  history and they need a recalculation against a real profile.
 - **Training environment** has open setuptools findings and a PyTorch audit gap.
 - **Not load-tested** beyond 300 job items and 2 workers.
 - **Housekeeping:** the original development PostgreSQL database (with the 448 train-v2 outputs)
@@ -1467,10 +1700,12 @@ The full record with reasoning is in [`decisions.md`](docs/engineering-log/decis
 |---|---|
 | Lead | One company (and optional contact) from an import |
 | Import (batch) | One uploaded CSV or sample load |
-| Priority score | The 100-point Hot / Warm / Cold score (legacy v1) |
-| Company fit | The versioned, evidence-based fit score (v2) |
-| Evidence coverage | The share of a fit profile's active criteria the record could answer |
-| Seller profile | What you sell; the only source of claims a draft may make |
+| Ranking | A lead's 0–100 match with the active seller profile's target customers, shown as Hot / Warm / Cold or Needs data |
+| Target preferences | The seller profile's structured "who we sell to": industries, locations, size ranges, contact roles, keywords |
+| Outdated ranking | A ranking made against different target preferences than the active profile's; kept as history, never current |
+| Priority score (retired) | The fixed-term 100-point Hot / Warm / Cold score (legacy v1), removed 2026-10-18 |
+| Evidence coverage | The share of the configured criteria's weight the record could answer |
+| Seller profile | What you sell (the only source of claims a draft may make) and who you sell to (what leads are ranked against) |
 | Grounded draft | A draft whose every claim cites an id in its context |
 | Runtime checks | Pattern checks that flag known problem phrasings for the reviewer |
 | Exact-draft approval | An approval tied to the content hash of the draft shown |
@@ -1478,6 +1713,7 @@ The full record with reasoning is in [`decisions.md`](docs/engineering-log/decis
 | Replay | A repeat push that returns the stored outcome without sending |
 | Unknown outcome | A delivery that may or may not have arrived; resolved by a person |
 | Fenced lease | A job lease renewed in the same transaction as each item's work |
+| Needs data | A ranking with under 50% evidence coverage: too little of the record to rank confidently |
 | Guest-safe | No Slack webhook, no paid per-request AI, planning mocked |
 | Company group | Companies linked by identity, domain, LinkedIn or name; never split across train and test |
 | LoRA | Low-Rank Adaptation: small trained weights added to a frozen base model |

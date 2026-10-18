@@ -23,8 +23,6 @@ from app.schemas import (
     LeadBatchRead,
     LeadCreate,
     LeadRead,
-    LeadScoreCreate,
-    LeadScoreRead,
     WorkflowEventCreate,
     WorkflowEventRead,
 )
@@ -79,16 +77,6 @@ def test_pydantic_schemas_instantiate() -> None:
     assert lead.company_name == "Cascade Modular Homes"
 
     lead_id = uuid4()
-    score = LeadScoreCreate(
-        lead_id=lead_id,
-        total_score=82,
-        priority="hot",
-        score_breakdown={"industry": 20, "title": 30, "size": 32},
-        reasoning="VP at modular homes manufacturer in target ICP",
-    )
-    assert score.total_score == 82
-    assert score.priority == "hot"
-
     ai = AIOutputCreate(
         lead_id=lead_id,
         output_type="summary",
@@ -150,18 +138,6 @@ def test_pydantic_read_schemas_support_from_attributes() -> None:
         updated_at=now,
     )
     assert LeadRead.model_validate(lead_row).company_name == "Cascade Modular Homes"
-
-    score_row = SimpleNamespace(
-        id=uuid4(),
-        lead_id=lead_id,
-        total_score=82,
-        priority="hot",
-        score_breakdown={"title": 30},
-        reasoning="VP title",
-        created_at=now,
-        updated_at=now,
-    )
-    assert LeadScoreRead.model_validate(score_row).priority == "hot"
 
     ai_row = SimpleNamespace(
         id=uuid4(),

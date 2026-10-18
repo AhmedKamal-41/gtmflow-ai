@@ -30,8 +30,8 @@ def build_slack_payload(
     *,
     lead_id: UUID,
     company_name: str,
-    score: int,
-    priority: str,
+    score: int | None,
+    priority: str | None,
     industry: str | None = None,
     contact_name: str | None = None,
     contact_title: str | None = None,
@@ -45,8 +45,12 @@ def build_slack_payload(
     """Return the JSON dict to POST to Slack. Missing optional fields are skipped."""
     url = lead_url or build_lead_url(lead_id)
 
-    lines: list[str] = [f"🔥 Hot GTM Lead: {company_name}"]
-    lines.append(f"Score: {score}/100 ({priority})")
+    heading = "🔥 Hot GTM Lead" if priority == "Hot" else "GTM Lead"
+    lines: list[str] = [f"{heading}: {company_name}"]
+    if score is not None:
+        lines.append(f"Target-customer match: {score}/100 ({priority or 'needs data'})")
+    else:
+        lines.append("Target-customer match: not ranked against the current seller profile")
 
     if industry:
         lines.append(f"Industry: {industry}")
@@ -63,7 +67,7 @@ def build_slack_payload(
         lines.append(line)
 
     if fit_reasoning:
-        lines.append(f"Why now: {fit_reasoning}")
+        lines.append(f"Why it fits: {fit_reasoning}")
     if detected_pain_points:
         lines.append("Pain points: " + ", ".join(detected_pain_points))
     if outreach_subject:

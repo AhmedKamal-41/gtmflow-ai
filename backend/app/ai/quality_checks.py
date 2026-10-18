@@ -26,13 +26,19 @@ Where each check comes from:
 * `need_or_interest_hypothesis` (summaries): the rubric rule that hypotheses
   inventing interest or need are not acceptable, even when "unconfirmed";
   the base model's most frequent fault in Phase 9.
+* `presumed_need_or_intent` (outreach, runtime-checks-v2): a statement that
+  the prospect needs the product, is looking for it, or plans to buy. Leads
+  are ranked by how well their recorded attributes match the seller's
+  target customers; a strong match must not turn into such a claim. A
+  question ("Do you need ...?") or a sentence that states the unknown
+  ("whether", "if") is not flagged.
 """
 from __future__ import annotations
 
 import re
 from typing import Any
 
-CHECKS_VERSION = "runtime-checks-v1"
+CHECKS_VERSION = "runtime-checks-v2"
 
 _PRESUMED_OUTREACH = re.compile(
     r"your (current |existing )?(outreach|lead[- ]generation|sales) (strateg\w*|efforts?|process\w*|approach\w*|activit\w*|needs?)"
@@ -64,6 +70,18 @@ _NEED_HYPOTHESIS = re.compile(
     r"|\bneeds?\b|challenges?|pain points?|looking for|could be expanding",
     re.IGNORECASE,
 )
+
+_PRESUMED_NEED = re.compile(
+    r"\byou(?:'re| are)? (?:clearly |really |definitely |likely |probably )?"
+    r"(?:need|needs|require|are looking for|'re looking for|are in the market for|'re in the market for"
+    r"|are planning to (?:buy|purchase|invest)|plan to (?:buy|purchase|invest)|want to (?:buy|purchase))\b"
+    r"|\byour (?:need|needs|interest|plans?) (?:for|in|to)\b"
+    r"|\b(?:since|because|as|given that) you(?:'re| are)? (?:need|looking|interested|struggl\w*|hav\w* trouble)"
+    r"|\b(?:ready|looking) to (?:buy|purchase)\b|\bin the market for\b|\bperfect fit for your needs\b",
+    re.IGNORECASE,
+)
+_SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
+_OPEN_QUESTION = re.compile(r"\b(whether|if|might|may|could)\b", re.IGNORECASE)
 
 _NOT_AN_OFFER = re.compile(r"not an? (commercial |real )?offer")
 
@@ -103,6 +121,12 @@ def check_outreach(output: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str
             m = pattern.search(text)
             if m:
                 flags.append(_flag(code, field, m.group(0), source))
+        if field != "call_note":
+            for sentence in _SENTENCE.findall(text):
+                m = _PRESUMED_NEED.search(sentence)
+                if m and not sentence.strip().endswith("?") and not _OPEN_QUESTION.search(sentence):
+                    flags.append(_flag("presumed_need_or_intent", field, m.group(0), "target-customer ranking rule"))
+                    break
         m = _INVENTED.search(_without_recorded_values(text, ctx))
         if m:
             flags.append(_flag("invented_phrasing", field, m.group(0), "ai-review-rubric-v1 (recorded values excluded)"))

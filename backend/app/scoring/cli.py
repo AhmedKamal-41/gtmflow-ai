@@ -1,5 +1,8 @@
-"""Phase 4 Part F: score the real, already-imported cohort with the v2
-deterministic company-fit scorer (app/scoring/fit.py), in bounded batches.
+"""Rank already-imported leads against the ACTIVE seller profile's target
+customers (app/scoring/fit.py), in bounded batches. (Phase 4 used this to
+score the real cohort against the since-retired demo rubric; those rows
+are kept as history.) Exits with status 2 and a message when no active
+profile states target customers.
 
 Reuses the EXACT same compute+persist path as the fit-score API
 (app.services.fit_scoring.score_leads) -- a lead scored via this CLI and one
@@ -37,6 +40,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.scoring.fit import RankingSetupRequired
 from app.services.fit_scoring import score_leads
 from app.core.database import get_sessionmaker
 from app.models import Lead
@@ -214,13 +218,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    summary = score_cohort(
-        get_sessionmaker(),
-        dry_run=args.dry_run,
-        chunk_size=args.chunk_size,
-        limit=args.limit,
-        rescore_unchanged=args.rescore_unchanged,
-    )
+    try:
+        summary = score_cohort(
+            get_sessionmaker(),
+            dry_run=args.dry_run,
+            chunk_size=args.chunk_size,
+            limit=args.limit,
+            rescore_unchanged=args.rescore_unchanged,
+        )
+    except RankingSetupRequired as error:
+        print(json.dumps({"error": "ranking_setup_required", "detail": str(error)}))
+        return 2
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["total_failed"] == 0 else 1
 

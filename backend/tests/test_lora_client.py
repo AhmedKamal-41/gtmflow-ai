@@ -145,7 +145,7 @@ def test_generation_sends_the_evaluated_request_and_records_adapter_provenance(c
     assert row.adapter_revision.endswith(lora_client.ADAPTER_SHA256)
     event = db_session.scalar(select(WorkflowEvent).where(WorkflowEvent.event_type == "outreach_generated"))
     assert event.event_data["adapter_revision"] == row.adapter_revision
-    assert event.event_data["quality_checks_version"] == "runtime-checks-v1"
+    assert event.event_data["quality_checks_version"] == "runtime-checks-v2"
     assert event.event_data["usage"]["completion_tokens"] == 290
     assert SECRET not in json.dumps(event.event_data) and SECRET not in response.text
 

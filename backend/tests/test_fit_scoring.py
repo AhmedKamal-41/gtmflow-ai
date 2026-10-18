@@ -1,6 +1,9 @@
-"""Phase 4 Parts B/C/D: unit tests for the v2 deterministic company-fit
-scorer (app/scoring/fit.py), independent of the API/DB layer.
-"""
+"""Unit tests for lead ranking against a seller profile's target customers
+(app/scoring/fit.py), independent of the API/DB layer: per-criterion
+results, the weighted 0-100 score, coverage and bands, whole-word matching,
+missing data versus mismatch, determinism and versioning. Readiness and
+eligibility (contact completeness and permission, kept apart from fit)
+are at the end."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -15,6 +18,8 @@ def _lead(**overrides):
         id="lead-1",
         industry=None,
         company_size=None,
+        location=None,
+        contact_title=None,
         cleaned_data=None,
         status="new",
         batch=None,
@@ -23,132 +28,215 @@ def _lead(**overrides):
     return SimpleNamespace(**base)
 
 
-# ------------------------------------------------------------- fit scoring
-
-def test_full_match_scores_100_with_full_coverage():
-    lead = _lead(
-        industry="Hospital & Health Care",
-        cleaned_data={"country": "United States"},
+def _profile(**preferences):
+    return fit.ranking_profile_from_content(
+        {"profile_kind": "seller", "target_preferences": preferences},
+        source=fit.SOURCE_ACTIVE, profile_id="profile-1", seller_profile_id=None, version="1",
     )
-    result = fit.compute_fit(lead)
-    assert result.fit_score == 100
-    assert result.evidence_coverage_pct == 100.0
-    assert result.band == fit.BAND_STRONG
 
 
-def test_real_estate_industry_alias_matches():
-    lead = _lead(industry="Real Estate", cleaned_data={"country": "United States"})
-    result = fit.compute_fit(lead)
-    assert result.fit_score == 100
+ALL = dict(
+    industries=["Healthcare"],
+    company_sizes=[{"min_employees": 11, "max_employees": 50}],
+    locations=["United States"],
+    contact_roles=["Practice Manager"],
+    keywords=["scheduling"],
+)
+
+
+def _criterion(result, name):
+    return next(c for c in result.criteria if c.name == name)
+
+
+# ------------------------------------------------------------- scoring
+
+def test_full_match_scores_100_hot_with_full_coverage():
+    lead = _lead(industry="Healthcare", company_size="11-50", location="Austin, Texas, USA",
+                 contact_title="Practice Manager", cleaned_data={"notes": "Patient scheduling backlog"})
+    result = fit.compute_fit(lead, _profile(**ALL))
+    assert result.fit_score == 100 and result.evidence_coverage_pct == 100.0
+    assert result.band == fit.BAND_STRONG and result.priority == "Hot"
+    assert all(c.result == fit.RESULT_MATCH for c in result.criteria)
+
+
+def test_default_weights_sum_to_100_and_thresholds_are_documented():
+    assert sum(fit.WEIGHTS.values()) == 100
+    assert fit.WEIGHTS == {"industry": 35, "company_size": 25, "location": 20, "contact_role": 15, "keywords": 5}
+    assert (fit.HOT_MIN, fit.WARM_MIN, fit.COVERAGE_MIN_PCT) == (75, 45, 50.0)
+
+
+def test_only_configured_criteria_count_and_weights_rescale():
+    profile = _profile(industries=["Healthcare"], company_sizes=[{"min_employees": 11, "max_employees": 50}])
+    lead = _lead(industry="Healthcare", company_size="5000", location="Canada", contact_title="CEO")
+    result = fit.compute_fit(lead, profile)
+    # industry 35 earned of 35 + 25 configured -> 58.3 -> 58
+    assert result.fit_score == 58
+    assert _criterion(result, "location").result == fit.RESULT_NOT_CONFIGURED
+    assert _criterion(result, "location").weight == 0
+    assert _criterion(result, "contact_role").result == fit.RESULT_NOT_CONFIGURED
+
+
+def test_small_company_scores_well_when_the_seller_targets_small_companies():
+    small = _lead(company_size="8")
+    large = _lead(company_size="10001+")
+    profile = _profile(company_sizes=[{"min_employees": 1, "max_employees": 10}])
+    assert fit.compute_fit(small, profile).fit_score == 100
+    assert fit.compute_fit(large, profile).fit_score == 0
+    enterprise = _profile(company_sizes=[{"min_employees": 1001, "max_employees": None}])
+    assert fit.compute_fit(small, enterprise).fit_score == 0
+    assert fit.compute_fit(large, enterprise).fit_score == 100
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("51-200", (51, 200)), ("1,001 - 5,000", (1001, 5000)), ("10001+", (10001, None)),
+    ("240", (240, 240)), ("1000+ employees", (1000, None)), ("small", None), ("", None), (None, None),
+])
+def test_company_size_parsing(raw, expected):
+    assert fit.parse_company_size(raw) == expected
+
+
+def test_company_size_partial_overlap_gets_half_credit_and_adjacent_targets_merge():
+    profile = _profile(company_sizes=[{"min_employees": 1, "max_employees": 100}])
+    result = fit.compute_fit(_lead(company_size="51-200"), profile)
+    assert _criterion(result, "company_size").result == fit.RESULT_PARTIAL
+    assert result.fit_score == 50
+    merged = _profile(company_sizes=[{"min_employees": 11, "max_employees": 50},
+                                     {"min_employees": 51, "max_employees": 200}])
+    assert _criterion(fit.compute_fit(_lead(company_size="11-200"), merged), "company_size").result == fit.RESULT_MATCH
 
 
 def test_hospitality_does_not_match_hospital():
-    """Explicit Part C requirement: 'hospitality must not match hospital'."""
-    lead = _lead(industry="Hospitality", cleaned_data={"country": "United States"})
-    result = fit.compute_fit(lead)
-    industry_criterion = next(c for c in result.criteria if c.name == "industry")
-    assert industry_criterion.result == fit.RESULT_MISMATCH
-    assert industry_criterion.points == 0
-    assert result.fit_score == 40  # country still matched
+    profile = _profile(industries=["Hospital"])
+    result = fit.compute_fit(_lead(industry="Hospitality"), profile)
+    assert _criterion(result, "industry").result == fit.RESULT_MISMATCH
+    assert _criterion(fit.compute_fit(_lead(industry="Hospitals & Clinics"), profile), "industry").result == fit.RESULT_MATCH
 
 
-def test_unknown_industry_scores_zero_and_still_counts_as_evidence_gap():
-    lead = _lead(industry=None, cleaned_data={"country": "United States"})
-    result = fit.compute_fit(lead)
-    industry_criterion = next(c for c in result.criteria if c.name == "industry")
-    assert industry_criterion.result == fit.RESULT_UNKNOWN
-    assert industry_criterion.points == 0
-    assert result.fit_score == 40
-    # 40/100 active weight interpretable (country only) -> 40% coverage.
-    assert result.evidence_coverage_pct == 40.0
-    assert result.band == fit.BAND_INSUFFICIENT_EVIDENCE
+@pytest.mark.parametrize("target,value,expected", [
+    ("Health Care", "Hospital & Health Care", True),
+    ("Healthcare", "Hospital & Health Care", True),
+    ("Clinic", "Clinics", True),
+    ("Real Estate", "Commercial Real Estate", True),
+    ("Estate", "Real Estate", True),
+    ("Software", "Computer Software", True),
+    ("Soft", "Software", False),
+    ("Care", "Healthcare", False),
+    ("VP Operations", "Vice President of Operations", True),
+    ("United States", "USA", True),
+    ("United States", "U.S.", True),
+    ("UK", "London, United Kingdom", True),
+    ("Georgia", "Atlanta, Georgia, US", True),
+    ("Indiana", "Indianapolis", False),
+])
+def test_whole_word_matching(target, value, expected):
+    assert fit.phrase_in_text(target, value) is expected
 
 
-def test_known_mismatch_counts_as_evidence_not_missing():
-    """A mismatch is still interpretable evidence -- coverage must not be
-    penalized just because the criterion didn't match."""
-    lead = _lead(industry="Retail", cleaned_data={"country": "United States"})
-    result = fit.compute_fit(lead)
-    assert result.evidence_coverage_pct == 100.0  # both criteria interpretable
-    assert result.fit_score == 40  # only country matched
+def test_missing_values_are_unknown_not_mismatch():
+    profile = _profile(**ALL)
+    result = fit.compute_fit(_lead(industry="Healthcare"), profile)
+    by = {c.name: c.result for c in result.criteria}
+    assert by == {"industry": "match", "company_size": "unknown", "location": "unknown",
+                  "contact_role": "unknown", "keywords": "unknown"}
+    assert "missing information, not a mismatch" in _criterion(result, "company_size").explanation
+    summary = fit.summarize_criteria(result.criteria_as_dicts())
+    assert summary["missing"] == ["Company size", "Location", "Contact role", "Keywords"]
+    assert summary["mismatched"] == []
 
 
-def test_country_never_parsed_from_free_text_location():
-    """Only the structured cleaned_data.country field counts -- a
-    plausible-looking free-text `location` must NOT be used."""
-    lead = _lead(
-        industry="Real Estate",
-        cleaned_data=None,
-        location="Austin, Texas, United States",
-    )
-    result = fit.compute_fit(lead)
-    country_criterion = next(c for c in result.criteria if c.name == "country")
-    assert country_criterion.result == fit.RESULT_UNKNOWN
-    assert country_criterion.raw_input is None
+def test_little_evidence_is_never_presented_as_a_confident_match():
+    # Only the industry is known and it matches: 35 of 100 earned, coverage
+    # 35% -> "needs data", not Hot, even though nothing contradicts a match.
+    result = fit.compute_fit(_lead(industry="Healthcare"), _profile(**ALL))
+    assert result.fit_score == 35 and result.evidence_coverage_pct == 35.0
+    assert result.band == fit.BAND_INSUFFICIENT_EVIDENCE and result.priority is None
+    assert fit.explain(result.criteria_as_dicts(), result.band).startswith("Not enough information")
 
 
-def test_non_us_country_is_a_mismatch_not_unknown():
-    lead = _lead(industry="Real Estate", cleaned_data={"country": "Canada"})
-    result = fit.compute_fit(lead)
-    country_criterion = next(c for c in result.criteria if c.name == "country")
-    assert country_criterion.result == fit.RESULT_MISMATCH
-    assert result.fit_score == 60
-
-
-def test_company_size_criterion_is_always_present_but_inactive():
-    lead = _lead(industry="Real Estate", cleaned_data={"country": "United States"}, company_size="1000+")
-    result = fit.compute_fit(lead)
-    size_criterion = next(c for c in result.criteria if c.name == "company_size")
-    assert size_criterion.active is False
-    assert size_criterion.weight == 0
-    assert size_criterion.points == 0
-    assert size_criterion.result == fit.RESULT_NOT_CONFIGURED
-    # An inactive criterion must never affect coverage's denominator.
+def test_known_mismatch_counts_as_evidence():
+    result = fit.compute_fit(_lead(industry="Retail", company_size="30", location="USA",
+                                   contact_title="Buyer", cleaned_data={"notes": "store staffing"}),
+                             _profile(**ALL))
+    assert _criterion(result, "industry").result == fit.RESULT_MISMATCH
     assert result.evidence_coverage_pct == 100.0
+    assert result.fit_score == 45 and result.priority == "Warm"  # size 25 + location 20
 
 
-def test_no_evidence_at_all_yields_zero_score_and_insufficient_evidence():
-    lead = _lead()
-    result = fit.compute_fit(lead)
-    assert result.fit_score == 0
-    assert result.evidence_coverage_pct == 0.0
+def test_unparseable_size_is_unknown():
+    result = fit.compute_fit(_lead(company_size="medium"), _profile(company_sizes=[{"min_employees": 1, "max_employees": 50}]))
+    assert _criterion(result, "company_size").result == fit.RESULT_UNKNOWN
     assert result.band == fit.BAND_INSUFFICIENT_EVIDENCE
+
+
+def test_location_reads_structured_fields_and_says_it_does_not_resolve_places():
+    profile = _profile(locations=["United States"])
+    pdl = _lead(cleaned_data={"locality": "Austin", "region": "Texas", "country": "united states"})
+    assert fit.compute_fit(pdl, profile).fit_score == 100
+    city_only = fit.compute_fit(_lead(location="Austin, TX"), profile)
+    assert _criterion(city_only, "location").result == fit.RESULT_MISMATCH
+    assert "not resolved" in _criterion(city_only, "location").explanation
+
+
+def test_keywords_search_free_text_but_not_import_labels():
+    profile = _profile(keywords=["healthcare"])
+    labels_only = _lead(cleaned_data={"candidate_segment": "healthcare", "country": "united states"})
+    assert _criterion(fit.compute_fit(labels_only, profile), "keywords").result == fit.RESULT_UNKNOWN
+    notes = _lead(cleaned_data={"notes": "Regional healthcare network"})
+    assert _criterion(fit.compute_fit(notes, profile), "keywords").result == fit.RESULT_MATCH
+
+
+def test_no_target_preferences_means_setup_required_not_a_fallback():
+    with pytest.raises(fit.RankingSetupRequired):
+        fit.compute_fit(_lead(industry="Hospital & Health Care"), _profile())
+    assert _profile().is_configured is False
+
+
+def test_old_demo_criteria_play_no_part():
+    # The retired rubric gave 100 to these exact values. A profile that
+    # targets other customers must not.
+    old_demo_lead = _lead(industry="Hospital & Health Care", cleaned_data={"country": "united states"})
+    profile = _profile(industries=["Software"], locations=["Germany"])
+    result = fit.compute_fit(old_demo_lead, profile)
+    assert result.fit_score == 0 and result.priority == "Cold"
+    assert not hasattr(fit, "INDUSTRY_MATCH_VALUES") and not hasattr(fit, "PROFILE_ID")
 
 
 def test_deterministic_repeat_produces_identical_result():
-    lead = _lead(industry="Medical Practice", cleaned_data={"country": "United States"})
-    first = fit.compute_fit(lead)
-    second = fit.compute_fit(lead)
-    assert first.fit_score == second.fit_score
-    assert first.evidence_coverage_pct == second.evidence_coverage_pct
-    assert first.band == second.band
-    assert first.input_fingerprint == second.input_fingerprint
-    assert first.criteria_as_dicts() == second.criteria_as_dicts()
+    lead = _lead(industry="Healthcare", company_size="20", location="USA")
+    a, b = fit.compute_fit(lead, _profile(**ALL)), fit.compute_fit(lead, _profile(**ALL))
+    assert (a.fit_score, a.band, a.input_fingerprint, a.criteria_as_dicts()) == \
+        (b.fit_score, b.band, b.input_fingerprint, b.criteria_as_dicts())
 
 
-def test_fingerprint_changes_when_relevant_input_changes():
-    a = fit.compute_fit(_lead(industry="Real Estate", cleaned_data={"country": "United States"}))
-    b = fit.compute_fit(_lead(industry="Retail", cleaned_data={"country": "United States"}))
-    assert a.input_fingerprint != b.input_fingerprint
+def test_fingerprint_tracks_inputs_and_targeting_but_not_unrelated_fields():
+    profile = _profile(industries=["Healthcare"])
+    base = fit.compute_fit(_lead(industry="Healthcare"), profile).input_fingerprint
+    assert fit.compute_fit(_lead(industry="Retail"), profile).input_fingerprint != base
+    # company_size is not configured -> not read -> does not change it
+    assert fit.compute_fit(_lead(industry="Healthcare", company_size="5"), profile).input_fingerprint == base
+    other = _profile(industries=["Healthcare", "Dental"])
+    assert fit.compute_fit(_lead(industry="Healthcare"), other).input_fingerprint != base
 
 
-def test_fingerprint_unaffected_by_unrelated_fields():
-    a = fit.compute_fit(_lead(industry="Real Estate", cleaned_data={"country": "United States"}, status="new"))
-    b = fit.compute_fit(_lead(industry="Real Estate", cleaned_data={"country": "United States"}, status="scored"))
-    assert a.input_fingerprint == b.input_fingerprint
+def test_targeting_hash_ignores_order_case_and_duplicates_but_not_meaning():
+    a = _profile(industries=["Healthcare", "Dental"])
+    b = _profile(industries=["dental", "Healthcare", "healthcare "])
+    assert a.targeting_hash == b.targeting_hash
+    assert _profile(industries=["Healthcare"]).targeting_hash != a.targeting_hash
 
 
 @pytest.mark.parametrize(
     "fit_score,coverage,expected_band",
     [
-        (85, 100.0, fit.BAND_STRONG),
-        (80, 100.0, fit.BAND_STRONG),
-        (79, 100.0, fit.BAND_PARTIAL),
-        (50, 100.0, fit.BAND_PARTIAL),
-        (49, 100.0, fit.BAND_WEAK),
+        (100, 100.0, fit.BAND_STRONG),
+        (75, 100.0, fit.BAND_STRONG),
+        (74, 100.0, fit.BAND_PARTIAL),
+        (45, 100.0, fit.BAND_PARTIAL),
+        (44, 100.0, fit.BAND_WEAK),
         (0, 100.0, fit.BAND_WEAK),
-        (100, 79.9, fit.BAND_INSUFFICIENT_EVIDENCE),
-        (0, 79.9, fit.BAND_INSUFFICIENT_EVIDENCE),
+        (49, 50.0, fit.BAND_PARTIAL),
+        (49, 49.9, fit.BAND_INSUFFICIENT_EVIDENCE),
+        (0, 0.0, fit.BAND_INSUFFICIENT_EVIDENCE),
     ],
 )
 def test_band_thresholds(fit_score, coverage, expected_band):

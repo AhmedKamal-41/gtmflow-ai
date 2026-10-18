@@ -7,7 +7,7 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Donut, Funnel, Gauge } from "@/components/charts";
 import { ErrorMessage } from "@/components/ErrorMessage";
-import { FitBandBadge } from "@/components/FitBandBadge";
+import { RankingBadge } from "@/components/PriorityBadge";
 import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
@@ -121,15 +121,15 @@ function Dashboard({
           tone="brand"
         />
         <StatCard
-          label="Processed (legacy v1 score)"
+          label="Ranked leads"
           value={m.total_leads_processed}
           hint={`${m.automation_coverage}% automation coverage`}
           icon="target"
         />
         <StatCard
-          label="Avg legacy v1 score"
+          label="Avg ranking score"
           value={m.average_lead_score}
-          hint="out of 100"
+          hint="target-customer match, out of 100"
           icon="chart"
         />
         <StatCard
@@ -141,33 +141,37 @@ function Dashboard({
         />
       </div>
 
-      <Card title="Company fit (v2 demo profile)" icon="target">
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <span>
-            <span className="tabular font-semibold text-slate-900">
-              {m.fit_scored_leads.toLocaleString()}
-            </span>{" "}
-            leads fit-scored
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FitBandBadge band="strong_match" /> {m.fit_strong_match.toLocaleString()}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FitBandBadge band="partial_match" /> {m.fit_partial_match.toLocaleString()}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FitBandBadge band="weak_match" /> {m.fit_weak_match.toLocaleString()}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FitBandBadge band="insufficient_evidence" />{" "}
-            {m.fit_insufficient_evidence.toLocaleString()}
-          </span>
-        </div>
+      <Card
+        title={m.ranking_profile_version ? `Ranking against seller profile version ${m.ranking_profile_version}` : "Ranking"}
+        icon="target"
+      >
+        {m.ranking_state !== "ready" ? (
+          <p className="text-sm text-amber-800">
+            Leads are not ranked: {m.ranking_state === "setup_required"
+              ? "the active seller profile has no target customers."
+              : "no seller profile is active."}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <span>
+              <span className="tabular font-semibold text-slate-900">{m.fit_scored_leads.toLocaleString()}</span>{" "}
+              leads ranked
+            </span>
+            <span className="flex items-center gap-1.5"><RankingBadge priority="Hot" band="strong_match" /> {m.fit_strong_match.toLocaleString()}</span>
+            <span className="flex items-center gap-1.5"><RankingBadge priority="Warm" band="partial_match" /> {m.fit_partial_match.toLocaleString()}</span>
+            <span className="flex items-center gap-1.5"><RankingBadge priority="Cold" band="weak_match" /> {m.fit_weak_match.toLocaleString()}</span>
+            <span className="flex items-center gap-1.5">
+              <RankingBadge priority={null} band="insufficient_evidence" /> {m.fit_insufficient_evidence.toLocaleString()}
+            </span>
+            {m.fit_outdated_leads > 0 && (
+              <span className="text-amber-800">{m.fit_outdated_leads.toLocaleString()} outdated</span>
+            )}
+          </div>
+        )}
         <p className="mt-2 text-xs text-slate-500">
-          Distinct leads, each counted once by its latest score -- rescoring
-          doesn&apos;t inflate these. Broad demonstration criteria (exact
-          industry + US), separate from legacy Hot/Warm/Cold; not a
-          purchase-probability or approval signal.
+          Distinct leads, each counted once by its current ranking against the active seller profile&apos;s target
+          customers -- ranking again doesn&apos;t inflate these, and rankings made against earlier target customers
+          are counted as outdated, not ranked. Not a purchase-probability or approval signal.
         </p>
       </Card>
 
@@ -190,7 +194,7 @@ function Dashboard({
           />
         </Card>
 
-        <Card title="Legacy priority split (v1)" icon="flame">
+        <Card title="Priority split (current rankings)" icon="flame">
           <div className="flex justify-center py-2">
             <Donut
               centerValue={m.total_leads_processed}

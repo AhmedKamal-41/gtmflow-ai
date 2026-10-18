@@ -15,7 +15,7 @@ from app.jobs.queue import claim_next
 from app.models import AIOutput, AIOutputReview, IntegrationPush, Lead, LeadFitScore, LeadScore, WorkflowEvent
 from app.models.background_job import BackgroundJob, BackgroundJobItem
 from app.services import ai_generation
-from tests.conftest import SYNTHETIC_SELLER_PROFILE, approve_current_draft, save_and_activate
+from tests.conftest import SYNTHETIC_SELLER_PROFILE, approve_current_draft, save_and_activate, rank_batch
 from tests.test_push_endpoints import MIXED_CSV, _upload
 
 
@@ -70,6 +70,7 @@ def test_enqueue_validates_and_deduplicates_active_jobs(client):
 # ------------------------------------------------------------ job types
 
 def test_fit_score_job_reports_progress_and_skips_unchanged_on_rerun(client, db_session_factory, db_session):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     batch_id = _batch(client)
     job = _enqueue(client, batch_id, "fit_score")
     assert _run(db_session_factory, job["id"]) == "completed"
@@ -84,15 +85,29 @@ def test_fit_score_job_reports_progress_and_skips_unchanged_on_rerun(client, db_
     assert _count(db_session, LeadFitScore) == 3
 
 
-def test_legacy_score_job_matches_the_synchronous_endpoint(client, db_session_factory, db_session):
-    sync_batch, job_batch = _batch(client), _batch(client)
-    sync = client.post(f"/api/batches/{sync_batch}/score").json()
-    job = _enqueue(client, job_batch, "legacy_score")
-    assert _run(db_session_factory, job["id"]) == "completed"
-    result = client.get(f"/api/jobs/{job['id']}").json()["result"]
-    assert {k: result[k] for k in ("scored_leads", "hot", "warm", "cold", "average_score")} == \
-        {k: sync[k] for k in ("scored_leads", "hot", "warm", "cold", "average_score")}
-    assert client.get(f"/api/batches/{job_batch}").json()["status"] == "scored"
+def test_fit_score_job_without_target_customers_fails_and_writes_nothing(client, db_session_factory, db_session):
+    batch_id = _batch(client)
+    job = _enqueue(client, batch_id, "fit_score")
+    assert _run(db_session_factory, job["id"]) == "failed"
+    assert "No seller profile is active" in client.get(f"/api/jobs/{job['id']}").json()["last_error"]
+    assert _count(db_session, LeadFitScore) == 0
+
+
+def test_the_retired_legacy_score_job_is_refused_and_an_old_queued_one_fails_cleanly(
+        client, db_session_factory, db_session):
+    batch_id = _batch(client)
+    refused = client.post(f"/api/batches/{batch_id}/jobs", json={"job_type": "legacy_score"})
+    assert refused.status_code == 400 and "retired" in refused.json()["detail"]
+    # A legacy_score job queued before the upgrade: the worker fails it
+    # without scoring anything or writing the retired table.
+    job = BackgroundJob(job_type="legacy_score", batch_id=UUID(batch_id), params={}, status="queued",
+                        dedupe_key=f"legacy_score:{batch_id}", attempts=0, max_attempts=3,
+                        max_item_attempts=3, counts={}, cancel_requested=False, created_by="test")
+    db_session.add(job)
+    db_session.commit()
+    assert _run(db_session_factory, str(job.id)) == "failed"
+    assert "retired" in client.get(f"/api/jobs/{job.id}").json()["last_error"]
+    assert _count(db_session, LeadScore) == 0 and _count(db_session, LeadFitScore) == 0
 
 
 def test_generation_job_uses_the_grounded_path_and_never_approves(client, db_session_factory, db_session):
@@ -171,6 +186,7 @@ def test_cancelling_a_queued_job_is_immediate_and_frees_the_slot(client):
 
 
 def test_a_running_job_stops_before_its_next_item_when_cancelled(client, db_session_factory):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     batch_id = _batch(client)
     job = _enqueue(client, batch_id, "fit_score")
     clock = Clock()
@@ -182,6 +198,7 @@ def test_a_running_job_stops_before_its_next_item_when_cancelled(client, db_sess
 
 
 def test_graceful_stop_returns_the_job_to_the_queue_without_counting_an_attempt(client, db_session_factory):
+    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     batch_id = _batch(client)
     job = _enqueue(client, batch_id, "fit_score")
     assert _run(db_session_factory, job["id"], should_stop=lambda: True) == runner.RELEASED
@@ -244,10 +261,10 @@ def test_a_job_that_keeps_killing_its_worker_fails_as_a_crash_loop(client, db_se
 def test_push_job_delivers_only_approved_hot_leads_in_mock_mode(client, db_session_factory, db_session):
     save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     batch_id = _batch(client)
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
     leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     by_name = {lead["company_name"]: lead for lead in leads}
-    assert {n: db_session.scalar(select(LeadScore.priority).where(LeadScore.lead_id == UUID(lead["id"])))
+    assert {n: client.get(f"/api/leads/{lead['id']}/fit-score").json()["priority"]
             for n, lead in by_name.items()} == {"Cascade Modular": "Hot", "Northbridge Clinics": "Hot",
                                                  "Vault Outfitters": "Cold"}
     approve_current_draft(client, by_name["Cascade Modular"]["id"])  # Northbridge stays unapproved
@@ -270,7 +287,7 @@ def test_push_job_delivers_only_approved_hot_leads_in_mock_mode(client, db_sessi
 def test_push_job_respects_blocked_statuses(client, db_session_factory, db_session):
     save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     batch_id = _batch(client)
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
     leads = {lead["company_name"]: lead for lead in client.get(f"/api/leads?batch_id={batch_id}").json()["items"]}
     target = leads["Cascade Modular"]["id"]
     approve_current_draft(client, target)
@@ -288,7 +305,7 @@ def test_push_job_on_a_partial_import_fails_before_any_item(client, db_session_f
     from app.models import LeadBatch
 
     batch_id = _batch(client)
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
     batch = db_session.get(LeadBatch, UUID(batch_id))
     batch.status = "partial"
     db_session.commit()

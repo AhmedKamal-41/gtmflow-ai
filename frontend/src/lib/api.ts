@@ -6,20 +6,19 @@ import type {
   BatchFitScoreRunSummary,
   BatchFitSummary,
   BatchPushResponse,
-  BatchScoreResponse,
   CurrentReadiness,
   DemoRunResponse,
-  FitProfile,
   IntegrationPush,
   Job,
   JobType,
   Lead,
   LeadBatch,
   LeadFitScore,
-  LeadScore,
   MetricsDashboard,
   OutreachReviewResponse,
   Page,
+  RankingRunSummary,
+  RankingStatus,
   SellerProfile,
   SellerProfileActivation,
   SellerProfileContent,
@@ -214,31 +213,6 @@ export function getLeads(
 
 export function getLead(leadId: string): Promise<Lead> {
   return request<Lead>(`/api/leads/${leadId}`);
-}
-
-// Legacy v1 scores for one page of a batch's leads (same order as
-// getLeads(batchId)) -- one request per page, not one per lead.
-export function getBatchScores(
-  batchId: string,
-  params?: PageParams,
-): Promise<Page<LeadScore>> {
-  return request<Page<LeadScore>>(
-    `/api/batches/${batchId}/scores${buildQuery({ ...params })}`,
-  );
-}
-
-export function scoreLead(leadId: string): Promise<LeadScore> {
-  return request<LeadScore>(`/api/leads/${leadId}/score`, { method: "POST" });
-}
-
-export function scoreBatch(batchId: string): Promise<BatchScoreResponse> {
-  return request<BatchScoreResponse>(`/api/batches/${batchId}/score`, {
-    method: "POST",
-  });
-}
-
-export function getLeadScore(leadId: string): Promise<LeadScore> {
-  return request<LeadScore>(`/api/leads/${leadId}/score`);
 }
 
 export function generateSummary(leadId: string): Promise<AIOutput> {
@@ -457,11 +431,9 @@ export function runDemo(): Promise<DemoRunResponse> {
   return request<DemoRunResponse>("/api/demo/run", { method: "POST" });
 }
 
-// --- Phase 4: v2 deterministic company-fit scorer --------------------
-// Entirely separate from scoreLead/scoreBatch/getLeadScore above (the
-// legacy v1 Hot/Warm/Cold scorer, unchanged). See types/api.ts's
-// LeadFitScore doc comment for why a "strong_match" fit band is not the
-// same claim as legacy "Hot".
+// --- Ranking against the active seller profile's target customers -------
+// Ranking endpoints answer 409 (with a message to show as-is) when no
+// active seller profile states target customers.
 
 export function scoreLeadFit(leadId: string): Promise<LeadFitScore> {
   return request<LeadFitScore>(`/api/leads/${leadId}/fit-score`, {
@@ -510,8 +482,14 @@ export function getBatchFitScores(
   );
 }
 
-export function getFitProfile(): Promise<FitProfile> {
-  return request<FitProfile>("/api/scoring/fit-profile");
+export function getRankingStatus(): Promise<RankingStatus> {
+  return request<RankingStatus>("/api/scoring/profile");
+}
+
+// Rank every lead against the active profile; already-current rankings
+// with identical inputs are skipped, earlier rankings are kept as history.
+export function recalculateRankings(): Promise<RankingRunSummary> {
+  return request<RankingRunSummary>("/api/scoring/recalculate", { method: "POST" });
 }
 
 // ---- Phase 12: auth endpoints --------------------------------------------
@@ -603,8 +581,15 @@ export type InboxItem = {
   industry: string | null;
   batch_id: string;
   batch_name: string | null;
+  // Current ranking against the active seller profile. priority null with a
+  // band = "needs data"; no band = not ranked (ranking_outdated: only
+  // against earlier target preferences).
   priority: "Hot" | "Warm" | "Cold" | null;
   score: number | null;
+  band: string | null;
+  evidence_coverage_pct: number | null;
+  ranking_reason: string | null;
+  ranking_outdated: boolean;
   stage: LeadStage;
   delivery_unknown: boolean;
   draft_model: string | null;
@@ -617,12 +602,15 @@ export type InboxPage = {
   total: number;
   limit: number;
   offset: number;
-  counts: Record<LeadStage | "all" | "hot" | "delivery_unknown", number>;
+  counts: Record<LeadStage | "all" | "hot" | "needs_data" | "ranking_outdated" | "delivery_unknown", number>;
+  ranking: { state: "ready" | "no_active_profile" | "setup_required"; profile_version: string | null; profile_kind: string | null };
 };
+
+export type InboxPriority = "Hot" | "Warm" | "Cold" | "needs_data";
 
 export function getInbox(params: {
   stage?: LeadStage;
-  priority?: "Hot" | "Warm" | "Cold";
+  priority?: InboxPriority;
   q?: string;
   limit?: number;
   offset?: number;

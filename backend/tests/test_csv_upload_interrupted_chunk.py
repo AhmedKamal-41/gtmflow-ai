@@ -28,6 +28,9 @@ from sqlalchemy.orm import Session
 
 from app.api import batches as batches_module
 from app.models import Lead, LeadBatch
+from tests.conftest import rank_batch
+
+pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
 CSV_TEXT = (
     "company_name,industry,contact_title,company_size,source\n"
@@ -162,7 +165,7 @@ def test_crash_escaping_the_handler_leaves_batch_uploading_and_resumable(
     _assert_routing_blocked(client, db_session, batch_id)
 
     # Legacy v1 batch scoring must not overwrite the incomplete status.
-    assert client.post(f"/api/batches/{batch_id}/score").status_code == 200
+    rank_batch(client, batch_id)
     assert _only_batch(db_session).status == "uploading"
 
     _assert_resume_completes_without_duplicates(client, db_session, monkeypatch, batch_id)

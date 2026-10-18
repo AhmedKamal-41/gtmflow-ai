@@ -201,7 +201,33 @@ SYNTHETIC_SELLER_PROFILE = {
         {"claim": "Used in a synthetic pilot by 3 test clinics", "source": "tests/conftest.py fixture"}
     ],
     "exclusions": [],
+    # Who the synthetic seller wants to reach. Shared test CSVs put housing
+    # and healthcare companies of 51+ staff with these roles at Hot and a
+    # retailer at Cold; tests/test_profile_ranking.py proves other target
+    # preferences rank the same companies differently.
+    "target_preferences": {
+        "industries": ["Housing", "Healthcare", "Clinic", "Property Management"],
+        "locations": [],
+        "company_sizes": [{"min_employees": 51, "max_employees": None}],
+        "contact_roles": ["VP Operations", "Practice Manager", "Property Manager"],
+        "keywords": [],
+    },
 }
+
+
+# A seller targeting US healthcare and real-estate companies: the shape of
+# the PDL-style leads several tests build (industry 35 + location 20 of 55
+# configured weight: a full match is 100, a matching industry alone 64).
+US_SECTOR_PREFERENCES = {
+    "industries": ["Hospital & Health Care", "Real Estate"],
+    "locations": ["United States"],
+    "company_sizes": [], "contact_roles": [], "keywords": [],
+}
+
+
+def activate_preferences(client: TestClient, preferences: dict, **changes) -> dict:
+    """Save and activate the synthetic seller with these target preferences."""
+    return save_and_activate(client, {**SYNTHETIC_SELLER_PROFILE, **changes, "target_preferences": preferences})
 
 
 def save_and_activate(client: TestClient, profile: dict) -> dict:
@@ -231,6 +257,17 @@ def active_seller_profile(client: TestClient) -> dict:
     """A synthetic, explicitly activated seller revision. Tests that generate
     outreach opt in; everything else runs with no active profile."""
     return save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+
+
+def rank_batch(client: TestClient, batch_id: str) -> dict:
+    """Rank a batch against the active seller profile's target customers,
+    activating the synthetic profile first if nothing rankable is active
+    (what an operator must do before leads can be ranked)."""
+    if client.get("/api/scoring/profile").json()["state"] != "ready":
+        save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    response = client.post(f"/api/batches/{batch_id}/fit-score")
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
 def review_json(client: TestClient, lead_id: str, output_id: str, reason: str | None = None,

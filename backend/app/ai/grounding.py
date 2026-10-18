@@ -51,8 +51,10 @@ ALWAYS_UNKNOWN: tuple[str, ...] = (
 )
 
 FIT_SCORE_MEANING = (
-    "Company-attribute match against a versioned demonstration rubric. "
-    "It is not evidence of interest, need, budget or intent to buy."
+    "How well the company's recorded attributes (industry, size, location, "
+    "contact role, keywords) match the seller's stated target customers. "
+    "It is not evidence of interest, need, budget or intent to buy; do not "
+    "say or imply that the company needs the product or plans to buy."
 )
 
 

@@ -93,6 +93,6 @@ class ReviewStateRead(BaseModel):
     blocker_explanations: dict[str, str]
     latest_review: ReviewRead | None
     source: SourceInfo
-    # Phase 10: the current draft's runtime quality flags (runtime-checks-v1).
+    # Phase 10: the current draft's runtime quality flags (app/ai/quality_checks.py CHECKS_VERSION).
     quality_checks_version: str
     draft_quality_flags: list[dict[str, Any]]

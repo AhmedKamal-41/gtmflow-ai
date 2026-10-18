@@ -25,6 +25,8 @@ from app.services.integration_push import (
     DeliveryOutcomeUnknownError,
     IncompleteImportError,
     ResolutionError,
+    current_hot_lead_ids,
+    current_ranking,
     deliver_lead_to_slack,
     lead_has_successful_slack_push,
     resolve_unknown_delivery,
@@ -81,20 +83,24 @@ def push_one_lead(
     _validate_integration_type(request.integration_type)
     _require_complete_batch(lead)
 
-    if lead.score is None:
+    # Ranking is against the active seller profile's target customers. A
+    # lead ranked only against earlier preferences has no current ranking.
+    ranking = current_ranking(session, lead)
+    if ranking is None:
         raise HTTPException(
             status_code=400,
-            detail="Lead must be scored before it can be pushed.",
+            detail="Lead needs a current ranking against the active seller profile before it can be pushed.",
         )
 
-    if lead.score.priority != "Hot" and not request.force:
+    if ranking.band != "strong_match" and not request.force:
         raise HTTPException(
             status_code=400,
             detail="Only Hot leads can be pushed unless force=true.",
         )
 
     try:
-        result = deliver_lead_to_slack(session, lead, redeliver=request.redeliver, actor="api:lead-push")
+        result = deliver_lead_to_slack(session, lead, redeliver=request.redeliver, actor="api:lead-push",
+                                       ranking=ranking)
     except (DeliveryInProgressError, DeliveryOutcomeUnknownError) as e:
         session.commit()
         raise HTTPException(status_code=409, detail={
@@ -179,16 +185,10 @@ def push_batch_hot_leads(
             ),
         )
 
-    leads_in_batch = list(
-        session.execute(
-            select(Lead).where(Lead.batch_id == batch_id)
-        ).scalars().all()
-    )
-    hot_leads = [
-        lead
-        for lead in leads_in_batch
-        if lead.score is not None and lead.score.priority == "Hot"
-    ]
+    hot_ids = current_hot_lead_ids(session, batch_id)
+    hot_leads = list(
+        session.execute(select(Lead).where(Lead.id.in_(hot_ids)).order_by(Lead.id)).scalars()
+    ) if hot_ids else []
 
     pushed = skipped = failed = blocked = uncertain = 0
     results: list[BatchPushResult] = []

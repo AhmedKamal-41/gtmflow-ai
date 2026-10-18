@@ -10,16 +10,34 @@ import { ErrorMessage } from "@/components/ErrorMessage";
 import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
-import { PriorityBadge } from "@/components/PriorityBadge";
+import { RankingBadge } from "@/components/PriorityBadge";
+import { RankingBanner } from "@/components/RankingBanner";
 import { STAGE_LABELS, StageBadge } from "@/components/StageBadge";
-import { APIError, getInbox, type InboxItem, type InboxPage, type LeadStage } from "@/lib/api";
+import {
+  APIError,
+  createBatchJob,
+  getInbox,
+  type InboxItem,
+  type InboxPage,
+  type InboxPriority,
+  type LeadStage,
+} from "@/lib/api";
 
-// Leads: every imported lead, ranked Hot first, filtered by workflow stage.
+// Leads: every imported lead, ranked against the active seller profile's
+// target customers (Hot first), filtered by workflow stage. Select ranked
+// leads to draft outreach for them with that same seller profile.
 
 const PAGE_SIZE = 50;
 const TABS: (LeadStage | "all")[] = ["all", "to_review", "approved", "outdated", "needs_draft", "needs_score", "rejected", "sent"];
-const PRIORITIES = ["Hot", "Warm", "Cold"] as const;
-type Priority = (typeof PRIORITIES)[number];
+const PRIORITIES: InboxPriority[] = ["Hot", "Warm", "Cold", "needs_data"];
+type Priority = InboxPriority;
+const PRIORITY_LABELS: Record<InboxPriority, string> = { Hot: "Hot", Warm: "Warm", Cold: "Cold", needs_data: "Needs data" };
+// One selection job per import may run at a time, of at most 25 leads.
+const MAX_SELECTED = 25;
+
+function selectable(item: InboxItem): boolean {
+  return item.band !== null && !item.blocked;
+}
 
 function tabLabel(tab: LeadStage | "all"): string {
   return tab === "all" ? "All" : STAGE_LABELS[tab];
@@ -38,6 +56,11 @@ function LeadsInbox() {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [drafting, setDrafting] = useState(false);
+  const [draftMessage, setDraftMessage] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [bannerKey, setBannerKey] = useState(0);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -54,6 +77,7 @@ function LeadsInbox() {
       if (current !== generation.current) return;
       setPage(result);
       setItems(result.items);
+      setSelected(new Set());
     } catch (e) {
       if (current !== generation.current) return;
       setError(e instanceof APIError ? (e.detail ?? e.message) : "Could not load leads.");
@@ -79,6 +103,44 @@ function LeadsInbox() {
     }
   }
 
+  function toggle(item: InboxItem) {
+    setDraftMessage(null);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else if (next.size < MAX_SELECTED) next.add(item.id);
+      return next;
+    });
+  }
+
+  async function draftSelected() {
+    const chosen = items.filter((item) => selected.has(item.id));
+    const byBatch = new Map<string, string[]>();
+    for (const item of chosen) byBatch.set(item.batch_id, [...(byBatch.get(item.batch_id) ?? []), item.id]);
+    setDrafting(true);
+    setDraftError(null);
+    setDraftMessage(null);
+    const failures: string[] = [];
+    let queued = 0;
+    for (const [batchId, leadIds] of byBatch) {
+      try {
+        await createBatchJob(batchId, "selected_outreach", { lead_ids: leadIds });
+        queued += leadIds.length;
+      } catch (e) {
+        failures.push(e instanceof APIError ? (e.detail ?? e.message) : "Could not queue drafts.");
+      }
+    }
+    setDrafting(false);
+    if (queued) {
+      setSelected(new Set());
+      setDraftMessage(
+        `Preparing drafts for ${queued} lead${queued === 1 ? "" : "s"} with your active seller profile. ` +
+          "They appear under To review as they finish; nothing is approved or sent automatically.",
+      );
+    }
+    if (failures.length) setDraftError(failures.join(" "));
+  }
+
   function setFilter(next: { stage?: LeadStage | "all"; priority?: Priority | "" }) {
     const url = new URLSearchParams(params?.toString() ?? "");
     const nextStage = next.stage ?? stage;
@@ -93,9 +155,11 @@ function LeadsInbox() {
     <div className="space-y-6">
       <PageHeader
         title="Leads"
-        description="Every lead you imported, ranked Hot first. Open one to review its draft and send it."
+        description="Every lead you imported, ranked by how well it matches the customers your seller profile targets. Select leads to draft outreach, or open one to review and send."
         actions={<Button icon="upload" variant="secondary" onClick={() => router.push("/imports")}>Import leads</Button>}
       />
+
+      <RankingBanner refreshKey={bannerKey} onRecalculated={() => { setBannerKey((k) => k + 1); void load(); }} />
 
       <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Stage">
         {TABS.map((tab) => {
@@ -125,10 +189,21 @@ function LeadsInbox() {
           <select value={priority ?? ""} onChange={(e) => setFilter({ priority: e.target.value as Priority | "" })}
             className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm">
             <option value="">Any</option>
-            {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
           </select>
         </label>
+        {selected.size > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-600">{selected.size} selected</span>
+            <Button size="sm" icon="sparkles" loading={drafting} disabled={drafting} onClick={() => void draftSelected()}>
+              Draft outreach for selected
+            </Button>
+            <Button size="sm" variant="ghost" disabled={drafting} onClick={() => setSelected(new Set())}>Clear</Button>
+          </div>
+        )}
       </div>
+      {draftMessage && <p role="status" className="text-sm text-emerald-700">{draftMessage}</p>}
+      {draftError && <ErrorMessage>{draftError}</ErrorMessage>}
 
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {!page && !error && <LoadingState />}
@@ -144,8 +219,9 @@ function LeadsInbox() {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="w-10 px-4 py-3"><span className="sr-only">Select</span></th>
                 <th className="px-4 py-3">Company</th>
-                <th className="px-4 py-3">Priority</th>
+                <th className="px-4 py-3">Ranking</th>
                 <th className="px-4 py-3">Stage</th>
                 <th className="hidden px-4 py-3 md:table-cell">Draft by</th>
                 <th className="hidden px-4 py-3 lg:table-cell">Import</th>
@@ -154,6 +230,13 @@ function LeadsInbox() {
             <tbody className="divide-y divide-slate-100">
               {items.map((item) => (
                 <tr key={item.id} className="cursor-pointer hover:bg-slate-50" onClick={() => router.push(`/leads/${item.id}`)}>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" aria-label={`Select ${item.company_name}`}
+                      checked={selected.has(item.id)}
+                      disabled={!selectable(item) || (!selected.has(item.id) && selected.size >= MAX_SELECTED)}
+                      title={item.blocked ? "Do not contact" : item.band === null ? "Rank this lead first" : undefined}
+                      onChange={() => toggle(item)} />
+                  </td>
                   <td className="px-4 py-3">
                     <Link href={`/leads/${item.id}`} className="font-medium text-slate-900 hover:text-brand-700" onClick={(e) => e.stopPropagation()}>
                       {item.company_name}
@@ -162,10 +245,12 @@ function LeadsInbox() {
                       {[item.contact_name, item.contact_title].filter(Boolean).join(" · ") || item.industry || "-"}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    {item.priority ? (
-                      <span className="flex items-center gap-2"><PriorityBadge priority={item.priority} /><span className="tabular text-xs text-slate-500">{item.score}</span></span>
-                    ) : <span className="text-xs text-slate-400">-</span>}
+                  <td className="px-4 py-3" title={item.ranking_reason ?? undefined}>
+                    <span className="flex items-center gap-2">
+                      <RankingBadge priority={item.priority} band={item.band} outdated={item.ranking_outdated} />
+                      {item.score !== null && <span className="tabular text-xs text-slate-500">{item.score}</span>}
+                    </span>
+                    {item.ranking_reason && <div className="mt-0.5 hidden max-w-xs truncate text-xs text-slate-500 xl:block">{item.ranking_reason}</div>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">

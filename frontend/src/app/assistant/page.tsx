@@ -175,7 +175,7 @@ export default function AssistantPage() {
         <ul className="mt-4 divide-y divide-slate-100">
           {result.leads.map((lead) => <li key={lead.id} className="py-4">
             <Link href={`/leads/${lead.id}`} className="font-semibold text-brand-700 hover:underline">{lead.company_name}</Link>
-            <p className="mt-1 text-sm text-slate-600">{lead.priority ? `${lead.priority} · ${lead.score}/100` : "Not scored"}</p>
+            <p className="mt-1 text-sm text-slate-600">{lead.priority ? `${lead.priority} · ${lead.score}/100` : "Not ranked"}</p>
             <ul className="mt-2 space-y-1 text-sm text-slate-600">{lead.evidence.map((fact, index) => <li key={index}>{fact}</li>)}</ul>
             <p className="mt-2 text-xs text-slate-500">Unknown: {lead.unknowns.join(", ")}.</p>
           </li>)}

@@ -15,18 +15,19 @@ if TYPE_CHECKING:
 
 
 class LeadFitScore(Base):
-    """Phase 4 (Part D.1): the v2 deterministic company-fit scorer's
-    versioned, historical storage -- deliberately NOT unique on `lead_id`,
-    unlike the legacy v1 `lead_scores` table (which this does not touch or
-    replace). Every scoring run inserts a NEW row rather than overwriting
-    the previous one, so:
+    """Versioned, append-only lead rankings (app/scoring/fit.py) --
+    deliberately NOT unique on `lead_id`. Every ranking run inserts a NEW
+    row rather than overwriting the previous one, so:
 
-      * v1's single mutable `LeadScore` row and its "Hot/Warm/Cold"
-        interpretation are fully preserved, untouched, still authoritative
-        for every existing consumer (API responses, push gating, metrics).
-      * v2's rescoring a lead (e.g. after a rubric version bump) never
-        destroys the prior result -- both remain queryable, each stamped
-        with the exact versions that produced it.
+      * a row is scoped to the lead and to the seller-profile revision
+        (`seller_profile_id`, `profile_id`/`profile_version`) and the
+        target preferences (`targeting_hash`) it was ranked against;
+      * changing target preferences never destroys the prior result -- it
+        stays queryable, stamped with what produced it, and simply stops
+        being current (app/services/fit_queries.py);
+      * rows from before profile-based ranking (profile
+        `demo-us-sectors-v1`, no targeting_hash) are kept as history and
+        are never current.
       * "unique scored leads" under a given profile/version is
         COUNT(DISTINCT lead_id) filtered to that profile_id/profile_version,
         not COUNT(*) -- rescoring once must not inflate the count (Part
@@ -50,6 +51,7 @@ class LeadFitScore(Base):
             "ix_lead_fit_scores_lead_profile_created",
             "lead_id", "profile_id", "profile_version", "created_at",
         ),
+        Index("ix_lead_fit_scores_lead_targeting_created", "lead_id", "targeting_hash", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -70,6 +72,13 @@ class LeadFitScore(Base):
     profile_version: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     normalization_version: Mapped[str] = mapped_column(String(64), nullable=False)
     input_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # Migration 0015: the seller revision (NULL for the built-in demo
+    # profile and for pre-0015 rows) and the hash of the target preferences,
+    # weights and rules the row was ranked with (NULL before 0015).
+    seller_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("seller_profiles.id"), nullable=True, index=True
+    )
+    targeting_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     # ---- Part C outputs
     fit_score: Mapped[int] = mapped_column(Integer, nullable=False, index=True)

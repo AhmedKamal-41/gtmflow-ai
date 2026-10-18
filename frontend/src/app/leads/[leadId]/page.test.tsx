@@ -156,9 +156,6 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     getLead: getLeadMock,
-    getLeadScore: vi.fn(() =>
-      Promise.reject(new actual.APIError(404, "not found")),
-    ),
     getLeadFitScore: vi.fn(() =>
       Promise.reject(new actual.APIError(404, "not found")),
     ),

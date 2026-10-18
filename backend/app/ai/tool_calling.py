@@ -59,7 +59,8 @@ def _call(name: str, arguments: dict, step: int) -> dict:
 
 
 def mock_tool_turn(messages: list[dict]) -> dict:
-    """A labeled demo: recognizes priority and healthcare/real-estate terms.
+    """A labeled demo: recognizes Hot/Warm/Cold and any of the seller
+    profile's target industries named in the request (whole words).
 
     It never claims to understand arbitrary natural-language constraints.
     """
@@ -68,7 +69,8 @@ def mock_tool_turn(messages: list[dict]) -> dict:
     if not results:
         prompt = task["request"].lower()
         priority = next((p for p in ("Hot", "Warm", "Cold") if re.search(rf"\b{p.lower()}\b", prompt)), None)
-        industry = "health" if "health" in prompt else "real estate" if "real estate" in prompt else None
+        targets = (task.get("ranking_profile") or {}).get("industries") or []
+        industry = next((t for t in targets if re.search(rf"\b{re.escape(t.lower())}\b", prompt)), None)
         return _call("search_leads", {"query": None, "industry": industry, "priority": priority}, 1)
     last = results[-1]
     if last["tool"] == "search_leads":

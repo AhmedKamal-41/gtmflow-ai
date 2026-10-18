@@ -39,7 +39,7 @@ from app.integrations.slack import (
     build_slack_payload,
     send_slack_payload,
 )
-from app.models import AIOutput, IntegrationPush, Lead, WorkflowEvent
+from app.models import AIOutput, IntegrationPush, Lead, LeadFitScore, WorkflowEvent
 from app.models.integration_push import (
     PUSH_FAILED,
     PUSH_MOCK_SUCCESS,
@@ -49,7 +49,9 @@ from app.models.integration_push import (
 )
 from app.models.ai_output import PURPOSE_OPERATIONAL
 from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
-from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from app.models.lead import DISQUALIFIED_STATUSES
+from app.scoring import fit
+from app.services import fit_queries
 from app.services.draft_review import review_state
 
 SLACK = "slack"
@@ -104,6 +106,31 @@ class DeliveryNotApprovedError(RuntimeError):
         )
 
 
+def current_ranking(session: Session, lead: Lead) -> LeadFitScore | None:
+    """The lead's current ranking against the active seller profile -- the
+    same definition the lists, the inbox and the jobs use."""
+    return fit_queries.latest_fit_score(session, lead.id)
+
+
+def current_hot_lead_ids(session: Session, batch_id: UUID) -> list[UUID]:
+    """Leads of one batch whose current ranking is Hot (strong match)."""
+    latest = fit_queries.latest_fit_subquery(fit_queries.current_ranking_profile(session))
+    return list(session.scalars(
+        select(Lead.id).join(latest, latest.c.lead_id == Lead.id)
+        .where(Lead.batch_id == batch_id, latest.c.band == fit.BAND_STRONG)
+        .order_by(Lead.id)
+    ))
+
+
+def _ranking_event_fields(ranking: LeadFitScore | None) -> dict[str, Any]:
+    return {
+        "priority": fit.priority_for_band(ranking.band) if ranking else None,
+        "score": ranking.fit_score if ranking else None,
+        "ranking_id": str(ranking.id) if ranking else None,
+        "ranking_profile_version": ranking.profile_version if ranking else None,
+    }
+
+
 def _block(session: Session, lead: Lead, reason: str, **details: Any) -> None:
     session.add(
         WorkflowEvent(
@@ -113,8 +140,7 @@ def _block(session: Session, lead: Lead, reason: str, **details: Any) -> None:
                 "integration_type": SLACK,
                 "reason": reason,
                 "lead_status": lead.status,
-                "priority": lead.score.priority if lead.score else None,
-                "score": lead.score.total_score if lead.score else None,
+                **_ranking_event_fields(current_ranking(session, lead)),
                 **details,
             },
         )
@@ -201,8 +227,8 @@ def _latest_attempt(session: Session, output_id: UUID, content_hash: str) -> Int
 
 
 def _gate(session: Session, lead: Lead):
-    """The unchanged delivery rules, checked before anything is claimed."""
-    assert lead.score is not None, "push_lead_to_slack requires a scored lead"
+    """The unchanged delivery rules, checked before anything is claimed.
+    No ranking can override them: a blocked lead stays blocked at any score."""
     if lead.status in BLOCKED_STATUSES:
         _block(session, lead, "blocked_lead_status")
         raise BlockedLeadError(lead.id, lead.status)
@@ -218,11 +244,12 @@ def _gate(session: Session, lead: Lead):
     return state
 
 
-def _payload(session: Session, lead: Lead, approved_draft: AIOutput) -> dict[str, Any]:
+def _payload(session: Session, lead: Lead, approved_draft: AIOutput,
+             ranking: LeadFitScore | None) -> dict[str, Any]:
     summary = _latest_output_content(session, lead.id, "company_summary")
     outreach = dict(approved_draft.content)
     detected_pains: list[str] = []
-    fit_reasoning: str | None = lead.score.reasoning
+    fit_reasoning: str | None = fit.explain(ranking.criteria, ranking.band) if ranking else None
     if summary:
         raw_pains = summary.get("detected_pain_points")
         if isinstance(raw_pains, list):
@@ -241,8 +268,8 @@ def _payload(session: Session, lead: Lead, approved_draft: AIOutput) -> dict[str
     return build_slack_payload(
         lead_id=lead.id,
         company_name=lead.company_name,
-        score=lead.score.total_score,
-        priority=lead.score.priority,
+        score=ranking.fit_score if ranking else None,
+        priority=fit.priority_for_band(ranking.band) if ranking else None,
         industry=lead.industry,
         contact_name=lead.contact_name,
         contact_title=lead.contact_title,
@@ -256,7 +283,7 @@ def _payload(session: Session, lead: Lead, approved_draft: AIOutput) -> dict[str
 
 
 def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = False,
-                          actor: str = "api") -> DispatchResult:
+                          actor: str = "api", ranking: LeadFitScore | None = None) -> DispatchResult:
     """The single Slack dispatch point (Phase 11 delivery ledger).
 
     1. The unchanged gates: blocked status, incomplete import, a current
@@ -278,8 +305,15 @@ def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = Fal
     Guarantee: at most one send per claimed attempt. Slack incoming webhooks
     take no idempotency key, so an attempt whose outcome is unknown cannot be
     deduplicated on Slack's side; that is why it is never resent blindly.
+
+    `ranking` (shown in the message) defaults to the lead's current ranking;
+    the standalone demo passes the ranking it made with its own profile.
+    Which leads may be pushed by ranking (Hot, or force) is the callers'
+    rule; this function enforces the rules no ranking can override.
     """
     state = _gate(session, lead)
+    if ranking is None:
+        ranking = current_ranking(session, lead)
     draft, content_hash = state.draft, state.draft_content_hash
     latest = _latest_attempt(session, draft.id, content_hash)
     if latest is not None:
@@ -309,7 +343,7 @@ def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = Fal
     attempt = (latest.attempt if latest is not None else 0) + 1
     mode = "real" if settings.slack_webhook_url else "mock"
     push = IntegrationPush(
-        lead_id=lead.id, integration_type=SLACK, payload=_payload(session, lead, draft),
+        lead_id=lead.id, integration_type=SLACK, payload=_payload(session, lead, draft, ranking),
         status=PUSH_PENDING, delivery_key=f"slack:{draft.id}:{content_hash}:{attempt}",
         approved_output_id=draft.id, approved_content_hash=content_hash, attempt=attempt,
         delivery_mode=mode, claimed_by=actor_label(), claimed_at=_now(),
@@ -342,8 +376,7 @@ def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = Fal
     event_data = {
         "integration_type": SLACK,
         "status": status,
-        "priority": lead.score.priority,
-        "score": lead.score.total_score,
+        **_ranking_event_fields(ranking),
         "approved_output_id": str(draft.id),
         "approved_content_hash": content_hash,
         "approval_review_id": str(state.review.id) if state.review else None,
@@ -367,12 +400,12 @@ def deliver_lead_to_slack(session: Session, lead: Lead, *, redeliver: bool = Fal
     return DispatchResult(push, sent=True, replay=False)
 
 
-def push_lead_to_slack(session: Session, lead: Lead) -> IntegrationPush:
+def push_lead_to_slack(session: Session, lead: Lead, *, ranking: LeadFitScore | None = None) -> IntegrationPush:
     """Backwards-compatible wrapper: deliver (or replay) the current
     approved draft and return its push row. Raises BlockedLeadError,
     IncompleteImportError, DeliveryNotApprovedError, DeliveryInProgressError
     or DeliveryOutcomeUnknownError; see deliver_lead_to_slack."""
-    return deliver_lead_to_slack(session, lead).push
+    return deliver_lead_to_slack(session, lead, ranking=ranking).push
 
 
 RESOLVED_DELIVERED = "confirmed_delivered"

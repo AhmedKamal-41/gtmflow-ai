@@ -47,10 +47,10 @@ describe("JobsPanel", () => {
     fake.created = [job({ status: "queued" }), job({ deduplicated: true })];
     render(<JobsPanel batchId="batch-1" />);
     await screen.findByText("No jobs for this batch yet.");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Fit-score all leads" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Rank all leads" })));
     expect(api.createBatchJob).toHaveBeenLastCalledWith("batch-1", "fit_score");
-    expect(screen.getByRole("status")).toHaveTextContent("Fit-score all leads: queued.");
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Fit-score all leads" })));
+    expect(screen.getByRole("status")).toHaveTextContent("Rank all leads: queued.");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Rank all leads" })));
     expect(screen.getByRole("status")).toHaveTextContent("already queued or running");
   });
 
@@ -67,8 +67,8 @@ describe("JobsPanel", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-    expect(screen.getByLabelText("Job Fit-score all leads")).toHaveTextContent("completed · 4/4");
-    expect(screen.getByLabelText("Job Fit-score all leads")).toHaveTextContent("succeeded 3 · blocked 1");
+    expect(screen.getByLabelText("Job Rank all leads")).toHaveTextContent("completed · 4/4");
+    expect(screen.getByLabelText("Job Rank all leads")).toHaveTextContent("succeeded 3 · blocked 1");
     const calls = vi.mocked(api.listBatchJobs).mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(vi.mocked(api.listBatchJobs).mock.calls.length).toBe(calls); // no polling when idle

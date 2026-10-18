@@ -1,6 +1,6 @@
-"""Phase 4 closeout: every reader of "a lead's current v2 fit score" (single
-GET, batch bulk listing, batch summary, GET /api/leads filter/sort) agrees
-on WHICH stored row is current, including rows from other profile
+"""Every reader of "a lead's current ranking" (single GET, batch bulk
+listing, batch summary, GET /api/leads filter/sort) agrees on WHICH stored
+row is current, including rows ranked against other target preferences or
 versions and rows sharing a timestamp; current readiness is distinguished
 from the snapshot stored at scoring time; and scoring has no side effects
 on dispositions, drafts, reviews, or sends.
@@ -25,7 +25,21 @@ from app.models import (
     WorkflowEvent,
 )
 from app.scoring import fit
-from tests.conftest import review_json
+from tests.conftest import SYNTHETIC_SELLER_PROFILE, review_json, save_and_activate
+
+# A seller targeting US healthcare: the shape of the companies these tests
+# create. Industry (35) + location (20) are configured, so a full match is
+# 100 and a matching industry alone is 64 (partial / Warm).
+CONSISTENCY_PREFERENCES = {
+    "industries": ["Hospital & Health Care"], "locations": ["United States"],
+    "company_sizes": [], "contact_roles": [], "keywords": [],
+}
+CONSISTENCY_HASH = fit.targeting_hash(CONSISTENCY_PREFERENCES)
+
+
+@pytest.fixture(autouse=True)
+def consistency_profile(client: TestClient) -> dict:
+    return save_and_activate(client, {**SYNTHETIC_SELLER_PROFILE, "target_preferences": CONSISTENCY_PREFERENCES})
 
 
 def _batch(db_session: Session, status: str = "uploaded") -> LeadBatch:
@@ -65,8 +79,9 @@ def _row(lead: Lead, *, band: str, fit_score: int, created_at: datetime, **versi
         id=versions.pop("id", uuid.uuid4()),
         lead_id=lead.id,
         scorer_version=versions.get("scorer_version", fit.SCORER_VERSION),
-        profile_id=versions.get("profile_id", fit.PROFILE_ID),
-        profile_version=versions.get("profile_version", fit.PROFILE_VERSION),
+        profile_id=versions.get("profile_id", "test-profile"),
+        profile_version=versions.get("profile_version", "1"),
+        targeting_hash=versions.get("targeting_hash", CONSISTENCY_HASH),
         normalization_version=versions.get("normalization_version", fit.NORMALIZATION_VERSION),
         input_fingerprint="f" * 64,
         fit_score=fit_score,
@@ -112,7 +127,7 @@ def test_band_change_on_rescore_uses_latest_row_everywhere(
     assert summary["score_rows"] == 2
     assert summary["strong_match"] == 0
     assert summary["partial_match"] == 1
-    assert summary["average_fit_score"] == 60.0
+    assert summary["average_fit_score"] == 64.0
 
 
 def test_rows_from_other_versions_are_history_not_current(
@@ -123,14 +138,19 @@ def test_rows_from_other_versions_are_history_not_current(
     now = datetime.now(timezone.utc)
     db_session.add_all(
         [
-            _row(lead, band="strong_match", fit_score=100, created_at=now, profile_version="0"),
+            _row(lead, band="strong_match", fit_score=100, created_at=now, targeting_hash="0" * 64),
             _row(lead, band="strong_match", fit_score=100, created_at=now,
                  normalization_version="fit-norm-v0"),
+            # The retired demo rubric's rows carry no targeting hash at all.
+            _row(lead, band="strong_match", fit_score=100, created_at=now,
+                 scorer_version="fit-scorer-v1", profile_id="demo-us-sectors-v1", targeting_hash=None),
         ]
     )
     db_session.commit()
 
-    assert client.get(f"/api/leads/{lead.id}/fit-score").status_code == 404
+    # Shown as outdated history, never as the current ranking.
+    single = client.get(f"/api/leads/{lead.id}/fit-score")
+    assert single.status_code == 200 and single.json()["is_current"] is False
     assert client.get("/api/leads?fit_band=strong_match").json()["total"] == 0
     assert client.get("/api/leads?min_fit_score=0").json()["total"] == 0
     assert client.get(f"/api/batches/{batch.id}/fit-scores").json()["items"] == []
@@ -336,20 +356,21 @@ def test_scoring_audit_records_do_not_inflate_operational_metrics(
         first["id"], second["id"],
     }
     assert all(event.lead_id == lead.id and event.batch_id == batch.id for event in events)
-    assert all(event.event_data["profile_id"] == fit.PROFILE_ID for event in events)
+    assert all(event.event_data["targeting_hash"] == CONSISTENCY_HASH for event in events)
     skipped = client.post(f"/api/batches/{batch.id}/fit-score").json()
     assert skipped["skipped_unchanged"] == 1
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 2
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(
+        ~WorkflowEvent.event_type.like("auth_%"), ~WorkflowEvent.event_type.like("seller_profile_%"))) == 2
     metrics = client.get("/api/metrics/dashboard").json()
-    assert metrics["fit_scored_leads"] == 1
-    assert metrics["total_leads_processed"] == 0
+    assert metrics["fit_scored_leads"] == 1  # one lead, not two rows
+    assert metrics["total_leads_processed"] == 1
     assert metrics["outreach_generated"] == metrics["outreach_approved"] == 0
 
 
 def test_batch_commit_failure_counts_failed_rows_and_continues(
     client: TestClient, db_session: Session, monkeypatch
 ) -> None:
-    from app.api import fit_scoring
+    from app.services import fit_scoring
 
     batch = _batch(db_session)
     for i in range(3):
@@ -372,7 +393,8 @@ def test_batch_commit_failure_counts_failed_rows_and_continues(
     assert (run["attempted"], run["newly_scored"], run["failed"]) == (3, 1, 2)
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(LeadFitScore)) == 1
-    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(~WorkflowEvent.event_type.like("auth_%"))) == 1
+    assert db_session.scalar(select(func.count()).select_from(WorkflowEvent).where(
+        WorkflowEvent.event_type == "lead_fit_scored")) == 1
     retry = client.post(f"/api/batches/{batch.id}/fit-score").json()
     assert (retry["newly_scored"], retry["skipped_unchanged"], retry["failed"]) == (2, 1, 0)
 

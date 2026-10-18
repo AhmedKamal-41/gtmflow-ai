@@ -2,7 +2,7 @@ import type { LeadStage } from "@/lib/api";
 
 // Where a lead is in the rep's workflow (computed by GET /api/inbox).
 export const STAGE_LABELS: Record<LeadStage, string> = {
-  needs_score: "Not scored",
+  needs_score: "Not ranked",
   needs_draft: "Needs a draft",
   to_review: "To review",
   outdated: "Draft out of date",

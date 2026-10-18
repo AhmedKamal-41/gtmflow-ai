@@ -1,34 +1,31 @@
-"""Phase 4: the ONE definition of "a lead's current v2 fit score" and of
-"current readiness", shared by every endpoint that reads them (single-lead
-GET, batch bulk listing, batch summary, and GET /api/leads sort/filter).
-
-Why one module: before this, each endpoint carried its own copy of the
-version filter and "latest" ordering, and they had already started to drift
-(one checked three version fields, another would have needed a fourth).
-A lead must never be "strong_match" on the list page and something else on
-its own page because two queries disagreed about which row is current.
+"""The ONE definition of "a lead's current ranking" and of "current
+readiness", shared by every reader: single-lead and batch fit endpoints,
+GET /api/leads sort/filter, the inbox, the dashboard, batch jobs, the
+assistant, draft review and Slack delivery.
 
 Definitions:
 
-* Applicable row: `scorer_version`, `profile_id`, `profile_version` AND
-  `normalization_version` all equal the scorer's current constants. Rows
-  from any other version stay in the table as history but are never
-  "current" -- a lead scored only under an old profile reads as unscored.
-* Latest: ordered by `created_at DESC, id DESC`. `id` is the unique
-  tie-breaker for equal timestamps (rows written in the same bounded batch
-  can share one); it's arbitrary-but-fixed, so the same data always
-  resolves to the same row.
-* Current readiness: recomputed from live lead / outreach-draft / review
-  state in a bounded number of queries per page, never read back from the
-  snapshot stored at scoring time (that snapshot is historical and is
-  returned separately, labeled as such).
+* Ranking profile: the target preferences of the ACTIVE seller-profile
+  revision (`current_ranking_profile`). No active revision, or one that
+  states no target customers, means nothing is ranked -- there is no
+  fallback rubric.
+* Current row: `scorer_version`, `normalization_version` and
+  `targeting_hash` equal the ranking profile's. Rows ranked against other
+  preferences (an earlier revision's, or the retired demo rubric's) stay in
+  the table as history but are never current: their lead reads as
+  "outdated" until it is ranked again. A new revision that keeps the same
+  target preferences keeps the same hash, so its scores stay current.
+* Latest: ordered by `created_at DESC, id DESC` (`id` is the unique
+  tie-breaker for rows written in the same batch).
+* Current readiness: recomputed from live lead / draft / review state,
+  never read back from the snapshot stored at scoring time.
 """
 from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import AIOutput, AIOutputReview, Lead, LeadFitScore
@@ -37,27 +34,77 @@ from app.services.seller_profiles import active_seller_profile
 
 OUTREACH_OUTPUT_TYPE = "outreach_email"
 
+RANKING_READY = "ready"
+RANKING_NO_PROFILE = "no_active_profile"
+RANKING_SETUP_REQUIRED = "setup_required"
 
-def current_version_clause():
+
+class _Active:
+    """Sentinel: resolve the ranking profile from the active seller revision."""
+
+
+ACTIVE = _Active()
+
+
+def current_ranking_profile(session: Session) -> fit.RankingProfile | None:
+    row = active_seller_profile(session)
+    if row is None:
+        return None
+    return fit.ranking_profile_from_content(
+        row.profile,
+        source=fit.SOURCE_ACTIVE,
+        profile_id=str(row.id),
+        seller_profile_id=row.id,
+        version=str(row.version),
+    )
+
+
+def builtin_demo_ranking_profile() -> fit.RankingProfile:
+    from app.services.seller_profiles import GTMFLOW_DEMO_PROFILE
+
+    return fit.ranking_profile_from_content(
+        GTMFLOW_DEMO_PROFILE.model_dump(mode="json"),
+        source=fit.SOURCE_BUILTIN_DEMO,
+        profile_id="builtin-demo",
+        seller_profile_id=None,
+        version="demo",
+    )
+
+
+def ranking_state(profile: fit.RankingProfile | None) -> str:
+    if profile is None:
+        return RANKING_NO_PROFILE
+    return RANKING_READY if profile.is_configured else RANKING_SETUP_REQUIRED
+
+
+def _resolve(session: Session, profile) -> fit.RankingProfile | None:
+    return current_ranking_profile(session) if isinstance(profile, _Active) else profile
+
+
+def current_version_clause(profile: fit.RankingProfile | None):
+    if profile is None or not profile.is_configured:
+        return false()
     return and_(
         LeadFitScore.scorer_version == fit.SCORER_VERSION,
-        LeadFitScore.profile_id == fit.PROFILE_ID,
-        LeadFitScore.profile_version == fit.PROFILE_VERSION,
         LeadFitScore.normalization_version == fit.NORMALIZATION_VERSION,
+        LeadFitScore.targeting_hash == profile.targeting_hash,
     )
 
 
 LATEST_FIT_ORDER = (LeadFitScore.created_at.desc(), LeadFitScore.id.desc())
 
 
-def latest_fit_subquery(lead_ids: list[UUID] | None = None):
-    """One row per lead: that lead's latest applicable fit score. A window
-    function over one scan, not a correlated subquery per lead. Columns:
-    every LeadFitScore column (id, lead_id, fit_score, band, ...)."""
+def latest_fit_subquery(profile: fit.RankingProfile | None, lead_ids: list[UUID] | None = None,
+                        *, current_only: bool = True):
+    """One row per lead: that lead's latest current row (or, with
+    `current_only=False`, its latest row of any version). A window function
+    over one scan, not a correlated subquery per lead."""
     rn = func.row_number().over(
         partition_by=LeadFitScore.lead_id, order_by=LATEST_FIT_ORDER
     ).label("rn")
-    stmt = select(LeadFitScore, rn).where(current_version_clause())
+    stmt = select(LeadFitScore, rn)
+    if current_only:
+        stmt = stmt.where(current_version_clause(profile))
     if lead_ids is not None:
         stmt = stmt.where(LeadFitScore.lead_id.in_(lead_ids))
     ranked = stmt.subquery()
@@ -65,21 +112,51 @@ def latest_fit_subquery(lead_ids: list[UUID] | None = None):
 
 
 def latest_fit_scores_by_lead(
-    session: Session, lead_ids: list[UUID]
+    session: Session, lead_ids: list[UUID], profile=ACTIVE
 ) -> dict[UUID, LeadFitScore]:
-    """Bounded bulk lookup: one query for however many leads are on the
-    current page."""
-    if not lead_ids:
+    """Bounded bulk lookup of current rows: one query per page of leads."""
+    profile = _resolve(session, profile)
+    if not lead_ids or profile is None or not profile.is_configured:
         return {}
-    latest = latest_fit_subquery(lead_ids)
+    latest = latest_fit_subquery(profile, lead_ids)
     rows = session.execute(
         select(LeadFitScore).join(latest, LeadFitScore.id == latest.c.id)
     ).scalars().all()
     return {row.lead_id: row for row in rows}
 
 
-def latest_fit_score(session: Session, lead_id: UUID) -> LeadFitScore | None:
-    return latest_fit_scores_by_lead(session, [lead_id]).get(lead_id)
+def latest_fit_score(session: Session, lead_id: UUID, profile=ACTIVE) -> LeadFitScore | None:
+    return latest_fit_scores_by_lead(session, [lead_id], profile).get(lead_id)
+
+
+def latest_any_fit_scores_by_lead(session: Session, lead_ids: list[UUID]) -> dict[UUID, LeadFitScore]:
+    """Each lead's newest row of ANY version -- to show an outdated ranking
+    as outdated (never as current)."""
+    if not lead_ids:
+        return {}
+    latest = latest_fit_subquery(None, lead_ids, current_only=False)
+    rows = session.execute(
+        select(LeadFitScore).join(latest, LeadFitScore.id == latest.c.id)
+    ).scalars().all()
+    return {row.lead_id: row for row in rows}
+
+
+def ranking_counts(session: Session, profile=ACTIVE, batch_id: UUID | None = None) -> dict[str, int]:
+    """Distinct leads: total, ranked under the current preferences, ranked
+    only under other (outdated) preferences, never ranked."""
+    profile = _resolve(session, profile)
+    lead_filter = [Lead.batch_id == batch_id] if batch_id is not None else []
+    lead_ids = select(Lead.id).where(*lead_filter)
+    total = session.scalar(select(func.count()).select_from(Lead).where(*lead_filter)) or 0
+    any_rows = session.scalar(
+        select(func.count(func.distinct(LeadFitScore.lead_id))).where(LeadFitScore.lead_id.in_(lead_ids))
+    ) or 0
+    current = session.scalar(
+        select(func.count(func.distinct(LeadFitScore.lead_id)))
+        .where(LeadFitScore.lead_id.in_(lead_ids), current_version_clause(profile))
+    ) or 0
+    return {"total_leads": total, "current": current, "outdated": any_rows - current,
+            "never_ranked": total - any_rows}
 
 
 # ---------------------------------------------------------------- readiness
@@ -182,29 +259,21 @@ def current_readiness(
 
 # ----------------------------------------------------------------- summary
 
-def batch_fit_summary(session: Session, batch_id: UUID | None) -> dict[str, Any]:
-    """Distinct-lead counts from each lead's latest applicable row -- a
-    lead rescored five times counts once, in the band of its latest score.
-    `score_rows` (all applicable rows, history included) is reported
-    alongside so the difference is visible rather than silently hidden.
-    `batch_id=None` summarizes every lead (the metrics dashboard)."""
+def batch_fit_summary(session: Session, batch_id: UUID | None, profile=ACTIVE) -> dict[str, Any]:
+    """Distinct-lead counts from each lead's latest current row -- a lead
+    ranked five times counts once, in the band of its latest score.
+    `score_rows` (all current rows, history included) is reported alongside
+    so the difference is visible. `batch_id=None` summarizes every lead."""
+    profile = _resolve(session, profile)
     lead_filter = [Lead.batch_id == batch_id] if batch_id is not None else []
-    total_leads = session.scalar(
-        select(func.count()).select_from(Lead).where(*lead_filter)
-    ) or 0
     batch_lead_ids = select(Lead.id).where(*lead_filter)
-    latest = latest_fit_subquery()
+    latest = latest_fit_subquery(profile)
     band_rows = session.execute(
         select(latest.c.band, func.count(), func.sum(latest.c.fit_score))
         .where(latest.c.lead_id.in_(batch_lead_ids))
         .group_by(latest.c.band)
     ).all()
-    counts = {
-        fit.BAND_STRONG: 0,
-        fit.BAND_PARTIAL: 0,
-        fit.BAND_WEAK: 0,
-        fit.BAND_INSUFFICIENT_EVIDENCE: 0,
-    }
+    counts = {band: 0 for band in fit.BANDS}
     scored = 0
     score_sum = 0
     for band, count, band_sum in band_rows:
@@ -214,18 +283,27 @@ def batch_fit_summary(session: Session, batch_id: UUID | None) -> dict[str, Any]
     score_rows = session.scalar(
         select(func.count())
         .select_from(LeadFitScore)
-        .where(current_version_clause(), LeadFitScore.lead_id.in_(batch_lead_ids))
+        .where(current_version_clause(profile), LeadFitScore.lead_id.in_(batch_lead_ids))
     ) or 0
+    totals = ranking_counts(session, profile, batch_id)
     return {
         "batch_id": batch_id,
-        "total_leads": total_leads,
+        "ranking_state": ranking_state(profile),
+        "profile_id": profile.profile_id if profile else None,
+        "profile_version": profile.version if profile else None,
+        "targeting_hash": profile.targeting_hash if profile else None,
+        "total_leads": totals["total_leads"],
         "scored_leads": scored,
-        "unscored_leads": total_leads - scored,
+        "unscored_leads": totals["total_leads"] - scored,
+        "outdated_leads": totals["outdated"],
         "score_rows": score_rows,
         "strong_match": counts[fit.BAND_STRONG],
         "partial_match": counts[fit.BAND_PARTIAL],
         "weak_match": counts[fit.BAND_WEAK],
         "insufficient_evidence": counts[fit.BAND_INSUFFICIENT_EVIDENCE],
+        "hot": counts[fit.BAND_STRONG],
+        "warm": counts[fit.BAND_PARTIAL],
+        "cold": counts[fit.BAND_WEAK],
         "average_fit_score": round(score_sum / scored, 1) if scored else None,
     }
 

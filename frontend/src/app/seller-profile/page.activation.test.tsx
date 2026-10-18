@@ -28,6 +28,7 @@ vi.mock("@/lib/api", async () => ({
   getSellerProfileDemoTemplate: vi.fn(),
   activateSellerProfile: vi.fn(),
   deactivateSellerProfile: vi.fn(),
+  getRankingStatus: vi.fn(),
 }));
 
 function content(kind: "seller" | "demo" = "seller"): SellerProfileContent {
@@ -35,6 +36,7 @@ function content(kind: "seller" | "demo" = "seller"): SellerProfileContent {
     profile_kind: kind, company_name: kind === "demo" ? "Demo Seller" : "Fixture Seller",
     product_name: "Queue tool", value_proposition: "Organizes requests.",
     target_customer: "US medical practices.", capabilities: [], proof_points: [], exclusions: [],
+    target_preferences: { industries: ["Medical Practice"], locations: [], company_sizes: [], contact_roles: [], keywords: [] },
   };
 }
 
@@ -105,7 +107,7 @@ describe("seller profile activation", () => {
 
     vi.mocked(getSellerProfileStatus).mockResolvedValue(status(row(1), 1));
     fireEvent.click(activate);
-    await screen.findByText("Version 1 is now active. New outreach drafts will use it.");
+    await screen.findByText("Version 1 is now active. New outreach drafts and lead rankings use it.");
     expect(activateSellerProfile).toHaveBeenCalledWith("profile-1", 0, false);
     expect(within(statusRegion()).getByText("Active: version 1 · Fixture Seller")).toBeInTheDocument();
     expect(await screen.findByText("Version 1 · Fixture Seller · Active seller profile")).toBeInTheDocument();
@@ -165,7 +167,7 @@ describe("seller profile activation", () => {
 
     vi.mocked(getSellerProfileStatus).mockResolvedValue(status(row(1), 1));
     fireEvent.click(screen.getByRole("button", { name: "Activate version 1" }));
-    await screen.findByText("Version 1 is now active. New outreach drafts will use it.");
+    await screen.findByText("Version 1 is now active. New outreach drafts and lead rankings use it.");
     expect(activateSellerProfile).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("Network error")).not.toBeInTheDocument();
   });

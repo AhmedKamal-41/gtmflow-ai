@@ -19,7 +19,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.ai.client import AIConfigError, AIProviderError
-from app.models import AIOutput, Lead, LeadBatch, LeadScore, WorkflowEvent
+from app.models import AIOutput, Lead, LeadBatch
 from app.models.ai_output import PURPOSE_OPERATIONAL
 from app.models.background_job import (
     ITEM_BLOCKED,
@@ -29,7 +29,7 @@ from app.models.background_job import (
     BackgroundJob,
 )
 from app.models.lead_batch import INCOMPLETE_BATCH_STATUSES
-from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from app.models.lead import DISQUALIFIED_STATUSES
 
 
 class TransientItemError(Exception):
@@ -71,41 +71,40 @@ class Handler:
 # ------------------------------------------------------------ scoring
 
 def _fit_score(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
+    from app.scoring.fit import RankingSetupRequired
     from app.services.fit_scoring import score_leads
 
-    [(_, response, error)] = score_leads(session, [lead], persist=True, skip_unchanged=True)
+    try:
+        [(_, response, error)] = score_leads(session, [lead], persist=True, skip_unchanged=True)
+    except RankingSetupRequired as e:
+        raise JobFatalError(str(e)) from None
     if error is not None:
         return ITEM_FAILED, {"reason": f"scoring_error:{type(error).__name__}"}
     if response is None:
         return ITEM_SKIPPED, {"reason": "unchanged_inputs"}
-    return ITEM_SUCCEEDED, {"fit_score": response.fit_score, "band": response.band}
+    return ITEM_SUCCEEDED, {"fit_score": response.fit_score, "band": response.band,
+                            "priority": response.priority, "profile_version": response.profile_version}
 
 
-def _legacy_score(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
-    from app.services.legacy_scoring import apply_legacy_score
+def _ranked_batch_leads(session: Session, job: BackgroundJob) -> list[UUID]:
+    from app.scoring.fit import RankingSetupRequired
+    from app.services.fit_scoring import require_ranking_profile
 
-    result = apply_legacy_score(session, lead)
-    return ITEM_SUCCEEDED, {"total_score": result["total_score"], "priority": result["priority"]}
+    try:
+        require_ranking_profile(session)
+    except RankingSetupRequired as e:
+        raise JobFatalError(str(e)) from None
+    return _all_batch_leads(session, job)
 
 
-def _legacy_finalize(session: Session, job: BackgroundJob) -> dict[str, Any]:
-    """Same batch-level effects as POST /api/batches/{id}/score."""
-    batch = session.get(LeadBatch, job.batch_id)
-    rows = session.execute(
-        select(LeadScore.priority, LeadScore.total_score).join(Lead, Lead.id == LeadScore.lead_id)
-        .where(Lead.batch_id == job.batch_id)
-    ).all()
-    bands = {"Hot": 0, "Warm": 0, "Cold": 0}
-    for priority, _ in rows:
-        bands[priority if priority in bands else "Cold"] += 1
-    average = round(sum(t for _, t in rows) / len(rows), 1) if rows else 0.0
-    if rows and batch.status not in INCOMPLETE_BATCH_STATUSES:
-        batch.status = "scored"
-    summary = {"scored_leads": len(rows), "hot": bands["Hot"], "warm": bands["Warm"],
-               "cold": bands["Cold"], "average_score": average}
-    session.add(WorkflowEvent(batch_id=job.batch_id, event_type="batch_scored",
-                              event_data={**summary, "job_id": str(job.id)}))
-    return summary
+def _retired(name: str, replacement: str):
+    def select_leads(session: Session, job: BackgroundJob) -> list[UUID]:
+        raise JobFatalError(f"The '{name}' job type was retired; use '{replacement}' instead.")
+    return select_leads
+
+
+def _refuse_item(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
+    return ITEM_BLOCKED, {"reason": "job_type_retired"}
 
 
 # ------------------------------------------------------------ generation
@@ -156,17 +155,25 @@ def _generate(output_type: str):
 
 # ------------------------------------------------------------ Assistant selections
 
-def _assistant_params(params: dict[str, Any]) -> dict[str, Any]:
-    from app.jobs.queue import JobError
-    from app.schemas.assistant import LeadSelection
+def _selection_params(max_leads: int):
+    def validate(params: dict[str, Any]) -> dict[str, Any]:
+        from app.jobs.queue import JobError
 
-    try:
-        selection = LeadSelection.model_validate(params)
-        if not selection.lead_ids or len(set(selection.lead_ids)) != len(selection.lead_ids):
-            raise ValueError("Choose one to five distinct leads")
-    except ValueError:
-        raise JobError(400, "Choose one to five distinct lead IDs; no other options are accepted.") from None
-    return {"lead_ids": sorted(str(i) for i in selection.lead_ids)}
+        ids = params.get("lead_ids") if isinstance(params, dict) else None
+        try:
+            if set(params) != {"lead_ids"} or not isinstance(ids, list):
+                raise ValueError
+            parsed = [UUID(str(i)) for i in ids]
+            if not parsed or len(parsed) > max_leads or len(set(parsed)) != len(parsed):
+                raise ValueError
+        except (ValueError, TypeError, AttributeError):
+            raise JobError(400, f"Choose one to {max_leads} distinct lead IDs; no other options are accepted.") from None
+        return {"lead_ids": sorted(str(i) for i in parsed)}
+    return validate
+
+
+_assistant_params = _selection_params(5)
+SELECTED_OUTREACH_MAX = 25
 
 
 def validate_assistant_selection(session: Session, batch_id: UUID, params: dict) -> None:
@@ -199,16 +206,30 @@ def _assistant_outreach(session: Session, job: BackgroundJob, lead: Lead) -> tup
     return _generate("outreach_email")(session, job, lead)
 
 
+def _selected_outreach(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
+    """Drafts for leads a rep picked from the ranked list. Each lead must
+    still have a current ranking under the active seller profile -- the
+    same revision the draft is generated from -- so a draft is never built
+    on a ranking made against other target preferences."""
+    from app.services import fit_queries
+
+    if lead.status in DISQUALIFIED_STATUSES:
+        return ITEM_BLOCKED, {"reason": f"lead_status:{lead.status}"}
+    profile = fit_queries.current_ranking_profile(session)
+    if fit_queries.latest_fit_score(session, lead.id, profile) is None:
+        return ITEM_BLOCKED, {"reason": "ranking_not_current"}
+    return _assistant_outreach(session, job, lead)
+
+
 # ------------------------------------------------------------ Slack push
 
 def _hot_leads(session: Session, job: BackgroundJob) -> list[UUID]:
+    from app.services.integration_push import current_hot_lead_ids
+
     batch = session.get(LeadBatch, job.batch_id)
     if batch.status in INCOMPLETE_BATCH_STATUSES:
         raise JobFatalError(f"Batch is only partially imported (status='{batch.status}'); excluded from routing.")
-    return list(session.scalars(
-        select(Lead.id).join(LeadScore, LeadScore.lead_id == Lead.id)
-        .where(Lead.batch_id == job.batch_id, LeadScore.priority == "Hot").order_by(Lead.id)
-    ))
+    return current_hot_lead_ids(session, job.batch_id)
 
 
 def _push(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[str, Any]]:
@@ -219,11 +240,13 @@ def _push(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[s
         DeliveryOutcomeUnknownError,
         IncompleteImportError,
         deliver_lead_to_slack,
+        current_ranking,
         lead_has_successful_slack_push,
     )
 
-    if lead.score is None or lead.score.priority != "Hot":
-        return ITEM_SKIPPED, {"reason": "no_longer_hot"}  # rescored since the job was queued
+    ranking = current_ranking(session, lead)
+    if ranking is None or ranking.band != "strong_match":
+        return ITEM_SKIPPED, {"reason": "no_longer_hot"}  # re-ranked since the job was queued
     if not job.params.get("force", False) and lead_has_successful_slack_push(session, lead.id):
         return ITEM_SKIPPED, {"reason": "already_pushed"}
     try:
@@ -254,10 +277,15 @@ def _push(session: Session, job: BackgroundJob, lead: Lead) -> tuple[str, dict[s
 
 
 HANDLERS: dict[str, Handler] = {
-    "fit_score": Handler(_bool_params({}), _all_batch_leads, _fit_score),
-    "legacy_score": Handler(_bool_params({}), _all_batch_leads, _legacy_score, _legacy_finalize),
+    "fit_score": Handler(_bool_params({}), _ranked_batch_leads, _fit_score),
+    # Retired: the fixed-term v1 priority score. Refused at enqueue
+    # (RETIRED_JOB_TYPES); a job queued before the upgrade fails cleanly.
+    "legacy_score": Handler(_bool_params({}), _retired("legacy_score", "fit_score"), _refuse_item),
     "generate_summary": Handler(_bool_params({"skip_existing": True}), _all_batch_leads, _generate("company_summary")),
     "generate_outreach": Handler(_bool_params({"skip_existing": True}), _all_batch_leads, _generate("outreach_email")),
     "push_hot": Handler(_bool_params({"force": False}), _hot_leads, _push),
     "assistant_outreach": Handler(_assistant_params, _assistant_leads, _assistant_outreach),
+    "selected_outreach": Handler(_selection_params(SELECTED_OUTREACH_MAX), _assistant_leads, _selected_outreach),
 }
+RETIRED_JOB_TYPES = frozenset({"legacy_score"})
+SELECTION_JOB_TYPES = frozenset({"assistant_outreach", "selected_outreach"})

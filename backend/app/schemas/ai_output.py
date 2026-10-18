@@ -60,7 +60,7 @@ class AIOutputRead(AIOutputBase):
         """Identity of the exact content shown; reviews must send it back."""
         return _content_hash(self.content)
 
-    # Phase 10: runtime quality checks (runtime-checks-v1), computed from the
+    # Phase 10: runtime quality checks (CHECKS_VERSION), computed from the
     # stored content and the input snapshot it was generated from. Flags ask
     # for review; they never approve, reject or change anything.
     @computed_field  # type: ignore[prop-decorator]

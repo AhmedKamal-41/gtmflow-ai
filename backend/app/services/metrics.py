@@ -28,11 +28,16 @@ Phase 11 (audit E.1, D.4/E.3):
   webhook versus a real Slack webhook). Each breakdown sums to the matching
   top-level totals. ``data_mode`` says whether anything real is in the data.
 
-The v2 company-fit counts (``fit_*``) are distinct LEADS, each counted
-once in the band of its latest applicable score (see
-app/services/fit_queries.py) -- rescoring adds history rows but never
-moves these numbers unless a lead's latest band actually changed. They are
-reported separately from the legacy Hot/Warm/Cold counts, never merged.
+Ranking counts (``hot_leads``/``warm_leads``/``cold_leads``, ``fit_*``,
+``total_leads_processed``, ``average_lead_score``) are distinct LEADS with a
+current ranking against the active seller profile's target customers, each
+counted once in the band of its latest current ranking (see
+app/services/fit_queries.py). Ranking again adds history rows but never
+moves these numbers unless a lead's band changed; leads ranked only against
+earlier target preferences are ``fit_outdated_leads``, not counted as ranked.
+Hot = strong match, Warm = partial, Cold = weak; "needs data"
+(insufficient evidence) is ``fit_insufficient_evidence``. The retired v1
+priority scores (``lead_scores``) are not read.
 """
 
 from __future__ import annotations
@@ -42,7 +47,7 @@ from typing import Any
 from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import AIOutput, AIOutputReview, IntegrationPush, Lead, LeadScore, WorkflowEvent
+from app.models import AIOutput, AIOutputReview, IntegrationPush, Lead, WorkflowEvent
 from app.models.ai_output import PURPOSE_OPERATIONAL
 from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
 from app.services.fit_queries import batch_fit_summary
@@ -120,11 +125,12 @@ def _push_mode(delivery_mode: str | None, status: str) -> str:
 
 def compute_dashboard(session: Session) -> dict[str, Any]:
     total_leads_uploaded = _count(session, Lead)
-    total_leads_processed = _count(session, LeadScore)
+    fit = batch_fit_summary(session, None)
+    total_leads_processed = fit["scored_leads"]
 
-    hot_leads = _count(session, LeadScore, LeadScore.priority == "Hot")
-    warm_leads = _count(session, LeadScore, LeadScore.priority == "Warm")
-    cold_leads = _count(session, LeadScore, LeadScore.priority == "Cold")
+    hot_leads = fit["hot"]
+    warm_leads = fit["warm"]
+    cold_leads = fit["cold"]
 
     # One cohort: distinct operational outreach drafts, by latest review.
     draft_modes = _draft_modes(session)
@@ -201,10 +207,7 @@ def compute_dashboard(session: Session) -> dict[str, Any]:
     )
     estimated_time_saved_hours = round(estimated_time_saved_minutes / 60, 2)
 
-    avg_score_raw = session.scalar(select(func.avg(LeadScore.total_score)))
-    average_lead_score = (
-        round(float(avg_score_raw), 2) if avg_score_raw is not None else 0.0
-    )
+    average_lead_score = float(fit["average_fit_score"]) if fit["average_fit_score"] is not None else 0.0
 
     missing_data_count = _count(
         session,
@@ -220,9 +223,10 @@ def compute_dashboard(session: Session) -> dict[str, Any]:
 
     automation_coverage = _pct(total_leads_processed, total_leads_uploaded)
 
-    fit = batch_fit_summary(session, None)
-
     return {
+        "ranking_state": fit["ranking_state"],
+        "ranking_profile_version": fit["profile_version"],
+        "fit_outdated_leads": fit["outdated_leads"],
         "fit_scored_leads": fit["scored_leads"],
         "fit_strong_match": fit["strong_match"],
         "fit_partial_match": fit["partial_match"],

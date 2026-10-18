@@ -12,6 +12,7 @@ import { ErrorMessage } from "@/components/ErrorMessage";
 import { Icon, type IconName } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PriorityBadge } from "@/components/PriorityBadge";
+import { RankingBanner } from "@/components/RankingBanner";
 import { StageBadge } from "@/components/StageBadge";
 import { APIError, getInbox, getSellerProfileStatus, type InboxItem, type InboxPage, type LeadStage } from "@/lib/api";
 import { SAMPLE_CSV_URL, loadSampleLeads } from "@/lib/sampleData";
@@ -142,14 +143,15 @@ export default function TodayPage() {
             <Icon name="target" className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1 text-sm">
-            <div className="font-semibold text-slate-900">One step before drafting: tell GTMFlow what you sell</div>
-            <div className="text-slate-600">Drafts may only describe your product the way your seller profile does.</div>
+            <div className="font-semibold text-slate-900">One step first: tell GTMFlow what you sell and who you want as customers</div>
+            <div className="text-slate-600">Leads are ranked against your target customers, and drafts may only describe your product the way your seller profile does.</div>
           </div>
           <Link href="/seller-profile" className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
             Set up seller profile
           </Link>
         </div>
       )}
+      {sellerActive === true && <RankingBanner onRecalculated={() => void load()} />}
       {counts.delivery_unknown > 0 && (
         <div role="alert" className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           <Icon name="alert" className="h-4 w-4 flex-none" />
@@ -174,7 +176,7 @@ export default function TodayPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-        <Card title="Next up" subtitle="Highest-priority leads that need you, Hot first."
+        <Card title="Next up" subtitle="Leads that best match your target customers and need you, Hot first."
           actions={<Link href="/leads" className="text-sm font-medium text-brand-700 hover:underline">All leads</Link>}
           padding="none">
           {next.length === 0 ? (

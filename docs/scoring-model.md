@@ -1,5 +1,10 @@
 # Scoring model
 
+> **Outdated (2026-10-18).** This page describes the retired fixed-term 100-point score. Leads are
+> now ranked against the active seller profile's target customers; see
+> [PROJECT.md section 8](../PROJECT.md#8-scoring) for the current formula, weights, thresholds,
+> missing-data rules and versioning.
+
 A deterministic, explainable 100-point fit score. No LLM in the loop, every score is reproducible from the lead fields alone.
 
 ## Why deterministic

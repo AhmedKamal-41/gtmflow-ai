@@ -28,13 +28,26 @@ class InboxItem(BaseModel):
     industry: str | None
     batch_id: UUID
     batch_name: str | None
+    # Current ranking against the active seller profile's target customers.
+    # priority None with a band = "needs data"; no band = not ranked (yet,
+    # or only against earlier target preferences: ranking_outdated).
     priority: Literal["Hot", "Warm", "Cold"] | None
     score: int | None
+    band: str | None
+    evidence_coverage_pct: float | None
+    ranking_reason: str | None
+    ranking_outdated: bool
     stage: Stage
     delivery_unknown: bool
     draft_model: str | None
     blocked: bool
     updated_at: datetime
+
+
+class RankingState(BaseModel):
+    state: Literal["ready", "no_active_profile", "setup_required"]
+    profile_version: str | None
+    profile_kind: str | None
 
 
 class InboxPage(BaseModel):
@@ -43,6 +56,7 @@ class InboxPage(BaseModel):
     limit: int
     offset: int
     counts: dict[str, int]
+    ranking: RankingState
 
 
 class AIStatus(BaseModel):
@@ -59,13 +73,14 @@ class AIStatus(BaseModel):
 @router.get("/inbox", response_model=InboxPage)
 def get_inbox(
     stage: Stage | None = None,
-    priority: Literal["Hot", "Warm", "Cold"] | None = None,
+    priority: Literal["Hot", "Warm", "Cold", "needs_data"] | None = None,
     q: str | None = Query(None, max_length=100),
     pagination: tuple[int, int] = Depends(pagination_params),
     session: Session = Depends(get_session),
 ) -> dict:
-    """Every lead with its priority and workflow stage, Hot first. Stages:
-    needs_score, needs_draft, to_review, outdated, rejected, approved, sent."""
+    """Every lead with its current ranking and workflow stage, Hot first.
+    Stages: needs_score, needs_draft, to_review, outdated, rejected,
+    approved, sent. `ranking.state` says whether leads can be ranked."""
     limit, offset = pagination
     return query_inbox(session, stage=stage, priority=priority, q=q, limit=limit, offset=offset)
 

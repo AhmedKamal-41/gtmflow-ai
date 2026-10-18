@@ -191,17 +191,22 @@ def test_strong_fit_is_not_treated_as_buying_intent(client):
     save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     lead = upload(
         client,
-        b"company_name,industry,country,notes\nStrong Fit Clinic,medical practice,united states,"
+        b"company_name,industry,company_size,contact_title,notes\nStrong Fit Clinic,Clinic,120,Practice Manager,"
         b"patient scheduling pain and intake backlog\n",
     )
     fit_row = client.post(f"/api/leads/{lead['id']}/fit-score").json()
-    assert fit_row["band"] == "strong_match"
+    assert fit_row["band"] == "strong_match" and fit_row["fit_score"] == 100
 
     summary = client.post(f"/api/leads/{lead['id']}/generate-summary").json()
     outreach = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
     fit_block = summary["input_snapshot"]["company_fit"]
     assert fit_block["band"] == "strong_match"
     assert "not evidence of interest" in fit_block["meaning"]
+    assert "do not say or imply that the company needs the product" in fit_block["meaning"]
+    # The draft is built on the ranking made with the same seller revision.
+    assert fit_row["seller_profile_id"] == outreach["seller_profile_id"]
+    assert fit_block["targeting_hash"] == fit_row["targeting_hash"]
+    assert outreach["quality_flags"] == []  # no presumed need or intent
     for unknown in ("buying_intent", "budget", "current_operational_problems"):
         assert unknown in summary["content"]["unknowns"]
         assert unknown in outreach["content"]["unknowns_acknowledged"]

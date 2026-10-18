@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import CompanyIdentity, ImportRun, Lead, SourceSnapshot
+from tests.conftest import rank_batch
 
 CSV = (
     "company_name,industry,contact_title,contact_name,contact_email,website,company_size,source,notes\n"
@@ -29,7 +30,7 @@ def _upload_and_score(client: TestClient) -> dict:
     up = client.post(
         "/api/batches/upload", files=files, data={"batch_name": "provenance-test"}
     ).json()
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     return client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
 
 

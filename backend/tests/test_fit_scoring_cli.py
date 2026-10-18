@@ -1,6 +1,7 @@
-"""Phase 4 Part F: the bounded, reproducible, dry-run-capable CLI command
-that scores the real cohort (app/scoring/cli.py's score_cohort). Tested
-against a disposable session factory, never the real database.
+"""The bounded, reproducible, dry-run-capable CLI command that ranks
+imported leads against the active seller profile (app/scoring/cli.py's
+score_cohort). Tested against a disposable session factory, never the real
+database.
 """
 from __future__ import annotations
 
@@ -8,11 +9,29 @@ import uuid
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import Lead, LeadBatch, LeadFitScore
-from app.scoring.cli import score_cohort
+from app.models import Lead, LeadBatch, LeadFitScore, SellerProfile, SellerProfileActivation
+from app.scoring.cli import main, score_cohort
+from app.services.seller_profiles import profile_content_hash
+from tests.conftest import SYNTHETIC_SELLER_PROFILE, US_SECTOR_PREFERENCES
+
+
+def _activate_profile(db_session: Session) -> None:
+    """An active seller revision targeting US healthcare and real estate,
+    written directly (this CLI has no HTTP layer)."""
+    content = {**SYNTHETIC_SELLER_PROFILE, "target_preferences": US_SECTOR_PREFERENCES}
+    row = SellerProfile(id=uuid.uuid4(), version=1, profile=content,
+                        content_hash=profile_content_hash(content), editor_label="test")
+    db_session.add(row)
+    db_session.flush()
+    db_session.add(SellerProfileActivation(
+        id=uuid.uuid4(), sequence=1, seller_profile_id=row.id, seller_profile_version=1,
+        content_hash=row.content_hash, action="activate", reviewed_confirmation=True,
+        demo_acknowledged=False, actor_label="test"))
+    db_session.commit()
 
 
 def _seed_leads(db_session: Session) -> LeadBatch:
+    _activate_profile(db_session)
     batch = LeadBatch(name="cli-test", source="pdl", status="uploaded")
     db_session.add(batch)
     db_session.flush()
@@ -77,7 +96,7 @@ def test_real_run_persists_one_row_per_lead(
 
     assert summary["band_counts"].get("strong_match") == 2  # both full matches
     assert summary["fit_score_distribution"]["max"] == 100
-    assert summary["fit_score_distribution"]["min"] == 40  # Weak Health Co: country only
+    assert summary["fit_score_distribution"]["min"] == 36  # Weak Health Co: location only (20 of 55)
 
 
 def test_default_rerun_skips_unchanged_leads_and_writes_nothing(
@@ -132,7 +151,7 @@ def test_changed_inputs_are_rescored_even_by_default(
     weak = db_session.execute(
         sa.select(Lead).where(Lead.company_name == "Weak Health Co")
     ).scalar_one()
-    weak.industry = "Medical Practice"
+    weak.industry = "Hospital & Health Care"
     db_session.commit()
 
     second = score_cohort(db_session_factory, dry_run=False, chunk_size=2)
@@ -149,10 +168,10 @@ def test_one_failing_lead_does_not_sink_its_chunk(
 
     real = fit_module.compute_fit
 
-    def flaky(lead):
+    def flaky(lead, profile):
         if lead.company_name == "Strong Realty Co":
             raise ValueError("bad input")
-        return real(lead)
+        return real(lead, profile)
 
     monkeypatch.setattr(fit_module, "compute_fit", flaky)
     summary = score_cohort(db_session_factory, dry_run=False, chunk_size=10)
@@ -226,3 +245,22 @@ def test_a_failed_audit_write_rolls_back_its_score_without_losing_other_leads(
     assert db_session.scalar(select(func.count()).select_from(LeadFitScore)) == 2
     assert db_session.scalar(select(func.count()).select_from(WorkflowEvent)) == 2
     assert db_session.scalar(select(LeadFitScore.id).where(LeadFitScore.lead_id == failing_id)) is None
+
+
+def test_without_an_active_target_profile_the_cli_refuses_and_writes_nothing(
+    db_session: Session, db_session_factory: sessionmaker[Session], monkeypatch, capsys
+) -> None:
+    from app.scoring import cli
+
+    batch = LeadBatch(name="cli-test", source="pdl", status="uploaded")
+    db_session.add(batch)
+    db_session.flush()
+    db_session.add(Lead(id=uuid.uuid4(), batch_id=batch.id, company_name="Any Co",
+                        industry="Hospital & Health Care", source="pdl_import", status="new"))
+    db_session.commit()
+    monkeypatch.setattr(cli, "get_sessionmaker", lambda: db_session_factory)
+    assert main([]) == 2
+    assert "ranking_setup_required" in capsys.readouterr().out
+    import sqlalchemy as sa
+
+    assert db_session.execute(sa.select(LeadFitScore)).scalars().all() == []

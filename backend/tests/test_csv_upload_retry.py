@@ -10,6 +10,7 @@ a nonexistent batch id is rejected.
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from tests.conftest import rank_batch
 
 CSV_TEXT = (
     "company_name,industry,contact_title,company_size,source\n"
@@ -214,7 +215,7 @@ def test_resume_preserves_incomplete_batch_push_routing_restriction(
     assert batch["status"] == "partial"
     assert batch["processed_leads"] == 2
 
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
     push_response = client.post(
         f"/api/batches/{batch_id}/push-hot",
         json={"integration_type": "slack", "force": True},

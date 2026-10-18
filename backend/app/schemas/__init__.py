@@ -10,13 +10,6 @@ from app.schemas.integration_push import (
 )
 from app.schemas.lead import LeadBase, LeadCreate, LeadRead
 from app.schemas.lead_batch import LeadBatchBase, LeadBatchCreate, LeadBatchRead
-from app.schemas.lead_score import (
-    BatchScoreSummary,
-    LeadScoreBase,
-    LeadScoreCreate,
-    LeadScoreRead,
-    LeadScoreResponse,
-)
 from app.schemas.metrics import MetricsDashboard
 from app.schemas.outreach_review import (
     OutreachReviewResponse,
@@ -34,7 +27,6 @@ __all__ = [
     "AIOutputRead",
     "BatchPushResult",
     "BatchPushSummary",
-    "BatchScoreSummary",
     "BatchUploadError",
     "BatchUploadResponse",
     "IntegrationPushBase",
@@ -46,10 +38,6 @@ __all__ = [
     "LeadBatchRead",
     "LeadCreate",
     "LeadRead",
-    "LeadScoreBase",
-    "LeadScoreCreate",
-    "LeadScoreRead",
-    "LeadScoreResponse",
     "MetricsDashboard",
     "OutreachReviewResponse",
     "PushRequest",

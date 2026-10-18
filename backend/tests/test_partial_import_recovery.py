@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from tests.conftest import approve_current_draft
+from tests.conftest import approve_current_draft, rank_batch
 
 
 def _transport_spy(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
@@ -75,7 +75,7 @@ def test_partial_batch_excluded_from_batch_push_even_with_force(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     batch_id = _upload_partial_batch(client, monkeypatch)
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
 
     calls = _transport_spy(monkeypatch)
     response = client.post(
@@ -103,7 +103,7 @@ def test_complete_batch_is_not_affected_by_the_partial_guard(
     assert batch["status"] == "uploaded"
 
     leads = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"]
-    client.post(f"/api/leads/{leads[0]['id']}/score")
+    client.post(f"/api/leads/{leads[0]['id']}/fit-score")
     approve_current_draft(client, leads[0]["id"])
     response = client.post(
         f"/api/leads/{leads[0]['id']}/push",

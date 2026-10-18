@@ -1,21 +1,21 @@
-"""Phase 4 Parts C/D/E: API surface for the v2 deterministic company-fit
-scorer. Additive -- does not call or alter anything in app/api/scoring.py
-(the legacy v1 endpoints), and never mutates Lead.status / LeadBatch.status
-/ AIOutputReview, never generates or approves a draft, never sends (Part
-D.3).
+"""API surface for lead ranking against the active seller profile's target
+customers (app/scoring/fit.py). Ranking never mutates Lead.status /
+LeadBatch.status / AIOutputReview, never generates or approves a draft,
+never sends.
 
-Every read of "the current fit score" or "current readiness" goes through
-app/services/fit_queries.py, so single-lead, bulk, summary, and list
-endpoints can't disagree about which stored row is current.
+Every read of "the current ranking" or "current readiness" goes through
+app/services/fit_queries.py, so single-lead, bulk, summary, list, inbox and
+delivery reads can't disagree about which stored row is current.
+
+When no seller profile is active, or the active one states no target
+customers, ranking endpoints answer 409 with the setup message -- they
+never fall back to another rubric.
 
 Two kinds of readiness appear in responses, deliberately kept apart:
 
 * `readiness` / `eligibility` -- CURRENT, recomputed from live lead,
-  batch, draft, and review state on every read (`readiness_is_current` is
-  always true).
-* `at_scoring` -- the HISTORICAL readiness/eligibility snapshot stored
-  with the score row, i.e. what was true when it was
-  computed. Useful for auditing; never used to gate anything.
+  batch, draft, and review state on every read.
+* `at_scoring` -- the HISTORICAL snapshot stored with the score row.
 """
 from __future__ import annotations
 
@@ -26,25 +26,38 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
-from app.models import Lead, LeadBatch
+from app.models import Lead, LeadBatch, WorkflowEvent
 from app.schemas.lead_fit_score import (
     BatchFitScoreRunSummary,
     BatchFitSummary,
     CurrentReadinessResponse,
-    FitProfileResponse,
     LeadFitScoreResponse,
+    RankingRunSummary,
+    RankingStatusResponse,
 )
 from app.schemas.pagination import Page
 from app.scoring import fit
 from app.services import fit_queries
-from app.services.fit_scoring import fit_score_response, score_leads
+from app.services.fit_scoring import fit_score_response, rank_in_chunks, score_leads
 from app.services.pagination import pagination_params
 
 router = APIRouter(tags=["fit-scoring"])
 
-# Leads scored per DB transaction by the batch endpoint -- bounded memory
-# and bounded transaction size regardless of batch size.
-SCORE_CHUNK_SIZE = 500
+STATE_MESSAGES = {
+    fit_queries.RANKING_READY: "Leads are ranked against the active seller profile's target customers.",
+    fit_queries.RANKING_NO_PROFILE: (
+        "No seller profile is active. Describe what you sell and who you want as customers, "
+        "then activate the profile to rank leads."
+    ),
+    fit_queries.RANKING_SETUP_REQUIRED: (
+        "The active seller profile has no target customers. Add industries, locations, company "
+        "sizes, contact roles or keywords, then save and activate it to rank leads."
+    ),
+}
+
+
+def _setup_required(error: fit.RankingSetupRequired) -> HTTPException:
+    return HTTPException(status_code=409, detail=str(error))
 
 
 @router.post(
@@ -53,12 +66,15 @@ SCORE_CHUNK_SIZE = 500
     status_code=status.HTTP_201_CREATED,
 )
 def score_lead_fit(lead_id: UUID, session: Session = Depends(get_session)) -> LeadFitScoreResponse:
-    """Computes and PERSISTS a new versioned row. Rescoring never mutates
-    or replaces a prior row -- both remain queryable (Part D.1/D.6)."""
+    """Ranks the lead against the active profile and PERSISTS a new row.
+    Ranking again never mutates or replaces a prior row."""
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    [(_, response, error)] = score_leads(session, [lead], persist=True)
+    try:
+        [(_, response, error)] = score_leads(session, [lead], persist=True)
+    except fit.RankingSetupRequired as e:
+        raise _setup_required(e) from None
     if error is not None:
         raise error
     session.commit()
@@ -73,18 +89,23 @@ def score_lead_fit(lead_id: UUID, session: Session = Depends(get_session)) -> Le
 def get_latest_lead_fit_score(
     lead_id: UUID, session: Session = Depends(get_session)
 ) -> LeadFitScoreResponse:
-    """The latest applicable stored fit/band/coverage/criteria, exactly as
-    computed, plus CURRENT readiness/eligibility (Part D.4: a stored
-    snapshot must not be trusted after lead/batch/outreach state changed)."""
+    """The lead's current ranking (`is_current` true). If it was only ever
+    ranked against other target preferences, its latest such ranking is
+    returned with `is_current` false -- shown as outdated, never used as
+    current. 404 when it was never ranked."""
     lead = session.get(Lead, lead_id)
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
-    stored = fit_queries.latest_fit_score(session, lead_id)
+    profile = fit_queries.current_ranking_profile(session)
+    stored = fit_queries.latest_fit_score(session, lead_id, profile)
     if stored is None:
-        raise HTTPException(status_code=404, detail="Lead has not been fit-scored yet")
+        stored = fit_queries.latest_any_fit_scores_by_lead(session, [lead_id]).get(lead_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Lead has not been ranked yet")
     readiness, eligibility = fit_queries.current_readiness(session, lead)
     return fit_score_response(
-        lead=lead, row=stored, fit_result=None, readiness=readiness, eligibility=eligibility
+        lead=lead, row=stored, fit_result=None, readiness=readiness, eligibility=eligibility,
+        current=profile,
     )
 
 
@@ -109,31 +130,44 @@ def get_current_readiness(
     )
 
 
-@router.get("/api/scoring/fit-profile", response_model=FitProfileResponse)
-def get_fit_profile() -> FitProfileResponse:
-    return FitProfileResponse(
-        profile_id=fit.PROFILE_ID,
-        profile_version=fit.PROFILE_VERSION,
+@router.get("/api/scoring/profile", response_model=RankingStatusResponse)
+def get_ranking_profile(session: Session = Depends(get_session)) -> RankingStatusResponse:
+    """What leads are ranked against right now, the fixed rules (weights and
+    thresholds), and how many leads are ranked, outdated or unranked."""
+    profile = fit_queries.current_ranking_profile(session)
+    state = fit_queries.ranking_state(profile)
+    counts = fit_queries.ranking_counts(session, profile)
+    return RankingStatusResponse(
+        state=state,
+        message=STATE_MESSAGES[state],
+        profile=profile.describe() if profile is not None else None,
         scorer_version=fit.SCORER_VERSION,
         normalization_version=fit.NORMALIZATION_VERSION,
-        description=(
-            "Broad demonstration profile -- NOT a calibrated ideal-customer "
-            "profile. Awards points for exact industry/country membership "
-            "only; every other signal (website, contact details, founded "
-            "year, name keywords, dataset provider) carries zero weight "
-            "until a real seller profile is configured (Phase 5)."
-        ),
-        industry_match_values=sorted(fit.INDUSTRY_MATCH_VALUES),
-        industry_weight=fit.INDUSTRY_WEIGHT,
-        country_match_values=sorted(fit.COUNTRY_MATCH_VALUES),
-        country_weight=fit.COUNTRY_WEIGHT,
-        size_weight=fit.SIZE_WEIGHT,
-        zero_weight_criteria=list(fit.ZERO_WEIGHT_CRITERIA),
-        max_fit_score=fit.MAX_FIT_SCORE,
-        coverage_threshold_pct=fit.COVERAGE_THRESHOLD_PCT,
-        band_strong_min=fit.BAND_STRONG_MIN,
-        band_partial_min=fit.BAND_PARTIAL_MIN,
+        weights=fit.WEIGHTS,
+        labels=fit.LABELS,
+        hot_min=fit.HOT_MIN,
+        warm_min=fit.WARM_MIN,
+        coverage_min_pct=fit.COVERAGE_MIN_PCT,
+        partial_credit=fit.PARTIAL_CREDIT,
+        total_leads=counts["total_leads"],
+        current_rankings=counts["current"],
+        outdated_rankings=counts["outdated"],
+        never_ranked=counts["never_ranked"],
     )
+
+
+@router.post("/api/scoring/recalculate", response_model=RankingRunSummary)
+def recalculate_rankings(session: Session = Depends(get_session)) -> RankingRunSummary:
+    """Rank every lead in the workspace against the active profile, in
+    committed chunks. Leads already ranked with identical inputs are
+    skipped, so it is safe to repeat; earlier rankings are kept as history."""
+    try:
+        summary = rank_in_chunks(session)
+    except fit.RankingSetupRequired as e:
+        raise _setup_required(e) from None
+    session.add(WorkflowEvent(event_type="rankings_recalculated", event_data=summary))
+    session.commit()
+    return RankingRunSummary(**summary)
 
 
 @router.post(
@@ -142,55 +176,26 @@ def get_fit_profile() -> FitProfileResponse:
     status_code=status.HTTP_200_OK,
 )
 def score_batch_fit(batch_id: UUID, session: Session = Depends(get_session)) -> BatchFitScoreRunSummary:
-    """Scores every lead in the batch in chunks of SCORE_CHUNK_SIZE, one
-    committed transaction per chunk. Leads whose latest applicable row has
-    the same input fingerprint are skipped (reported, not rescored), so
-    pressing the button twice doesn't pile up identical history rows.
-    Never touches LeadBatch.status or Lead.status (Part D.3) -- a partial
-    batch stays partial and nothing becomes contactable by being scored.
-
-    The response's run counts describe THIS run; `summary` is the batch's
-    distinct-lead state afterwards (see GET /api/batches/{id}/fit-summary).
-    """
+    """Ranks every lead in the batch against the active profile, one
+    committed transaction per chunk. Leads whose latest current row has the
+    same input fingerprint are skipped (reported, not ranked again). Never
+    touches LeadBatch.status or Lead.status -- a partial batch stays
+    partial and nothing becomes contactable by being ranked."""
     batch = session.get(LeadBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=404, detail="Batch not found")
-
-    lead_ids = list(
-        session.execute(
-            select(Lead.id).where(Lead.batch_id == batch_id).order_by(Lead.id)
-        ).scalars()
-    )
-    scored = skipped = failed = 0
-    for start in range(0, len(lead_ids), SCORE_CHUNK_SIZE):
-        chunk_ids = lead_ids[start : start + SCORE_CHUNK_SIZE]
-        leads = list(
-            session.execute(select(Lead).where(Lead.id.in_(chunk_ids))).scalars()
-        )
-        chunk_scored = 0
-        for _, response, error in score_leads(
-            session, leads, persist=True, skip_unchanged=True
-        ):
-            if error is not None:
-                failed += 1
-            elif response is None:
-                skipped += 1
-            else:
-                chunk_scored += 1
-        try:
-            session.commit()
-        except Exception:  # a failed chunk must not be reported as scored
-            session.rollback()
-            failed += chunk_scored
-        else:
-            scored += chunk_scored
-
+    try:
+        run = rank_in_chunks(session, batch_id=batch_id)
+    except fit.RankingSetupRequired as e:
+        raise _setup_required(e) from None
     return BatchFitScoreRunSummary(
         batch_id=batch_id,
-        attempted=len(lead_ids),
-        newly_scored=scored,
-        skipped_unchanged=skipped,
-        failed=failed,
+        profile_id=run["profile_id"],
+        profile_version=run["profile_version"],
+        attempted=run["attempted"],
+        newly_scored=run["newly_scored"],
+        skipped_unchanged=run["skipped_unchanged"],
+        failed=run["failed"],
         summary=BatchFitSummary(**fit_queries.batch_fit_summary(session, batch_id)),
     )
 
@@ -202,8 +207,8 @@ def score_batch_fit(batch_id: UUID, session: Session = Depends(get_session)) -> 
 def get_batch_fit_summary(
     batch_id: UUID, session: Session = Depends(get_session)
 ) -> BatchFitSummary:
-    """Distinct-lead band counts from each lead's latest applicable score --
-    rescoring never inflates these."""
+    """Distinct-lead band counts from each lead's latest current ranking --
+    ranking again never inflates these."""
     if session.get(LeadBatch, batch_id) is None:
         raise HTTPException(status_code=404, detail="Batch not found")
     return BatchFitSummary(**fit_queries.batch_fit_summary(session, batch_id))
@@ -264,7 +269,7 @@ def list_batch_fit_scores(
     """Paginated bulk lookup over the batch's leads, in the same order as
     GET /api/leads?batch_id=... (created_at DESC, id DESC). Pagination is
     over LEADS, so `total` is the batch's lead count and a page's `items`
-    omits leads on that page that have never been fit-scored. A constant
+    omits leads on that page with no current ranking. A constant
     number of queries per page: leads, latest fit rows, latest drafts,
     their latest reviews. Readiness/eligibility in each item are current.
     """
@@ -283,7 +288,8 @@ def list_batch_fit_scores(
     ) or 0
     leads = list(session.execute(lead_stmt.limit(limit).offset(offset)).scalars())
 
-    scores_by_lead = fit_queries.latest_fit_scores_by_lead(session, [lead.id for lead in leads])
+    profile = fit_queries.current_ranking_profile(session)
+    scores_by_lead = fit_queries.latest_fit_scores_by_lead(session, [lead.id for lead in leads], profile)
     scored_leads = [lead for lead in leads if lead.id in scores_by_lead]
     readiness_by_lead = fit_queries.current_readiness_by_lead(session, scored_leads)
 
@@ -297,6 +303,7 @@ def list_batch_fit_scores(
                 fit_result=None,
                 readiness=readiness,
                 eligibility=eligibility,
+                current=profile,
             )
         )
 

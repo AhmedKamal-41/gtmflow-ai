@@ -53,19 +53,34 @@ def test_inbox_needs_a_session(anon_client):
     assert anon_client.get("/api/ai/status").status_code == 401
 
 
+def test_inbox_without_target_customers_says_setup_is_required(operator):
+    operator.post("/api/demo/run")
+    page = operator.get("/api/inbox?limit=100").json()
+    assert page["ranking"]["state"] == "no_active_profile"
+    # The demo ranked with its own profile; nothing is presented as ranked here.
+    assert all(item["priority"] is None and item["score"] is None for item in page["items"])
+    assert page["counts"]["hot"] == 0
+
+
 def test_inbox_ranks_hot_first_and_tracks_each_stage(operator):
+    # The workspace uses the demonstration template, the same target
+    # customers the demo ranks with, so the demo's rankings are current.
+    _activate_demo_seller(operator)
     assert operator.post("/api/demo/run").status_code == 201
     page = operator.get("/api/inbox?limit=100").json()
+    assert page["ranking"] == {"state": "ready", "profile_version": "1", "profile_kind": "demo"}
     assert page["total"] == 10 and page["counts"]["all"] == 10 and page["counts"]["hot"] == 2
     priorities = [item["priority"] for item in page["items"]]
     assert priorities == sorted(priorities, key=["Hot", "Warm", "Cold"].index)
+    scores = [item["score"] for item in page["items"]]
+    assert scores == sorted(scores, reverse=True)
     leads = _by_company(page)
-    assert leads["Cascade Modular Homes"]["stage"] == "sent"  # approved and delivered by the demo
+    assert leads["Loopline Software"]["stage"] == "sent"  # approved and delivered by the demo
+    assert leads["Loopline Software"]["ranking_reason"].startswith("Target-customer fit: matches industry")
     assert page["counts"]["sent"] == 2 and page["counts"]["needs_draft"] == 8
 
-    _activate_demo_seller(operator)
-    warm = [item for item in page["items"] if item["priority"] == "Warm"]
-    to_review, to_approve, to_reject = warm[0]["id"], warm[1]["id"], warm[2]["id"]
+    cold = [item for item in page["items"] if item["priority"] == "Cold"]
+    to_review, to_approve, to_reject = cold[0]["id"], cold[1]["id"], cold[2]["id"]
     drafts = {}
     for lead_id in (to_review, to_approve, to_reject):
         response = operator.post(f"/api/leads/{lead_id}/generate-outreach")
@@ -86,6 +101,7 @@ def test_inbox_ranks_hot_first_and_tracks_each_stage(operator):
 
 
 def test_inbox_filters_and_counts(operator):
+    _activate_demo_seller(operator)
     operator.post("/api/demo/run")
     csv = b"company_name,industry\nUnscored Example Co,Retail\n"
     assert operator.post("/api/batches/upload", files={"file": ("new.csv", csv, "text/csv")}).status_code == 201
@@ -96,6 +112,7 @@ def test_inbox_filters_and_counts(operator):
     assert hot["total"] == 2 and all(item["priority"] == "Hot" for item in hot["items"])
     search = operator.get("/api/inbox?q=cascade").json()
     assert [item["company_name"] for item in search["items"]] == ["Cascade Modular Homes"]
+    assert operator.get("/api/inbox?priority=needs_data").json()["total"] == 0
     paged = operator.get("/api/inbox?limit=3&offset=3").json()
     assert len(paged["items"]) == 3 and paged["total"] == 11
     assert operator.get("/api/inbox?stage=bogus").status_code == 422
@@ -186,18 +203,29 @@ def test_guest_safe_excludes_paid_ai_and_real_slack(changes, safe):
     assert config.Settings(**{**config.settings.__dict__, **changes}).guest_safe is safe
 
 
-def test_a_changed_input_makes_the_draft_outdated_not_ready(operator):
-    """Re-scoring changes a draft's inputs: the list must stop offering
-    'ready to send' exactly when review and delivery would refuse it."""
-    operator.post("/api/demo/run")
+def test_a_changed_input_makes_the_draft_outdated_not_ready(operator, db_session):
+    """A changed company fact and its new ranking change a draft's inputs:
+    the list must stop offering 'ready to send' exactly when review and
+    delivery would refuse it. Ranking again with identical inputs does not."""
+    from uuid import UUID
+
+    from app.models import Lead
+
     _activate_demo_seller(operator)
-    lead_id = next(i["id"] for i in operator.get("/api/inbox?limit=100").json()["items"] if i["priority"] == "Warm")
+    operator.post("/api/demo/run")
+    lead_id = next(i["id"] for i in operator.get("/api/inbox?limit=100").json()["items"] if i["priority"] == "Cold")
     draft = operator.post(f"/api/leads/{lead_id}/generate-outreach").json()
     operator.post(f"/api/leads/{lead_id}/approve-outreach", json={
         "ai_output_id": draft["id"], "content_hash": draft["content_hash"],
         "acknowledged_quality_flags": sorted({f["code"] for f in draft.get("quality_flags") or []})})
     assert _stage(operator, lead_id) == "approved"
-    assert operator.post(f"/api/leads/{lead_id}/fit-score").status_code in (200, 201)
+    assert operator.post(f"/api/leads/{lead_id}/fit-score").status_code == 201
+    assert _stage(operator, lead_id) == "approved"  # same inputs, same ranking
+    lead = db_session.get(Lead, UUID(lead_id))
+    lead.industry = "Computer Software"
+    db_session.commit()
+    ranked = operator.post(f"/api/leads/{lead_id}/fit-score").json()
+    assert ranked["summary"]["matched"][:1] == ["Industry"]
     assert operator.get(f"/api/leads/{lead_id}/review-state").json()["approval_applicable"] is False
     assert _stage(operator, lead_id) == "outdated"
     counts = operator.get("/api/inbox").json()["counts"]

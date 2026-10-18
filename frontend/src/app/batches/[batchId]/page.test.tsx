@@ -1,13 +1,13 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import BatchDetailPage from "./page";
 
 /**
- * Phase 4: the batch page shows v2 company fit, evidence coverage, current
- * readiness gaps and eligibility reasons next to clearly labeled legacy v1
- * scores -- loaded with ONE bounded request per page per kind of data,
- * never one request per lead.
+ * The batch page shows each lead's ranking against the active seller
+ * profile, evidence coverage and missing data, current readiness gaps and
+ * eligibility reasons -- loaded with ONE bounded request per page per kind
+ * of data, never one request per lead. No legacy score is shown.
  */
 
 const { useParamsMock } = vi.hoisted(() => ({ useParamsMock: vi.fn() }));
@@ -59,30 +59,28 @@ vi.mock("@/lib/api", async () => {
     getLeads: vi.fn(() => Promise.resolve(pageOf(leads))),
     getBatchFitSummary: vi.fn(() =>
       Promise.resolve({
-        batch_id: "batch-1", total_leads: 3, scored_leads: 2, unscored_leads: 1,
-        score_rows: 5, strong_match: 2, partial_match: 0, weak_match: 0,
-        insufficient_evidence: 0, average_fit_score: 100,
+        batch_id: "batch-1", ranking_state: "ready", profile_id: "p", profile_version: "4", targeting_hash: "h",
+        total_leads: 3, scored_leads: 2, unscored_leads: 1, outdated_leads: 1,
+        score_rows: 5, strong_match: 1, partial_match: 0, weak_match: 0,
+        insufficient_evidence: 1, hot: 1, warm: 0, cold: 0, average_fit_score: 60,
       }),
     ),
-    getBatchScores: vi.fn(() =>
-      Promise.resolve(
-        pageOf([
-          {
-            lead_id: "lead-a", total_score: 38, priority: "Cold", score_breakdown: {},
-            matched_signals: { industry_terms: [], title_terms: [], pain_point_terms: [] },
-            reasoning: "",
-          },
-        ]),
-      ),
-    ),
+    getRankingStatus: vi.fn(() => Promise.resolve({ state: "ready", outdated_rankings: 0, never_ranked: 0, profile: { version: "4" } })),
     getBatchFitScores: vi.fn(() =>
       Promise.resolve(
         pageOf(
           ["lead-a", "lead-c"].map((id) => ({
-            id: `${id}-fit`, lead_id: id, scorer_version: "fit-scorer-v1",
-            profile_id: "demo-us-sectors-v1", profile_version: "1",
-            normalization_version: "fit-norm-v1", input_fingerprint: "f", fit_score: 100,
-            max_fit_score: 100, evidence_coverage_pct: 100, band: "strong_match", criteria: [],
+            id: `${id}-fit`, lead_id: id, scorer_version: "fit-scorer-v2",
+            profile_id: "p", profile_version: "4", seller_profile_id: "p", targeting_hash: "h",
+            normalization_version: "fit-norm-v2", input_fingerprint: "f",
+            fit_score: id === "lead-a" ? 100 : 20, max_fit_score: 100,
+            evidence_coverage_pct: id === "lead-a" ? 100 : 35,
+            band: id === "lead-a" ? "strong_match" : "insufficient_evidence",
+            priority: id === "lead-a" ? "Hot" : null, is_current: true,
+            explanation: id === "lead-a" ? "Target-customer fit: matches industry." : "Not enough information to rank confidently.",
+            summary: { matched: ["Industry"], partial: [], mismatched: [],
+              missing: id === "lead-a" ? [] : ["Company size", "Location"], not_configured: [] },
+            criteria: [],
             ...ready(id === "lead-c", id === "lead-c" ? ["lead status 'do_not_contact' blocks outreach delivery"] : []),
             readiness_is_current: true, at_scoring: null,
             computed_at: "2026-09-22T00:00:00Z", computation_ms: 0.1,
@@ -105,9 +103,7 @@ vi.mock("@/lib/api", async () => {
         ),
       ),
     ),
-    getLeadScore: vi.fn(() => Promise.reject(new Error("per-lead request not expected"))),
     getLeadFitScore: vi.fn(() => Promise.reject(new Error("per-lead request not expected"))),
-    scoreBatch: vi.fn(),
     scoreBatchFit: vi.fn(),
     pushHotLeads: vi.fn(() => Promise.resolve({ pushed: 0, hot_leads_found: 0, skipped: 0, failed: 0 })),
   };
@@ -121,32 +117,29 @@ beforeEach(async () => {
 
 describe("BatchDetailPage", () => {
   it.each([
-    ["scoreBatch", /rescore leads/i],
-    ["scoreBatchFit", /score company fit/i],
+    ["scoreBatchFit", /rank leads/i],
     ["pushHotLeads", /send approved hot leads/i],
   ] as const)("a late %s action cannot replace the newly selected batch", async (method, button) => {
     const api = await import("@/lib/api");
     let finish: () => void = () => {};
     const response = {
-      batch_id: "batch-1", scored_leads: 3, hot: 0, warm: 0, cold: 3, average_score: 30,
+      batch_id: "batch-1", profile_id: "p", profile_version: "4",
       attempted: 3, newly_scored: 3, skipped_unchanged: 0, failed: 0,
       pushed: 0, hot_leads_found: 0, skipped: 0, blocked: 0, results: [],
       summary: {
-        batch_id: "batch-1", total_leads: 3, scored_leads: 3, unscored_leads: 0,
+        batch_id: "batch-1", ranking_state: "ready", profile_id: "p", profile_version: "4", targeting_hash: "h",
+        total_leads: 3, scored_leads: 3, unscored_leads: 0, outdated_leads: 0,
         score_rows: 3, strong_match: 3, partial_match: 0, weak_match: 0,
-        insufficient_evidence: 0, average_fit_score: 100,
+        insufficient_evidence: 0, hot: 3, warm: 0, cold: 0, average_fit_score: 100,
       },
     };
     // Only the action is held; the real page can finish loading batch 2.
-    vi.mocked(api[method]).mockImplementationOnce(() => new Promise<typeof response>((resolve) => {
+    // One fixture answers both actions, so the mock is typed loosely.
+    vi.mocked(api[method]).mockImplementationOnce((() => new Promise<typeof response>((resolve) => {
       finish = () => resolve(response);
-    }));
+    })) as never);
     const { rerender } = render(<BatchDetailPage />);
     await screen.findByRole("heading", { name: "Real cohort" });
-    // Company-fit scoring lives behind the scoring-details toggle.
-    if (!screen.queryByRole("button", { name: button })) {
-      fireEvent.click(screen.getByRole("button", { name: "Show scoring details" }));
-    }
     await act(async () => fireEvent.click(screen.getByRole("button", { name: button })));
     useParamsMock.mockReturnValue({ batchId: "batch-2" });
     rerender(<BatchDetailPage />);
@@ -163,38 +156,33 @@ describe("BatchDetailPage", () => {
     render(<BatchDetailPage />);
     await screen.findByText("Company A");
 
-    expect(api.getBatchScores).toHaveBeenCalledTimes(1);
     expect(api.getBatchFitScores).toHaveBeenCalledTimes(1);
     expect(api.getBatchReadiness).toHaveBeenCalledTimes(1);
-    expect(api.getBatchScores).toHaveBeenCalledWith("batch-1", { limit: 3, offset: 0 });
-    expect(api.getLeadScore).not.toHaveBeenCalled();
+    expect(api.getBatchFitScores).toHaveBeenCalledWith("batch-1", { limit: 3, offset: 0 });
     expect(api.getLeadFitScore).not.toHaveBeenCalled();
   });
 
-  it("shows v2 fit, coverage, current readiness and eligibility beside labeled legacy scores", async () => {
+  it("shows each ranking, missing data, current readiness and eligibility -- and no legacy score", async () => {
     render(<BatchDetailPage />);
     await screen.findByText("Company A");
-    // The rep view hides scoring internals until asked.
-    expect(screen.queryByText("Company fit (v2 demo)", { selector: "th" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show scoring details" }));
-
-    expect(screen.getByText("Legacy score (v1)")).toBeInTheDocument();
-    expect(screen.getByText("Legacy priority (v1)")).toBeInTheDocument();
-    expect(screen.getByText("Company fit (v2 demo)", { selector: "th" })).toBeInTheDocument();
-    expect(screen.getAllByText("coverage 100%")).toHaveLength(2);
-    expect(screen.getByText("Not fit-scored")).toBeInTheDocument(); // lead-b
-    // Legacy Cold and v2 strong_match on the same lead, both shown, neither
-    // translated into the other.
-    expect(screen.getByText("Cold")).toBeInTheDocument();
-    expect(screen.getAllByText("Strong match").length).toBeGreaterThanOrEqual(2);
-    // Current eligibility reason and readiness gaps, for scored AND unscored leads.
+    expect(screen.queryByText(/Legacy/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ranking against seller profile version 4" })).toBeInTheDocument();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("Hot")).toBeInTheDocument(); // lead-a
+    expect(table.getByText("Needs data")).toBeInTheDocument(); // lead-c: too little evidence, not "Cold"
+    expect(table.getByText("Not ranked")).toBeInTheDocument(); // lead-b
+    expect(screen.queryByText("coverage 100%")).not.toBeInTheDocument(); // details hidden for reps
+    fireEvent.click(screen.getByRole("button", { name: "Show ranking details" }));
+    expect(screen.getByText("coverage 100%")).toBeInTheDocument();
+    expect(screen.getByText("missing: company size, location")).toBeInTheDocument();
+    // Current eligibility reason and readiness gaps, for ranked AND unranked leads.
     expect(
       screen.getByText(/Excluded: lead status 'do_not_contact' blocks outreach delivery/),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/Not ready: no seller profile, no contact email, no draft/)).toHaveLength(3);
-    // Distinct-lead summary, with history rows reported separately.
-    expect(screen.getByText(/2 of 3 leads scored/)).toBeInTheDocument();
-    expect(screen.getByText(/5 stored score rows incl\. history/)).toBeInTheDocument();
+    // Distinct-lead summary, with outdated rankings and history reported separately.
+    expect(screen.getByText(/2 of 3 leads ranked \(1 only against earlier target customers\)/)).toBeInTheDocument();
+    expect(screen.getByText(/5 stored rows incl\. history/)).toBeInTheDocument();
   });
 
   it("disables push and explains why when the batch import is incomplete", async () => {

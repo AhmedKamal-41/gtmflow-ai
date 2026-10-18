@@ -1,30 +1,20 @@
 import Link from "next/link";
 
-import type {
-  CurrentReadiness,
-  Lead,
-  LeadFitScore,
-  LeadScore,
-} from "@/types/api";
+import type { CurrentReadiness, Lead, LeadFitScore } from "@/types/api";
 
 import { Card } from "./Card";
-import { FitBandBadge } from "./FitBandBadge";
 import { Icon } from "./Icon";
-import { PriorityBadge } from "./PriorityBadge";
+import { RankingBadge } from "./PriorityBadge";
 import { StatusBadge } from "./StatusBadge";
 
 type Props = {
   leads: Lead[];
-  // Legacy v1 Hot/Warm/Cold scorer. Missing key = not loaded yet;
-  // null = loaded, never scored.
-  scores: Record<string, LeadScore | null>;
-  // v2 deterministic company-fit scorer (Phase 4) -- separate from
-  // `scores`. Omitted keys render as "Not fit-scored", never inferred
-  // from the legacy score.
+  // Current rankings against the active seller profile's target customers.
+  // A missing key renders as "Not ranked".
   fitScores?: Record<string, LeadFitScore | undefined>;
-  // Current readiness/eligibility (live state, independent of scoring).
+  // Current readiness/eligibility (live state, independent of ranking).
   readiness?: Record<string, CurrentReadiness | undefined>;
-  // Company fit, routing and email-readiness columns (off for the rep view).
+  // Evidence coverage, routing and email-readiness columns (off for the rep view).
   showDetails?: boolean;
 };
 
@@ -40,7 +30,6 @@ const GAP_LABEL: Record<string, string> = {
 
 export function LeadTable({
   leads,
-  scores,
   fitScores = {},
   readiness = {},
   showDetails = false,
@@ -62,11 +51,11 @@ export function LeadTable({
               <th className="px-4 py-3">Company</th>
               <th className="px-4 py-3">Industry</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">{showDetails ? "Legacy score (v1)" : "Score"}</th>
-              <th className="px-4 py-3">{showDetails ? "Legacy priority (v1)" : "Priority"}</th>
+              <th className="px-4 py-3 text-right">Score</th>
+              <th className="px-4 py-3">Ranking</th>
               {showDetails && (
                 <>
-                  <th className="px-4 py-3">Company fit (v2 demo)</th>
+                  <th className="px-4 py-3">Evidence</th>
                   <th className="px-4 py-3">Routing (current)</th>
                   <th className="px-4 py-3">Email readiness (current)</th>
                 </>
@@ -76,7 +65,6 @@ export function LeadTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {leads.map((lead) => {
-              const score = scores[lead.id];
               const fit = fitScores[lead.id];
               const current = readiness[lead.id];
               return (
@@ -99,36 +87,25 @@ export function LeadTable({
                     <StatusBadge status={lead.status} />
                   </td>
                   <td className="tabular px-4 py-3 text-right font-semibold text-slate-900">
-                    {score ? (
-                      score.total_score
+                    {fit ? (
+                      fit.fit_score
                     ) : (
                       <span className="font-normal text-slate-300">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    {score ? (
-                      <PriorityBadge priority={score.priority} />
-                    ) : (
-                      <span className="text-xs text-slate-400">Not scored</span>
-                    )}
+                  <td className="px-4 py-3" title={fit?.explanation}>
+                    <RankingBadge priority={fit?.priority} band={fit?.band} />
                   </td>
                   {showDetails && (
                     <>
                   <td className="px-4 py-3">
                     {fit ? (
-                      <div className="space-y-0.5">
-                        <span className="inline-flex items-center gap-1.5">
-                          <FitBandBadge band={fit.band} />
-                          <span className="tabular text-xs text-slate-500">
-                            {fit.fit_score}/{fit.max_fit_score}
-                          </span>
-                        </span>
-                        <div className="tabular text-xs text-slate-400">
-                          coverage {fit.evidence_coverage_pct.toFixed(0)}%
-                        </div>
+                      <div className="space-y-0.5 text-xs text-slate-500">
+                        <div className="tabular">coverage {fit.evidence_coverage_pct.toFixed(0)}%</div>
+                        {fit.summary.missing.length > 0 && <div>missing: {fit.summary.missing.join(", ").toLowerCase()}</div>}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400">Not fit-scored</span>
+                      <span className="text-xs text-slate-400">-</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs">

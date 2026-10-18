@@ -11,11 +11,12 @@ import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { APIError, getBatches, scoreBatch, uploadBatch } from "@/lib/api";
-import { SAMPLE_CSV_URL, loadSampleLeads } from "@/lib/sampleData";
+import { APIError, getBatches, uploadBatch } from "@/lib/api";
+import { SAMPLE_CSV_URL, loadSampleLeads, rankImport } from "@/lib/sampleData";
 import type { LeadBatch, Page, UploadResponse } from "@/types/api";
 
-// Imports: bring in a lead list (scored right away) and see past imports.
+// Imports: bring in a lead list (ranked right away against the seller
+// profile's target customers) and see past imports.
 
 const PAGE_SIZE = 25;
 
@@ -25,6 +26,7 @@ export default function ImportsPage() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<"upload" | "sample" | null>(null);
   const [result, setResult] = useState<UploadResponse | null>(null);
+  const [rankNote, setRankNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [batches, setBatches] = useState<Page<LeadBatch> | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export default function ImportsPage() {
     setResult(null);
     try {
       const uploaded = await uploadBatch(file, name.trim() || undefined);
-      if (uploaded.valid_rows > 0) await scoreBatch(uploaded.batch_id);
+      setRankNote(uploaded.valid_rows > 0 ? await rankImport(uploaded.batch_id) : null);
       setResult(uploaded);
       setFile(null);
       setName("");
@@ -81,7 +83,7 @@ export default function ImportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Imports"
-        description="Bring in a CSV of companies you are working. Each lead is scored as soon as it is imported."
+        description="Bring in a CSV of companies you are working. Each lead is ranked against your seller profile's target customers as soon as it is imported."
       />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -90,7 +92,7 @@ export default function ImportsPage() {
             <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center hover:border-brand-400">
               <Icon name="file" className="h-6 w-6 text-brand-600" />
               <span className="text-sm font-medium text-slate-900">{file ? file.name : "Choose a CSV file"}</span>
-              <span className="text-xs text-slate-500">Needs a company_name column; contact and industry columns help scoring.</span>
+              <span className="text-xs text-slate-500">Needs a company_name column; industry, company_size, location and contact_title columns are what ranking compares.</span>
               <input type="file" accept=".csv,text/csv" className="sr-only" aria-label="CSV file"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </label>
@@ -101,7 +103,7 @@ export default function ImportsPage() {
             </label>
             {error && <ErrorMessage>{error}</ErrorMessage>}
             <Button type="submit" icon="upload" loading={busy === "upload"} disabled={!file || busy !== null}>
-              Import and score
+              Import and rank
             </Button>
           </form>
 
@@ -111,6 +113,14 @@ export default function ImportsPage() {
                 Imported {result.valid_rows} of {result.total_rows} rows
                 {result.batch_name ? ` into "${result.batch_name}"` : ""}.
               </div>
+              {rankNote ? (
+                <p className="text-amber-900">
+                  {rankNote}{" "}
+                  <Link href="/seller-profile" className="font-medium underline">Set up target customers</Link>
+                </p>
+              ) : (
+                <p className="text-emerald-900">Ranked against your seller profile&apos;s target customers.</p>
+              )}
               {result.errors.length > 0 && (
                 <ul className="ml-4 list-disc space-y-1 text-amber-900">
                   {result.errors.slice(0, 10).map((err, i) => (

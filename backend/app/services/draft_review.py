@@ -12,7 +12,10 @@ still applies*:
 * It was produced by grounded generation from a seller that is still in
   force (the active revision, or the unchanged built-in demo profile), and
   rebuilding its input context today gives the same `input_hash` -- i.e.
-  company facts, fit, restrictions and seller content are unchanged.
+  company facts, restrictions, seller content and the lead's current
+  ranking under that seller's target customers are unchanged. Changing the
+  target preferences therefore makes an approval stop applying, both
+  because it is a new seller revision and because the ranking changes.
 
 Anything else yields ordered blocker codes (the readiness gap codes in
 app/scoring/fit.py). A human edit is a new immutable output row, so it
@@ -41,7 +44,7 @@ from app.models import AIOutput, AIOutputReview, Lead, WorkflowEvent
 from app.models.ai_output import ORIGIN_HUMAN_EDITED, PURPOSE_OPERATIONAL
 from app.models.ai_output_review import REVIEW_KIND_OPERATIONAL_OUTREACH
 from app.scoring import fit
-from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from app.models.lead import DISQUALIFIED_STATUSES
 
 OUTREACH = "outreach_email"
 SUMMARY = "company_summary"
@@ -155,6 +158,7 @@ def review_states(session: Session, leads: list[Lead]) -> dict[UUID, ReviewState
     from app.services import fit_queries
     from app.services.ai_generation import (
         current_input_hash,
+        ranking_profile_for_seller,
         resolve_active_seller,
         seller_context_for_output,
     )
@@ -163,7 +167,21 @@ def review_states(session: Session, leads: list[Lead]) -> dict[UUID, ReviewState
     active = resolve_active_seller(session)
     drafts = current_drafts_by_lead(session, lead_ids)
     reviews = latest_reviews_by_output(session, [d.id for d in drafts.values()])
-    fits = fit_queries.latest_fit_scores_by_lead(session, list(drafts))
+    # The seller each draft would be rebuilt with today, and the lead's
+    # current ranking under THAT seller's target preferences (one query per
+    # seller in play: normally just the active revision).
+    sellers = {
+        lead_id: seller_context_for_output(draft, active)
+        if draft.output_schema_version == GROUNDED_SCHEMA else None
+        for lead_id, draft in drafts.items()
+    }
+    fits: dict[UUID, Any] = {}
+    by_seller: dict[str, tuple[Any, list[UUID]]] = {}
+    for lead_id, seller in sellers.items():
+        if seller is not None:
+            by_seller.setdefault(seller.content_hash, (seller, []))[1].append(lead_id)
+    for seller, ids in by_seller.values():
+        fits.update(fit_queries.latest_fit_scores_by_lead(session, ids, ranking_profile_for_seller(seller)))
 
     states: dict[UUID, ReviewState] = {}
     for lead in leads:
@@ -174,11 +192,7 @@ def review_states(session: Session, leads: list[Lead]) -> dict[UUID, ReviewState
             continue
         draft_hash = content_hash(draft.content)
         blockers: list[str] = []
-        seller = (
-            seller_context_for_output(draft, active)
-            if draft.output_schema_version == GROUNDED_SCHEMA
-            else None
-        )
+        seller = sellers[lead.id]
         if seller is None:
             blockers.append(fit.GAP_DRAFT_NOT_FROM_ACTIVE_PROFILE)
         elif current_input_hash(lead, OUTREACH, seller, fits.get(lead.id)) != draft.input_hash:

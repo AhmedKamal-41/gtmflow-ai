@@ -1,3 +1,1 @@
-from app.scoring.lead_scoring import score_lead
-
-__all__ = ["score_lead"]
+"""Deterministic lead ranking (app/scoring/fit.py)."""

@@ -2,13 +2,17 @@
 
 This powers ``POST /api/demo/run`` so a freshly deployed instance is never an
 empty dashboard. It composes the same service-layer functions the real
-endpoints use: CSV ingestion, scoring, AI generation, outreach approval, and
+endpoints use: CSV ingestion, ranking, AI generation, outreach approval, and
 the Slack push, so the demo exercises real code paths, not a shortcut.
+
+The demo ranks and drafts with the labeled built-in GTMFlow demonstration
+profile (passed per call, never activated): its target customers are B2B
+software teams, so the two software companies rank Hot. The workspace's own
+seller profile is neither needed nor changed.
 
 The sample leads are embedded here (not read from ``sample_data/``) so the demo
 works in a deployed container where the repo's sample files aren't present. The
-10 rows mirror ``sample_data/leads_sample.csv`` and are tuned to score
-2 Hot / 4 Warm / 4 Cold.
+10 rows mirror ``sample_data/leads_sample.csv``.
 
 Each run creates a fresh batch; it never deletes existing data.
 """
@@ -19,10 +23,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import Lead, LeadBatch, LeadScore, WorkflowEvent
-from app.scoring.lead_scoring import DISQUALIFIED_STATUSES, score_lead
-
-DEMO_REVIEWER_LABEL = "demo-auto-approve"
+from app.models import Lead, LeadBatch, WorkflowEvent
+from app.scoring import fit
 from app.services.ai_generation import (
     builtin_demo_seller,
     generate_outreach_for_lead,
@@ -30,7 +32,11 @@ from app.services.ai_generation import (
 )
 from app.services.csv_ingestion import parse_csv
 from app.services.draft_review import DECISION_APPROVED, apply_review
+from app.services.fit_queries import builtin_demo_ranking_profile, latest_fit_scores_by_lead
+from app.services.fit_scoring import score_leads
 from app.services.integration_push import SUCCESS_STATUSES, push_lead_to_slack
+
+DEMO_REVIEWER_LABEL = "demo-auto-approve"
 
 DEMO_BATCH_NAME = "Demo: sample leads"
 
@@ -95,35 +101,6 @@ def _seed_batch(session: Session) -> tuple[LeadBatch, list[Lead]]:
     return batch, leads
 
 
-def _score(session: Session, lead: Lead) -> str:
-    """Score a lead, persist the LeadScore, return its priority band."""
-    result = score_lead(lead)
-    persisted_breakdown = {
-        **result["score_breakdown"],
-        "matched_signals": result["matched_signals"],
-    }
-    lead.score = LeadScore(
-        lead_id=lead.id,
-        total_score=result["total_score"],
-        priority=result["priority"],
-        score_breakdown=persisted_breakdown,
-        reasoning=result["reasoning"],
-    )
-    if lead.status not in DISQUALIFIED_STATUSES:
-        lead.status = "scored"
-    session.add(
-        WorkflowEvent(
-            lead_id=lead.id,
-            event_type="lead_scored",
-            event_data={
-                "total_score": result["total_score"],
-                "priority": result["priority"],
-            },
-        )
-    )
-    return result["priority"]
-
-
 def _approve(session: Session, lead: Lead, outreach: Any) -> None:
     # The same exact-content review the approve endpoint records, labeled
     # as the demo's auto-approval rather than a human decision. It only
@@ -135,23 +112,22 @@ def _approve(session: Session, lead: Lead, outreach: Any) -> None:
 
 
 def run_demo(session: Session) -> dict[str, Any]:
-    """Seed a batch and run upload → score → generate → approve → push.
+    """Seed a batch and run upload → rank → generate → approve → push.
 
-    Hot leads get the full AI + approval + push treatment; Warm/Cold leads are
-    scored only, which keeps the metrics realistic (not everything is pushed).
+    Hot leads get the full AI + approval + push treatment; the others are
+    ranked only, which keeps the metrics realistic (not everything is pushed).
     Returns a summary the frontend renders as the demo result.
     """
     batch, leads = _seed_batch(session)
 
-    hot = warm = cold = 0
-    for lead in leads:
-        band = _score(session, lead)
-        if band == "Hot":
-            hot += 1
-        elif band == "Warm":
-            warm += 1
-        else:
-            cold += 1
+    profile = builtin_demo_ranking_profile()
+    ranked = score_leads(session, leads, persist=True, profile=profile)
+    for _, _, error in ranked:
+        if error is not None:
+            raise error
+    rankings = latest_fit_scores_by_lead(session, [lead.id for lead in leads], profile)
+    priorities = [fit.priority_for_band(rankings[lead.id].band) for lead in leads]
+    hot, warm, cold = (priorities.count(p) for p in ("Hot", "Warm", "Cold"))
     batch.status = "scored"
 
     # The demo sells GTMFlow itself through the explicitly labeled built-in
@@ -161,7 +137,7 @@ def run_demo(session: Session) -> dict[str, Any]:
     demo_seller = builtin_demo_seller()
     generated = approved = pushed = 0
     for lead in leads:
-        if lead.score is None or lead.score.priority != "Hot":
+        if rankings[lead.id].band != fit.BAND_STRONG:
             continue
         generate_summary_for_lead(session, lead, seller=demo_seller)
         outreach = generate_outreach_for_lead(session, lead, seller=demo_seller)
@@ -169,7 +145,7 @@ def run_demo(session: Session) -> dict[str, Any]:
         generated += 1
         _approve(session, lead, outreach)
         approved += 1
-        push = push_lead_to_slack(session, lead)
+        push = push_lead_to_slack(session, lead, ranking=rankings[lead.id])
         session.flush()
         if push.status in SUCCESS_STATUSES:
             pushed += 1

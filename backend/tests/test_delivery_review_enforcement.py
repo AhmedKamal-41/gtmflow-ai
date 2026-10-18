@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.models import IntegrationPush, Lead, LeadBatch, WorkflowEvent
-from tests.conftest import SYNTHETIC_SELLER_PROFILE, approve_current_draft, save_and_activate
+from tests.conftest import SYNTHETIC_SELLER_PROFILE, approve_current_draft, save_and_activate, rank_batch
 
 pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
@@ -36,7 +36,7 @@ def transport(monkeypatch):
 
 def scored(client: TestClient) -> tuple[str, dict, dict]:
     batch = client.post("/api/batches/upload", files={"file": ("l.csv", CSV.encode(), "text/csv")}).json()
-    client.post(f"/api/batches/{batch['batch_id']}/score")
+    rank_batch(client, batch['batch_id'])
     leads = {l["company_name"]: l for l in client.get(f"/api/leads?batch_id={batch['batch_id']}").json()["items"]}
     return batch["batch_id"], leads["Cascade Modular"], leads["Vault Outfitters"]
 

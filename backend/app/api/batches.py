@@ -331,16 +331,17 @@ async def upload_batch(
 
 
 def _scored_counts_by_batch(session: Session, batch_ids: list[UUID]) -> dict[UUID, int]:
-    """One grouped query for however many batches are on the current page
-    -- avoids an N+1 COUNT per batch row."""
+    """Leads with a current ranking (against the active seller profile), in
+    one grouped query for however many batches are on the current page."""
     if not batch_ids:
         return {}
-    from app.models import LeadScore
+    from app.services.fit_queries import current_ranking_profile, latest_fit_subquery
 
+    latest = latest_fit_subquery(current_ranking_profile(session))
     rows = session.execute(
         select(Lead.batch_id, func.count())
         .select_from(Lead)
-        .join(LeadScore, LeadScore.lead_id == Lead.id)
+        .join(latest, latest.c.lead_id == Lead.id)
         .where(Lead.batch_id.in_(batch_ids))
         .group_by(Lead.batch_id)
     ).all()

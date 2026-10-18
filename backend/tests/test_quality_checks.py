@@ -1,4 +1,4 @@
-"""Phase 10: runtime quality checks (runtime-checks-v1) and the approval
+"""Runtime quality checks (runtime-checks-v2; v1 plus presumed_need_or_intent) and the approval
 acknowledgement they require. The frozen heldout-criteria-v1 lints are
 untouched and still behave as recorded in Phase 9."""
 from __future__ import annotations
@@ -48,6 +48,21 @@ def test_documented_outreach_problems_are_flagged():
     }
     for code, change in cases.items():
         assert Q.flag_codes(Q.check_output("outreach_email", _outreach(ctx, **change), ctx)) == [code], code
+
+
+def test_presumed_need_or_intent_is_flagged_but_questions_and_stated_unknowns_are_not():
+    ctx = _context("outreach_email")
+    for body in ("Since you need faster scheduling, here is our tool.",
+                 "You are looking for a new booking system.",
+                 "Your need for automation is clear from your profile."):
+        out = _outreach(ctx, email_body=body)
+        assert Q.flag_codes(Q.check_output("outreach_email", out, ctx)) == ["presumed_need_or_intent"], body
+    for body in ("Do you need faster scheduling?",
+                 "I don't know whether you need this, so I'd rather ask.",
+                 "If you are looking for a booking system, a short call may help."):
+        assert Q.check_output("outreach_email", _outreach(ctx, email_body=body), ctx) == [], body
+    # The internal call note is never sent, so it is not checked.
+    assert Q.check_output("outreach_email", _outreach(ctx, call_note="They need this."), ctx) == []
 
 
 def test_a_company_name_is_not_invented_phrasing_but_the_frozen_lint_is_unchanged():
@@ -103,7 +118,7 @@ def _flagged_draft(client, monkeypatch):
 def test_flagged_drafts_show_their_flags_and_need_an_exact_acknowledgement(client, db_session, monkeypatch):
     lead, draft = _flagged_draft(client, monkeypatch)
     assert [f["code"] for f in draft["quality_flags"]] == ["commercial_opportunity_framing"]
-    assert draft["quality_checks_version"] == "runtime-checks-v1"
+    assert draft["quality_checks_version"] == "runtime-checks-v2"
     state = client.get(f"/api/leads/{lead['id']}/review-state").json()
     assert [f["code"] for f in state["draft_quality_flags"]] == ["commercial_opportunity_framing"]
     event = db_session.scalar(select(WorkflowEvent).where(WorkflowEvent.event_type == "outreach_generated"))
@@ -120,7 +135,7 @@ def test_flagged_drafts_show_their_flags_and_need_an_exact_acknowledgement(clien
     assert ok.status_code == 200
     approved = db_session.scalar(select(WorkflowEvent).where(WorkflowEvent.event_type == "outreach_approved"))
     assert approved.event_data["acknowledged_quality_flags"] == ["commercial_opportunity_framing"]
-    assert approved.event_data["quality_checks_version"] == "runtime-checks-v1"
+    assert approved.event_data["quality_checks_version"] == "runtime-checks-v2"
 
 
 def test_rejecting_a_flagged_draft_needs_no_acknowledgement(client, db_session, monkeypatch):

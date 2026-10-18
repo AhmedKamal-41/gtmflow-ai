@@ -33,7 +33,6 @@ const server = vi.hoisted(() => {
     outputs: {} as Record<string, Record<string, unknown>[]>,
     pushes: {} as Record<string, Record<string, unknown>[]>,
     fit: {} as Record<string, Record<string, unknown> | null>,
-    scores: {} as Record<string, Record<string, unknown> | null>,
     readiness: {} as Record<string, Record<string, unknown>>,
     holds: new Set<string>(),
     held: {} as Record<string, Held[]>,
@@ -81,9 +80,6 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     getLead: vi.fn((id: string) => call("getLead", id, () => Promise.resolve(state.leads[id]))),
-    getLeadScore: vi.fn((id: string) =>
-      call("getLeadScore", id, () => (state.scores[id] ? Promise.resolve(state.scores[id]) : nf())),
-    ),
     getLeadFitScore: vi.fn((id: string) =>
       call("getLeadFitScore", id, () => (state.fit[id] ? Promise.resolve(state.fit[id]) : nf())),
     ),
@@ -209,11 +205,15 @@ function readiness(excluded: boolean, reasons: string[] = []) {
 }
 
 function fitRow(leadId: string, band: string, score: number) {
+  const priority = { strong_match: "Hot", partial_match: "Warm", weak_match: "Cold" }[band] ?? null;
   return {
-    id: `${leadId}-fit`, lead_id: leadId, scorer_version: "fit-scorer-v1",
-    profile_id: "demo-us-sectors-v1", profile_version: "1", normalization_version: "fit-norm-v1",
-    input_fingerprint: "f", fit_score: score, max_fit_score: 100, evidence_coverage_pct: 100,
-    band, criteria: [], readiness: readiness(false).readiness, readiness_is_current: true,
+    id: `${leadId}-fit`, lead_id: leadId, scorer_version: "fit-scorer-v2",
+    profile_id: "p", profile_version: "3", seller_profile_id: "p", targeting_hash: "h",
+    normalization_version: "fit-norm-v2", input_fingerprint: "f", fit_score: score, max_fit_score: 100,
+    evidence_coverage_pct: 100, band, priority, is_current: true,
+    explanation: `${leadId} ranking explanation`,
+    summary: { matched: [], partial: [], mismatched: [], missing: [], not_configured: [] },
+    criteria: [], readiness: readiness(false).readiness, readiness_is_current: true,
     eligibility: readiness(false).eligibility, at_scoring: null,
     computed_at: "2026-09-22T00:00:00Z", computation_ms: 0.1,
   };
@@ -230,15 +230,6 @@ function seed(leadId: string, name: string, opts: { summaries?: number; pushes?:
   s.pushes[leadId] = Array.from({ length: opts.pushes ?? 0 }, (_, i) => push(leadId, i));
   s.readiness[leadId] = readiness(false);
   s.fit[leadId] = null;
-  s.scores[leadId] = null;
-}
-
-function legacyScore(leadId: string, total: number, priority: string) {
-  return {
-    lead_id: leadId, total_score: total, priority, score_breakdown: {},
-    matched_signals: { industry_terms: [], title_terms: [], pain_point_terms: [] },
-    reasoning: `${leadId} legacy reasoning`,
-  };
 }
 
 async function release(name: string, leadId: string) {
@@ -339,16 +330,14 @@ describe("history panels", () => {
 });
 
 describe("out-of-order responses after navigation", () => {
-  // The page loads a lead's data in sequence (lead, draft, legacy score,
-  // readiness, fit), so each stage is held for lead A in turn: A's load is
-  // stuck exactly there when the user navigates to B, and its late response
+  // The page loads a lead's data in sequence (lead, draft, readiness,
+  // ranking), so each stage is held for lead A in turn: A's load is stuck
+  // exactly there when the user navigates to B, and its late response
   // arrives after B has fully rendered.
-  it.each(["getLatestAIOutput", "getLeadScore", "getLeadReadiness", "getLeadFitScore"])(
+  it.each(["getLatestAIOutput", "getLeadReadiness", "getLeadFitScore"])(
     "a late %s response for the previous lead cannot overwrite the current lead",
     async (stage) => {
       const s = server.state;
-      s.scores["lead-a"] = legacyScore("lead-a", 91, "Hot");
-      s.scores["lead-b"] = legacyScore("lead-b", 12, "Cold");
       s.fit["lead-a"] = fitRow("lead-a", "strong_match", 100);
       s.fit["lead-b"] = fitRow("lead-b", "weak_match", 40);
       s.readiness["lead-a"] = readiness(true, ["LEAD-A-ONLY exclusion reason"]);
@@ -363,7 +352,7 @@ describe("out-of-order responses after navigation", () => {
       useParamsMock.mockReturnValue({ leadId: "lead-b" });
       rerender(<LeadDetailPage />);
       await within(await currentDraftSection()).findByText("Beta Co current draft");
-      await screen.findByText("Weak match");
+      await screen.findByText("lead-b ranking explanation");
       await screen.findAllByText("Cold");
 
       // Lead A's held responses now arrive, late and out of order.
@@ -375,10 +364,10 @@ describe("out-of-order responses after navigation", () => {
       const draftCard = section("Current outreach draft");
       expect(within(draftCard).getByText("Beta Co current draft")).toBeInTheDocument();
       expect(screen.queryByText("Alpha Co current draft")).not.toBeInTheDocument();
-      expect(screen.queryByText("Hot")).not.toBeInTheDocument(); // A's legacy score
-      expect(screen.getAllByText("Cold").length).toBeGreaterThan(0); // header badge and score card
-      expect(screen.queryByText("Strong match")).not.toBeInTheDocument(); // A's fit
-      expect(screen.getByText("Weak match")).toBeInTheDocument();
+      expect(screen.queryByText("Hot")).not.toBeInTheDocument(); // A's ranking
+      expect(screen.getAllByText("Cold").length).toBeGreaterThan(0); // header badge and ranking card
+      expect(screen.queryByText("lead-a ranking explanation")).not.toBeInTheDocument();
+      expect(screen.getByText("lead-b ranking explanation")).toBeInTheDocument();
       expect(screen.queryByText(/LEAD-A-ONLY/)).not.toBeInTheDocument(); // A's readiness
       expect(screen.queryByText("lead-a summary 0")).not.toBeInTheDocument();
       expect(screen.queryByText("lead-a push 0")).not.toBeInTheDocument();

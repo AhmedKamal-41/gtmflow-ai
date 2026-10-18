@@ -11,10 +11,12 @@ from sqlalchemy.orm import Session
 from app.core.actor import actor_label as current_actor_label
 from app.models import SellerProfile, SellerProfileActivation, WorkflowEvent
 from app.schemas.seller_profile import (
+    CompanySizeRange,
     SellerProfileActivate,
     SellerProfileContent,
     SellerProfileCreate,
     SellerProfileDeactivate,
+    TargetPreferences,
 )
 
 EDITOR_LABEL = "local-demo-unauthenticated"
@@ -23,7 +25,9 @@ EDITOR_LABEL = "local-demo-unauthenticated"
 # describes what this repository does; it has no proof points because no
 # evidence of customer results exists. It is offered as an editor template
 # and used by the standalone mock demo -- it is never activated for the
-# real cohort automatically.
+# real cohort automatically. Its target preferences describe who a tool
+# like GTMFlow is for (small B2B software teams' sales leaders); they are
+# not a validated segment and apply only where this profile is chosen.
 GTMFLOW_DEMO_PROFILE = SellerProfileContent(
     profile_kind="demo",
     company_name="GTMFlow (demonstration)",
@@ -36,8 +40,9 @@ GTMFLOW_DEMO_PROFILE = SellerProfileContent(
         "profile is not a commercial offer and has no customer results to cite."
     ),
     target_customer=(
-        "Demonstration only: teams evaluating a lead-workflow prototype. "
-        "No real customer segment has been specified."
+        "Demonstration only: sales leaders, founders and revenue-operations "
+        "staff at B2B software companies of 11 to 200 employees. This is an "
+        "illustration, not a validated customer segment."
     ),
     capabilities=[
         "Imports company lists from CSV files and a public company dataset",
@@ -49,6 +54,11 @@ GTMFLOW_DEMO_PROFILE = SellerProfileContent(
     ],
     proof_points=[],
     exclusions=[],
+    target_preferences=TargetPreferences(
+        industries=["Software", "SaaS", "Computer Software"],
+        company_sizes=[CompanySizeRange(min_employees=11, max_employees=200)],
+        contact_roles=["Founder", "VP Sales", "Head of Sales", "Revenue Operations"],
+    ),
 )
 
 

@@ -15,6 +15,11 @@ if TYPE_CHECKING:
 
 
 class LeadScore(Base):
+    """Frozen history: the retired v1 priority score (fixed healthcare and
+    property-management terms). Nothing writes or reads these rows any more;
+    ranking is app/scoring/fit.py against the seller's target customers.
+    The table is kept so earlier results are not lost (migration 0015)."""
+
     __tablename__ = "lead_scores"
 
     id: Mapped[uuid.UUID] = mapped_column(

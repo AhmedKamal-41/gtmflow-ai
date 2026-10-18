@@ -14,7 +14,7 @@ from app.pdl.importer import (
     import_companies,
 )
 from app.pdl.normalize import NormalizedCompany
-from app.scoring.lead_scoring import DISQUALIFIED_STATUSES
+from app.models.lead import DISQUALIFIED_STATUSES
 
 
 def _company(i: int, segment: str = "healthcare") -> NormalizedCompany:

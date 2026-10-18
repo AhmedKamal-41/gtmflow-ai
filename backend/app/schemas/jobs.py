@@ -7,7 +7,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-JobType = Literal["fit_score", "legacy_score", "generate_summary", "generate_outreach", "push_hot", "assistant_outreach"]
+# "legacy_score" is retired: still accepted here so enqueue can explain the refusal.
+JobType = Literal["fit_score", "legacy_score", "generate_summary", "generate_outreach", "push_hot",
+                  "assistant_outreach", "selected_outreach"]
 
 
 class JobCreate(BaseModel):

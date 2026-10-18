@@ -22,6 +22,13 @@ if TYPE_CHECKING:
     from app.models.source_snapshot import SourceSnapshot
     from app.models.workflow_event import WorkflowEvent
 
+# Hard dispositions: a lead with one of these statuses can never receive
+# outreach or reach Slack, whatever its ranking, and no workflow step
+# (ranking, review, generation) may overwrite the status.
+DISQUALIFIED_STATUSES: frozenset[str] = frozenset(
+    {"do_not_contact", "disqualified", "unsubscribed"}
+)
+
 
 class Lead(Base):
     __tablename__ = "leads"

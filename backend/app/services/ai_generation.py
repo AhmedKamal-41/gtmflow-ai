@@ -7,7 +7,9 @@ Order of operations for one request:
    content. Activating another revision mid-request cannot change what this
    output used or records.
 2. Build the grounded context (app/ai/grounding.py) from current lead
-   facts, provenance, the current fit score and current restrictions.
+   facts, provenance, current restrictions and the lead's current ranking
+   against THAT seller revision's target customers -- so a draft and the
+   ranking it is based on always come from the same seller profile.
 3. Call the client, then validate the result against the versioned schema
    and the context's fact/capability/claim ids. Invalid output is never
    saved as an AIOutput.
@@ -175,20 +177,37 @@ def seller_context_for_output(
     return None
 
 
+def ranking_profile_for_seller(seller: SellerContext | None) -> fit.RankingProfile | None:
+    """The target preferences of exactly this seller revision (or of the
+    built-in demo profile) -- what its drafts' ranking must come from."""
+    if seller is None:
+        return None
+    return fit.ranking_profile_from_content(
+        seller.content,
+        source=fit.SOURCE_ACTIVE if seller.profile_id else fit.SOURCE_BUILTIN_DEMO,
+        profile_id=str(seller.profile_id) if seller.profile_id else "builtin-demo",
+        seller_profile_id=seller.profile_id,
+        version=str(seller.version) if seller.version is not None else "demo",
+    )
+
+
 def current_input_hash(
     lead: Lead, task: str, seller: SellerContext | None, fit_row: Any
 ) -> str:
     """Hash of the context generation would build right now -- compared with
-    a draft's recorded `input_hash` to detect changed company or seller
-    inputs. `fit_row` is the lead's current fit score (or None), prefetched
-    so a page of leads needs one fit query, not one per lead."""
+    a draft's recorded `input_hash` to detect changed company, ranking or
+    seller inputs. `fit_row` is the lead's current ranking under `seller`'s
+    target preferences (or None), prefetched so a page of leads needs one
+    query, not one per lead."""
     return _hash_input(_context_from(lead, task, seller, fit_row))
 
 
 def _build_context(
     session: Session, lead: Lead, task: str, seller: SellerContext | None
 ) -> dict[str, Any]:
-    return _context_from(lead, task, seller, fit_queries.latest_fit_score(session, lead.id))
+    ranking = ranking_profile_for_seller(seller)
+    fit_row = fit_queries.latest_fit_score(session, lead.id, ranking) if ranking is not None else None
+    return _context_from(lead, task, seller, fit_row)
 
 
 def _context_from(
@@ -196,12 +215,16 @@ def _context_from(
 ) -> dict[str, Any]:
     fit_block = None
     if score is not None:
+        # What the ranking says and which target preferences produced it.
+        # The seller block already names the revision; a re-ranking with
+        # identical inputs and targets (even from another revision that kept
+        # the same targets) yields the same block, so it does not by itself
+        # make an approval stale.
         fit_block = {
             "fit_score": score.fit_score,
             "band": score.band,
             "evidence_coverage_pct": score.evidence_coverage_pct,
-            "profile_id": score.profile_id,
-            "profile_version": score.profile_version,
+            "targeting_hash": score.targeting_hash,
         }
     eligibility = fit.compute_eligibility(lead)
     return build_grounded_context(

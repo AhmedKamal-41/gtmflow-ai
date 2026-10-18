@@ -13,14 +13,14 @@ from app.api import assistant as assistant_api, auth as auth_api
 from app.core import config
 from app.models import AIOutput, AIOutputReview, BackgroundJob, IntegrationPush, Lead, LeadBatch, WorkflowEvent
 from app.services import auth as auth_service, lead_assistant, signup as signup_service
-from tests.conftest import SYNTHETIC_SELLER_PROFILE, create_test_user, save_and_activate, sign_in
+from tests.conftest import SYNTHETIC_SELLER_PROFILE, create_test_user, save_and_activate, sign_in, rank_batch
 from tests.test_background_jobs import _count, _enqueue, _run
 from tests.test_push_endpoints import _upload
 
 
 def setup_leads(client):
     batch_id = _upload(client)["batch_id"]
-    assert client.post(f"/api/batches/{batch_id}/score").status_code == 200
+    rank_batch(client, batch_id)
     rows = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     return batch_id, {row["company_name"]: row["id"] for row in rows}
 
@@ -312,7 +312,7 @@ def test_real_sdk_round_trip_uses_tool_results_and_ignores_freeform_claims(clien
         requests.append(payload)
         step = len(requests)
         if step == 1:
-            tool = call("search_leads", {"query": None, "industry": "health", "priority": "Hot"})
+            tool = call("search_leads", {"query": None, "industry": "healthcare", "priority": "Hot"})
         elif step == 2:
             observed = json.loads(payload["messages"][-1]["content"])
             assert observed["leads"][0]["id"] == selected

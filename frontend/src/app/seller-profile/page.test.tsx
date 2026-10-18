@@ -14,6 +14,7 @@ vi.mock("@/lib/api", async () => ({
   getSellerProfileDemoTemplate: vi.fn(),
   activateSellerProfile: vi.fn(),
   deactivateSellerProfile: vi.fn(),
+  getRankingStatus: vi.fn(),
 }));
 
 function row(version = 1): SellerProfile {
@@ -24,6 +25,8 @@ function row(version = 1): SellerProfile {
       profile_kind: "demo", company_name: "Fixture Seller", product_name: "Queue tool",
       value_proposition: "Organizes requests.", target_customer: "US medical practices; office managers; no size preference.",
       capabilities: [], proof_points: [], exclusions: [],
+      target_preferences: { industries: ["Medical Practice"], locations: ["United States"],
+        company_sizes: [{ min_employees: 11, max_employees: 75 }], contact_roles: ["Office Manager"], keywords: [] },
     },
   };
 }
@@ -44,6 +47,31 @@ beforeEach(() => {
 });
 
 describe("seller profile drafts", () => {
+  it("separates what is sold from who it is for and explains how leads are ranked", async () => {
+    render(<SellerProfilePage />);
+    expect(await screen.findByRole("heading", { name: "What you sell" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Who you want to sell to" })).toBeInTheDocument();
+    expect(screen.getByText(/“Hospital” does not match “Hospitality”/)).toBeInTheDocument();
+    expect(screen.getByText("How leads are ranked")).toBeInTheDocument();
+    expect(screen.getByText(/industry 35, company size 25, location 20, contact role 15, keywords 5/)).toBeInTheDocument();
+    expect(screen.getByText(/Hot is 75 or more, Warm 45–74, Cold under 45/)).toBeInTheDocument();
+  });
+
+  it("keeps a saved custom size range and warns when no target customers are set", async () => {
+    vi.mocked(getSellerProfile).mockResolvedValue(row(2));
+    const empty = row(3);
+    empty.profile = { ...empty.profile, target_preferences: { industries: [], locations: [], company_sizes: [], contact_roles: [], keywords: [] } };
+    vi.mocked(saveSellerProfile).mockResolvedValue(empty);
+    render(<SellerProfilePage />);
+    expect(await screen.findByText("Custom 11–75")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Industries/)).toHaveValue("Medical Practice");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(vi.mocked(saveSellerProfile).mock.calls[0][0].target_preferences.company_sizes)
+      .toEqual([{ min_employees: 11, max_employees: 75 }]));
+    expect(await screen.findByText(/It has no target customers, so leads cannot be ranked with it/)).toBeInTheDocument();
+  });
+
+
   it("starts empty and saves supplied content with sourced claims", async () => {
     render(<SellerProfilePage />);
     expect(await screen.findByLabelText("Company name")).toHaveValue("");
@@ -55,14 +83,24 @@ describe("seller profile drafts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add proof point" }));
     fireEvent.change(screen.getByLabelText("Claim 1"), { target: { value: "Supports assignment" } });
     fireEvent.change(screen.getByLabelText("Source or reference 1"), { target: { value: "Feature specification" } });
+    fireEvent.change(screen.getByLabelText(/^Industries/), { target: { value: "Medical Practice\n\nDental" } });
+    fireEvent.change(screen.getByLabelText(/^Locations/), { target: { value: "United States" } });
+    fireEvent.click(screen.getByLabelText("1–10"));
+    fireEvent.click(screen.getByLabelText("11–50"));
+    fireEvent.change(screen.getByLabelText(/^Contact roles/), { target: { value: "Office Manager" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await screen.findByText("Draft version 1 saved. It is not active for outreach.");
+    await screen.findByText("Draft version 1 saved. It is not active for outreach or ranking until you activate it.");
     expect(saveSellerProfile).toHaveBeenCalledWith({
       profile_kind: "seller", company_name: "Fixture Seller", product_name: "Queue tool",
       value_proposition: "Organizes requests.", target_customer: "US medical practices",
       capabilities: ["Shared queue", "Request assignment"],
       proof_points: [{ claim: "Supports assignment", source: "Feature specification" }],
       exclusions: [],
+      target_preferences: {
+        industries: ["Medical Practice", "Dental"], locations: ["United States"],
+        company_sizes: [{ min_employees: 1, max_employees: 10 }, { min_employees: 11, max_employees: 50 }],
+        contact_roles: ["Office Manager"], keywords: [],
+      },
     }, 0);
     expect(screen.getByText(/Draft only/)).toBeInTheDocument();
   });
@@ -85,7 +123,7 @@ describe("seller profile drafts", () => {
     await screen.findByText("Network error");
     expect(screen.getByLabelText("Company name")).toHaveValue("Edited seller");
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await screen.findByText("Draft version 5 saved. It is not active for outreach.");
+    await screen.findByText("Draft version 5 saved. It is not active for outreach or ranking until you activate it.");
     expect(saveSellerProfile).toHaveBeenCalledTimes(2);
     expect(vi.mocked(saveSellerProfile).mock.calls[0]).toEqual(vi.mocked(saveSellerProfile).mock.calls[1]);
     expect(vi.mocked(saveSellerProfile).mock.calls[1][1]).toBe(4);

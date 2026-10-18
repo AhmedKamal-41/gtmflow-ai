@@ -8,15 +8,23 @@ from pydantic import BaseModel
 
 
 class FitCriterionRead(BaseModel):
+    """One criterion of a ranking. `weight` is the default weight (0 when
+    the profile does not configure the criterion); `points` the weight
+    earned (half for a partial size match). Rows from before profile-based
+    ranking lack the newer fields, hence the defaults."""
+
     name: str
+    label: str | None = None
     weight: int
     active: bool
     source_field: str
     raw_input: Any
     normalized_input: str | None
     result: str
-    points: int
+    points: float
     explanation: str
+    targets: list[str] = []
+    matched_targets: list[str] = []
 
 
 class ActionReadinessRead(BaseModel):
@@ -46,22 +54,39 @@ class HistoricalAssessment(BaseModel):
     computed_at: datetime
 
 
+class CriteriaSummary(BaseModel):
+    matched: list[str]
+    partial: list[str]
+    mismatched: list[str]
+    missing: list[str]
+    not_configured: list[str]
+
+
 class LeadFitScoreResponse(BaseModel):
-    """Full Part C output for one lead: fit + coverage + band, readiness,
-    eligibility, and every version identifier needed to reproduce or audit
-    the result (Part D.2)."""
+    """One lead's ranking against a seller profile's target customers:
+    score, evidence coverage, band and priority, the per-criterion
+    breakdown, current readiness/eligibility (contact completeness and
+    permission to contact, kept separate from fit), and every identifier
+    needed to reproduce or audit it. `is_current` is false for a ranking
+    made against different target preferences than the active profile's."""
 
     id: UUID | None = None
     lead_id: UUID
     scorer_version: str
     profile_id: str
     profile_version: str
+    seller_profile_id: UUID | None = None
+    targeting_hash: str | None = None
     normalization_version: str
     input_fingerprint: str
     fit_score: int
     max_fit_score: int
     evidence_coverage_pct: float
     band: str
+    priority: str | None
+    is_current: bool
+    explanation: str
+    summary: CriteriaSummary
     criteria: list[FitCriterionRead]
     # CURRENT readiness/eligibility, recomputed on every read.
     readiness: ReadinessRead
@@ -73,25 +98,42 @@ class LeadFitScoreResponse(BaseModel):
     computation_ms: float
 
 
-class FitProfileResponse(BaseModel):
-    """Static rubric definition -- Part E: UI labels this as broad
-    demonstration criteria, not a claim of purchase probability."""
+class RankingStatusResponse(BaseModel):
+    """GET /api/scoring/profile: what ranking compares leads with right now,
+    the fixed rules, and how many leads are ranked, outdated or unranked.
+    `state` is `ready`, `no_active_profile` or `setup_required` (the active
+    profile states no target customers)."""
 
-    profile_id: str
-    profile_version: str
+    state: str
+    message: str
+    profile: dict[str, Any] | None
     scorer_version: str
     normalization_version: str
-    description: str
-    industry_match_values: list[str]
-    industry_weight: int
-    country_match_values: list[str]
-    country_weight: int
-    size_weight: int
-    zero_weight_criteria: list[str]
-    max_fit_score: int
-    coverage_threshold_pct: float
-    band_strong_min: int
-    band_partial_min: int
+    weights: dict[str, int]
+    labels: dict[str, str]
+    hot_min: int
+    warm_min: int
+    coverage_min_pct: float
+    partial_credit: float
+    total_leads: int
+    current_rankings: int
+    outdated_rankings: int
+    never_ranked: int
+
+
+class RankingRunSummary(BaseModel):
+    """Result of a recalculation (workspace or one batch). Run counts
+    describe this run; nothing but LeadFitScore rows and their audit events
+    is written."""
+
+    batch_id: UUID | None = None
+    profile_id: str
+    profile_version: str
+    targeting_hash: str
+    attempted: int
+    newly_scored: int
+    skipped_unchanged: int
+    failed: int
 
 
 class CurrentReadinessResponse(BaseModel):
@@ -109,15 +151,23 @@ class BatchFitSummary(BaseModel):
     `score_rows` counts every applicable stored row (history included) so a
     reader can see rescoring happened without it inflating the lead counts."""
 
-    batch_id: UUID
+    batch_id: UUID | None
+    ranking_state: str
+    profile_id: str | None
+    profile_version: str | None
+    targeting_hash: str | None
     total_leads: int
     scored_leads: int
     unscored_leads: int
+    outdated_leads: int
     score_rows: int
     strong_match: int
     partial_match: int
     weak_match: int
     insufficient_evidence: int
+    hot: int
+    warm: int
+    cold: int
     average_fit_score: float | None
 
 
@@ -127,6 +177,8 @@ class BatchFitScoreRunSummary(BaseModel):
     writes LeadFitScore rows only -- no Lead/LeadBatch status change."""
 
     batch_id: UUID
+    profile_id: str
+    profile_version: str
     attempted: int
     newly_scored: int
     skipped_unchanged: int

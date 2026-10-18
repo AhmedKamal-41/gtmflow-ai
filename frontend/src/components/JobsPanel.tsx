@@ -14,8 +14,7 @@ import { Card } from "./Card";
 // job delivers only drafts a reviewer already approved.
 
 const JOB_BUTTONS: { type: JobType; label: string }[] = [
-  { type: "fit_score", label: "Fit-score all leads" },
-  { type: "legacy_score", label: "Legacy-score all leads" },
+  { type: "fit_score", label: "Rank all leads" },
   { type: "generate_summary", label: "Generate summaries" },
   { type: "generate_outreach", label: "Generate outreach drafts" },
   { type: "push_hot", label: "Push approved Hot leads" },
@@ -23,6 +22,8 @@ const JOB_BUTTONS: { type: JobType; label: string }[] = [
 
 const LABELS: Record<string, string> = Object.fromEntries(JOB_BUTTONS.map((b) => [b.type, b.label]));
 LABELS.assistant_outreach = "Prepare assistant drafts";
+LABELS.selected_outreach = "Draft selected leads";
+LABELS.legacy_score = "Legacy score (retired)";
 const ACTIVE = new Set(["queued", "running"]);
 
 export function JobsPanel({

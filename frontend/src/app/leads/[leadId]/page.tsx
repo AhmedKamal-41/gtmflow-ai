@@ -10,13 +10,12 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { CurrentReadinessCard } from "@/components/CurrentReadinessCard";
 import { ErrorMessage } from "@/components/ErrorMessage";
-import { FitScoreCard } from "@/components/FitScoreCard";
 import { Icon } from "@/components/Icon";
 import { LoadingState } from "@/components/LoadingState";
 import { PageHeader } from "@/components/PageHeader";
-import { PriorityBadge } from "@/components/PriorityBadge";
+import { RankingBadge } from "@/components/PriorityBadge";
 import { PushHistory } from "@/components/PushHistory";
-import { ScoreBreakdown } from "@/components/ScoreBreakdown";
+import { RankingCard } from "@/components/RankingCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePaginatedHistory } from "@/hooks/usePaginatedHistory";
 import {
@@ -30,14 +29,12 @@ import {
   getLead,
   getLeadFitScore,
   getLeadReadiness,
-  getLeadScore,
   getPushes,
   getReviewState,
   getSellerProfileStatus,
   pushLead,
   rejectOutreach,
   reviseOutput,
-  scoreLead,
   scoreLeadFit,
 } from "@/lib/api";
 import type {
@@ -45,14 +42,12 @@ import type {
   CurrentReadiness,
   Lead,
   LeadFitScore,
-  LeadScore,
   ReviewState,
   SellerProfileStatus,
 } from "@/types/api";
 
 type ActionLabel =
-  | "Score"
-  | "Fit"
+  | "Rank"
   | "Summary"
   | "Outreach"
   | "Push"
@@ -68,9 +63,8 @@ export default function LeadDetailPage() {
   const leadId = params?.leadId ?? "";
 
   const [lead, setLead] = useState<Lead | null>(null);
-  const [score, setScore] = useState<LeadScore | null>(null);
-  // v2 deterministic company-fit scorer (Phase 4) -- entirely separate
-  // from `score`/`LeadScore` above (the legacy v1 Hot/Warm/Cold scorer).
+  // The lead's ranking against the active seller profile's target
+  // customers (`is_current` false = ranked against earlier preferences).
   const [fitScore, setFitScore] = useState<LeadFitScore | null>(null);
   // CURRENT readiness + routing eligibility (live state, independent of
   // whether the lead was ever fit-scored). `undefined` = not resolved yet
@@ -200,7 +194,6 @@ export default function LeadDetailPage() {
     setLoadingLead(true);
     setError(null);
     setLead(null);
-    setScore(null);
     setFitScore(null);
     setReadiness(undefined);
     setLatestOutreach(undefined);
@@ -210,19 +203,6 @@ export default function LeadDetailPage() {
       setLead(leadData);
 
       await refreshLatestOutreach(generation);
-
-      try {
-        const scoreData = await getLeadScore(leadId);
-        if (generationRef.current !== generation) return; // stale
-        setScore(scoreData);
-      } catch (e) {
-        if (generationRef.current !== generation) return; // stale
-        if (e instanceof APIError && e.status === 404) {
-          setScore(null);
-        } else {
-          throw e;
-        }
-      }
 
       const readinessData = await getLeadReadiness(leadId);
       if (generationRef.current !== generation) return; // stale
@@ -322,9 +302,11 @@ export default function LeadDetailPage() {
     return error ? <ErrorMessage>{error}</ErrorMessage> : <LoadingState />;
   }
 
-  // Legacy v1 semantics, unchanged: a lead that isn't legacy-Hot is pushed
-  // with force. Force never overrides a routing exclusion (backend-enforced).
-  const pushForce = score?.priority !== "Hot";
+  // A lead whose current ranking isn't Hot is pushed with force (the rep's
+  // explicit choice). Force never overrides a routing exclusion, a block or
+  // the approval check (backend-enforced), and the backend still requires a
+  // current ranking.
+  const pushForce = !(fitScore?.is_current && fitScore.priority === "Hot");
   // Delivery also needs a current approval of the exact draft; the backend
   // enforces it at dispatch, this only avoids offering a doomed push.
   const pushBlocked =
@@ -445,7 +427,13 @@ export default function LeadDetailPage() {
         back={{ href: "/leads", label: "All leads" }}
         description={
           <span className="flex flex-wrap items-center gap-2">
-            {score && <PriorityBadge priority={score.priority} />}
+            {fitScore && (
+              <RankingBadge
+                priority={fitScore.is_current ? fitScore.priority : null}
+                band={fitScore.is_current ? fitScore.band : null}
+                outdated={!fitScore.is_current}
+              />
+            )}
             <StatusBadge status={lead.status} />
             {lead.industry && <span className="text-slate-500">· {lead.industry}</span>}
             {lead.location && <span className="text-slate-500">· {lead.location}</span>}
@@ -676,23 +664,26 @@ export default function LeadDetailPage() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900">Why this priority</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Why this ranking</h2>
               <Button
                 variant="ghost"
                 size="sm"
-                loading={busy === "Score"}
-                onClick={() => runAction("Score", () => scoreLead(leadId))}
+                loading={busy === "Rank"}
+                onClick={() => runAction("Rank", () => scoreLeadFit(leadId))}
               >
-                {score ? "Rescore" : "Score lead"}
+                {fitScore ? "Rank again" : "Rank lead"}
               </Button>
             </div>
-            {score ? (
-              <ScoreBreakdown score={score} />
-            ) : (
-              <Card>
-                <div className="text-sm text-slate-600">Not scored yet.</div>
-              </Card>
-            )}
+            <Card>
+              {fitScore ? (
+                <RankingCard fit={fitScore} />
+              ) : (
+                <div className="text-sm text-slate-600">
+                  Not ranked yet. Leads are ranked against the target customers in your{" "}
+                  <Link href="/seller-profile" className="font-medium text-brand-700 hover:underline">seller profile</Link>.
+                </div>
+              )}
+            </Card>
           </section>
         </aside>
       </div>
@@ -701,24 +692,10 @@ export default function LeadDetailPage() {
         <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-semibold text-slate-900">
           Technical details
           <span className="text-xs font-normal text-slate-500 group-open:hidden">
-            Company fit, eligibility, review record and full AI history
+            Eligibility, review record and full AI history
           </span>
         </summary>
         <div className="space-y-6 border-t border-slate-100 p-5">
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Company fit (v2 demo)</h2>
-              <Button variant="secondary" size="sm" loading={busy === "Fit"} onClick={() => runAction("Fit", () => scoreLeadFit(leadId))}>
-                Score company fit (v2 demo)
-              </Button>
-            </div>
-            {fitScore ? (
-              <FitScoreCard fit={fitScore} />
-            ) : (
-              <div className="text-sm text-slate-600">Not fit-scored yet.</div>
-            )}
-          </section>
-
           {reviewState && (
             <section className="space-y-1 text-xs text-slate-500">
               <h2 className="mb-2 text-base font-semibold text-slate-900">Review record</h2>

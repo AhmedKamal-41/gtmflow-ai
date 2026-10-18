@@ -1,6 +1,7 @@
-"""Phase 4 Part E: GET /api/leads supports server-side sort/filter by the
-v2 fit score/band, applied before pagination, and never breaks on unscored
-leads or on a lead rescored multiple times.
+"""GET /api/leads supports server-side sort/filter by the current ranking
+score/band (against the active seller profile's target customers), applied
+before pagination, and never breaks on unranked leads or on a lead ranked
+multiple times.
 """
 from __future__ import annotations
 
@@ -10,10 +11,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Lead, LeadBatch
+from tests.conftest import US_SECTOR_PREFERENCES, activate_preferences
 
 CSV_NO_STRUCTURED_COUNTRY = (
     "company_name,industry\n"
-    "Ambiguous Health Co,Hospital & Health Care\n"  # industry match, country unknown -> insufficient_evidence
+    "Ambiguous Health Co,\n"  # no industry, no location -> 0 points, insufficient_evidence
     "Never Scored Co,Real Estate\n"  # left unscored deliberately
 )
 
@@ -36,13 +38,14 @@ def _make_pdl_lead(
 
 
 def _setup(client: TestClient, db_session: Session) -> dict[str, str]:
-    """Five leads spanning every band:
+    """Five leads spanning every band, ranked against US_SECTOR_PREFERENCES:
       - Strong Match Co: industry+country match -> 100, strong_match
-      - Partial Match Co: industry match, country mismatch -> 60, partial_match
-      - Weak Match Co: industry mismatch, country match -> 40, weak_match
-      - Ambiguous Health Co: industry match, no structured country (CSV) -> 60 pts but insufficient_evidence
-      - Never Scored Co: left unscored
+      - Partial Match Co: industry match, country mismatch -> 64, partial_match
+      - Weak Match Co: industry mismatch, country match -> 36, weak_match
+      - Ambiguous Health Co: nothing to compare (CSV) -> 0, insufficient_evidence
+      - Never Scored Co: left unranked
     """
+    activate_preferences(client, US_SECTOR_PREFERENCES)
     batch = LeadBatch(name="fit-fixtures", source="pdl", status="uploaded")
     db_session.add(batch)
     db_session.flush()
@@ -119,13 +122,10 @@ def test_min_fit_score_filter_excludes_unscored_and_low_scores(
     response = client.get("/api/leads?min_fit_score=60&limit=50")
     body = response.json()
     returned_ids = {item["id"] for item in body["items"]}
-    # Strong (100), Partial (60), and Ambiguous (60 pts, despite
-    # insufficient_evidence band) all clear the raw-points threshold;
-    # Weak (40) and the unscored lead do not.
-    assert returned_ids == {
-        by_name["Strong Match Co"], by_name["Partial Match Co"], by_name["Ambiguous Health Co"],
-    }
-    assert body["total"] == 3
+    # Strong (100) and Partial (64) clear the threshold; Weak (36),
+    # Ambiguous (0, needs data) and the unranked lead do not.
+    assert returned_ids == {by_name["Strong Match Co"], by_name["Partial Match Co"]}
+    assert body["total"] == 2
 
 
 def test_sort_by_fit_score_desc_places_unscored_last(
@@ -136,13 +136,13 @@ def test_sort_by_fit_score_desc_places_unscored_last(
     body = response.json()
     assert body["total"] == 5
     ids_in_order = [item["id"] for item in body["items"]]
-    assert ids_in_order[0] == by_name["Strong Match Co"]  # 100
-    # Partial Match Co and Ambiguous Health Co are tied at 60 -- either
-    # relative order is fine, but both must precede Weak (40) and both
-    # must come from the scored set.
-    assert set(ids_in_order[1:3]) == {by_name["Partial Match Co"], by_name["Ambiguous Health Co"]}
-    assert ids_in_order[3] == by_name["Weak Match Co"]  # 40
-    assert ids_in_order[4] == by_name["Never Scored Co"]  # unscored -> last
+    assert ids_in_order == [
+        by_name["Strong Match Co"],  # 100
+        by_name["Partial Match Co"],  # 64
+        by_name["Weak Match Co"],  # 36
+        by_name["Ambiguous Health Co"],  # 0 (needs data)
+        by_name["Never Scored Co"],  # unranked -> last
+    ]
 
 
 def test_sort_by_fit_score_asc_also_places_unscored_last(
@@ -155,23 +155,23 @@ def test_sort_by_fit_score_asc_also_places_unscored_last(
     response = client.get("/api/leads?sort=fit_score_asc&limit=50")
     body = response.json()
     ids_in_order = [item["id"] for item in body["items"]]
-    assert ids_in_order[0] == by_name["Weak Match Co"]  # 40, lowest scored
-    assert set(ids_in_order[1:3]) == {by_name["Partial Match Co"], by_name["Ambiguous Health Co"]}
-    assert ids_in_order[3] == by_name["Strong Match Co"]  # 100, highest scored
-    assert ids_in_order[4] == by_name["Never Scored Co"]  # unscored -> still last
+    assert ids_in_order == [
+        by_name["Ambiguous Health Co"], by_name["Weak Match Co"], by_name["Partial Match Co"],
+        by_name["Strong Match Co"], by_name["Never Scored Co"],  # unranked -> still last
+    ]
 
 
 def test_totals_remain_correct_when_pagination_returns_fewer_items(
     client: TestClient, db_session: Session
 ) -> None:
     _setup(client, db_session)
-    # 3 leads clear min_fit_score=60, but ask for only 2 per page.
-    page1 = client.get("/api/leads?min_fit_score=60&limit=2&offset=0").json()
+    # 3 leads clear min_fit_score=30, but ask for only 2 per page.
+    page1 = client.get("/api/leads?min_fit_score=30&limit=2&offset=0").json()
     assert page1["total"] == 3
     assert len(page1["items"]) == 2
     assert page1["has_more"] is True
 
-    page2 = client.get("/api/leads?min_fit_score=60&limit=2&offset=2").json()
+    page2 = client.get("/api/leads?min_fit_score=30&limit=2&offset=2").json()
     assert page2["total"] == 3
     assert len(page2["items"]) == 1
     assert page2["has_more"] is False

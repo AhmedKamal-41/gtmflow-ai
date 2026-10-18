@@ -6,7 +6,21 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import pytest
+
 from app.models import Lead, LeadFitScore
+from tests.conftest import US_SECTOR_PREFERENCES, activate_preferences
+
+# US healthcare/real estate plus 51+ staff: industry 35 + size 25 + location
+# 20 = 80 configured. A full PDL-style match scores 100; the CSV lead below
+# (industry only, no size or location) earns 35 of 80 = 44 with 44%
+# coverage -> "needs data" (insufficient_evidence).
+PREFERENCES = {**US_SECTOR_PREFERENCES, "company_sizes": [{"min_employees": 51, "max_employees": None}]}
+
+
+@pytest.fixture(autouse=True)
+def ranking_profile(client: TestClient) -> dict:
+    return activate_preferences(client, PREFERENCES)
 
 CSV_INDUSTRY_ONLY = (
     "company_name,industry,contact_email\n"
@@ -41,6 +55,7 @@ def _make_pdl_style_lead(db_session: Session, batch_id: str, **overrides) -> Lea
         batch_id=batch_id,
         company_name=overrides.pop("company_name", "Full Match Health Co"),
         industry=overrides.pop("industry", "Hospital & Health Care"),
+        company_size=overrides.pop("company_size", "51-200"),
         cleaned_data=overrides.pop("cleaned_data", {"country": "United States"}),
         source="pdl_import",
         status=overrides.pop("status", "new"),
@@ -52,7 +67,7 @@ def _make_pdl_style_lead(db_session: Session, batch_id: str, **overrides) -> Lea
     return lead
 
 
-def test_post_fit_score_creates_and_persists(client: TestClient, db_session: Session) -> None:
+def test_post_fit_score_creates_and_persists(client: TestClient, db_session: Session, ranking_profile) -> None:
     upload = _upload(client)
     lead_id = _first_lead_id(client, upload["batch_id"])
 
@@ -60,16 +75,18 @@ def test_post_fit_score_creates_and_persists(client: TestClient, db_session: Ses
     assert response.status_code == 201
     body = response.json()
     assert body["lead_id"] == lead_id
-    assert body["profile_id"] == "demo-us-sectors-v1"
-    # Industry matches (Real Estate), country unknown (CSV lead, no
-    # structured field) -> 60/100 fit, 60% coverage -> insufficient_evidence.
-    assert body["fit_score"] == 60
-    assert body["evidence_coverage_pct"] == 60.0
-    assert body["band"] == "insufficient_evidence"
-    industry_criterion = next(c for c in body["criteria"] if c["name"] == "industry")
-    assert industry_criterion["result"] == "match"
-    country_criterion = next(c for c in body["criteria"] if c["name"] == "country")
-    assert country_criterion["result"] == "unknown"
+    assert body["profile_id"] == ranking_profile["id"]
+    assert body["seller_profile_id"] == ranking_profile["id"]
+    assert body["profile_version"] == str(ranking_profile["version"])
+    assert body["fit_score"] == 44
+    assert body["evidence_coverage_pct"] == 43.8
+    assert body["band"] == "insufficient_evidence" and body["priority"] is None
+    assert body["is_current"] is True
+    assert body["summary"] == {"matched": ["Industry"], "partial": [], "mismatched": [],
+                               "missing": ["Company size", "Location"],
+                               "not_configured": ["Contact role", "Keywords"]}
+    by_name = {c["name"]: c["result"] for c in body["criteria"]}
+    assert by_name["industry"] == "match" and by_name["location"] == "unknown"
 
     rows = db_session.execute(
         select(LeadFitScore).where(LeadFitScore.lead_id == UUID(lead_id))
@@ -87,7 +104,7 @@ def test_get_fit_score_404_before_scoring_then_200_after(client: TestClient) -> 
     client.post(f"/api/leads/{lead_id}/fit-score")
     after = client.get(f"/api/leads/{lead_id}/fit-score")
     assert after.status_code == 200
-    assert after.json()["fit_score"] == 60
+    assert after.json()["fit_score"] == 44
 
 
 def test_rescoring_inserts_new_row_not_overwrite(client: TestClient, db_session: Session) -> None:
@@ -116,7 +133,7 @@ def test_full_match_pdl_style_lead_scores_100_strong_match(
     body = response.json()
     assert body["fit_score"] == 100
     assert body["evidence_coverage_pct"] == 100.0
-    assert body["band"] == "strong_match"
+    assert body["band"] == "strong_match" and body["priority"] == "Hot"
 
 
 def test_fit_scoring_never_mutates_lead_status(client: TestClient, db_session: Session) -> None:
@@ -150,8 +167,6 @@ def test_blocked_lead_full_fit_score_still_excluded_from_routing(
     assert refreshed.status == "do_not_contact"
 
     # And the actual push pipeline still refuses it, even with force=true.
-    push_score = client.post(f"/api/leads/{lead.id}/score")  # legacy v1 score required by push gate
-    assert push_score.status_code == 200
     push = client.post(
         f"/api/leads/{lead.id}/push", json={"integration_type": "slack", "force": True}
     )
@@ -191,18 +206,18 @@ def test_partial_batch_fit_score_flags_eligibility_and_batch_endpoint_leaves_sta
     assert any("partial" in r for r in fit_score["eligibility"]["reasons"])
 
 
-def test_fit_profile_endpoint_exposes_versioned_rubric(client: TestClient) -> None:
-    response = client.get("/api/scoring/fit-profile")
+def test_ranking_profile_endpoint_exposes_targets_weights_and_thresholds(
+        client: TestClient, ranking_profile) -> None:
+    response = client.get("/api/scoring/profile")
     assert response.status_code == 200
     body = response.json()
-    assert body["profile_id"] == "demo-us-sectors-v1"
-    assert body["industry_weight"] == 60
-    assert body["country_weight"] == 40
-    assert body["size_weight"] == 0
-    assert body["max_fit_score"] == 100
-    assert set(body["industry_match_values"]) == {
-        "hospital & health care", "medical practice", "real estate",
-    }
+    assert body["state"] == "ready"
+    assert body["profile"]["profile_id"] == ranking_profile["id"]
+    assert body["profile"]["configured_criteria"] == ["industry", "company_size", "location"]
+    assert body["profile"]["targeting"]["industries"] == ["Hospital & Health Care", "Real Estate"]
+    assert body["weights"] == {"industry": 35, "company_size": 25, "location": 20, "contact_role": 15, "keywords": 5}
+    assert (body["hot_min"], body["warm_min"], body["coverage_min_pct"]) == (75, 45, 50.0)
+    assert "industry_match_values" not in body  # the retired fixed rubric is gone
 
 
 def test_batch_fit_score_summary_counts_and_bulk_list_endpoint(
@@ -215,12 +230,12 @@ def test_batch_fit_score_summary_counts_and_bulk_list_endpoint(
     assert run["newly_scored"] == 1
     summary = run["summary"]
     assert summary["scored_leads"] == 1
-    assert summary["insufficient_evidence"] == 1  # industry-only match, no structured country
+    assert summary["insufficient_evidence"] == 1  # industry-only match: needs data
 
     listing = client.get(f"/api/batches/{batch_id}/fit-scores").json()
     assert listing["total"] == 1
     assert len(listing["items"]) == 1
-    assert listing["items"][0]["fit_score"] == 60
+    assert listing["items"][0]["fit_score"] == 44
 
 
 def test_unscored_leads_do_not_break_bulk_listing_pagination(client: TestClient) -> None:

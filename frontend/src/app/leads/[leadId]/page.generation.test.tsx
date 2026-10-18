@@ -97,7 +97,6 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     getLead: vi.fn((id: string) => Promise.resolve({ ...LEAD, id })),
-    getLeadScore: vi.fn(nf),
     getLeadFitScore: vi.fn(nf),
     getReviewState: vi.fn((leadId: string) =>
       Promise.resolve({

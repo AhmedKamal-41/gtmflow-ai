@@ -222,33 +222,44 @@ def test_unknown_revision_cannot_be_activated(client):
     assert missing.status_code == 404
 
 
-def test_activation_does_not_change_the_fit_rubric_or_stored_scores(client, db_session):
+def test_activation_keeps_stored_rankings_and_scopes_current_ranking_to_target_preferences(client, db_session):
+    """Activating a revision never edits stored rankings. Rankings made with
+    the same target preferences stay current; different preferences make
+    them outdated (history, still readable) until ranked again."""
     upload = client.post("/api/batches/upload", files={
-        "file": ("f.csv", b"company_name,industry,location\nFit Co,medical practice,united states\n", "text/csv")
+        "file": ("f.csv", b"company_name,industry,company_size,contact_title\nFit Co,Clinic,120,Practice Manager\n",
+                 "text/csv")
     }).json()
     lead = client.get(f"/api/leads?batch_id={upload['batch_id']}").json()["items"][0]
+    assert client.post(f"/api/leads/{lead['id']}/fit-score").status_code == 409  # nothing to rank against yet
+    first = save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
     scored = client.post(f"/api/leads/{lead['id']}/fit-score").json()
-    rubric = (fit.SCORER_VERSION, fit.PROFILE_ID, fit.PROFILE_VERSION, fit.NORMALIZATION_VERSION)
+    assert scored["priority"] == "Hot" and scored["profile_id"] == first["id"]
 
     def stored_rows():
         db_session.expire_all()
         return [
-            (row.id, row.fit_score, row.band, row.criteria, row.readiness, row.input_fingerprint)
+            (row.id, row.fit_score, row.band, row.criteria, row.readiness, row.input_fingerprint, row.targeting_hash)
             for row in db_session.scalars(select(LeadFitScore))
         ]
 
     before = stored_rows()
-    save_and_activate(client, SYNTHETIC_SELLER_PROFILE)
+    # A new revision that changes only what is sold keeps the same targets:
+    # the ranking stays current.
+    save_and_activate(client, {**SYNTHETIC_SELLER_PROFILE, "value_proposition": "A reworded synthetic offer."})
     assert stored_rows() == before
-    assert (fit.SCORER_VERSION, fit.PROFILE_ID, fit.PROFILE_VERSION, fit.NORMALIZATION_VERSION) == rubric
+    same = client.get(f"/api/leads/{lead['id']}/fit-score").json()
+    assert same["is_current"] is True and same["id"] == scored["id"]
+    assert "no_seller_profile_configured" not in same["readiness"]["outbound_email"]["gaps"]
 
-    after = client.get(f"/api/leads/{lead['id']}/fit-score").json()
-    assert (after["fit_score"], after["band"], after["criteria"]) == (
-        scored["fit_score"], scored["band"], scored["criteria"],
-    )
-    # Current readiness reflects the activation; the stored snapshot does not.
-    assert "no_seller_profile_configured" not in after["readiness"]["outbound_email"]["gaps"]
-    assert "no_seller_profile_configured" in after["at_scoring"]["readiness"]["outbound_email"]["gaps"]
+    # Different target customers: the stored row is untouched but outdated.
+    changed = {**SYNTHETIC_SELLER_PROFILE["target_preferences"], "industries": ["Retail"]}
+    save_and_activate(client, {**SYNTHETIC_SELLER_PROFILE, "target_preferences": changed})
+    assert stored_rows() == before
+    outdated = client.get(f"/api/leads/{lead['id']}/fit-score").json()
+    assert outdated["is_current"] is False and outdated["id"] == scored["id"]
+    status = client.get("/api/scoring/profile").json()
+    assert (status["current_rankings"], status["outdated_rankings"]) == (0, 1)
 
 
 @pytest.mark.parametrize("body", [

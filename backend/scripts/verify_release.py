@@ -232,12 +232,14 @@ def main() -> None:
                         time.sleep(0.1)
                     raise AssertionError(f"worker timed out on {kind}")
 
-                for kind in ("fit_score", "legacy_score", "generate_summary", "generate_outreach"):
+                retired = client.post(f"/api/batches/{batch_id}/jobs", json={"job_type": "legacy_score"})
+                check(retired.status_code == 400, "retired fixed-term scoring job is refused")
+                for kind in ("fit_score", "generate_summary", "generate_outreach"):
                     job(kind)
                 leads = request("GET", f"/api/leads?batch_id={batch_id}")["items"]
-                scores = request("GET", f"/api/batches/{batch_id}/scores")["items"]
-                hot_ids = {row["lead_id"] for row in scores if row["priority"] == "Hot"}
-                check(len(hot_ids) == 2, "synthetic fixture has two Hot leads")
+                scores = request("GET", f"/api/batches/{batch_id}/fit-scores")["items"]
+                hot_ids = {row["lead_id"] for row in scores if row["priority"] == "Hot" and row["is_current"]}
+                check(len(hot_ids) == 2, "synthetic fixture has two Hot leads for the demonstration profile's targets")
                 drafts = {}
                 for lead in leads:
                     draft = request("GET", f"/api/leads/{lead['id']}/latest-ai-output?output_type=outreach_email")

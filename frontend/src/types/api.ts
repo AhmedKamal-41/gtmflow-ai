@@ -49,33 +49,6 @@ export type Lead = {
   source_raw_data: Record<string, unknown> | null;
 };
 
-export type ScoreBreakdown = {
-  industry_fit: number;
-  company_size_fit: number;
-  persona_title_fit: number;
-  pain_point_keywords: number;
-  data_completeness: number;
-  source_quality: number;
-  penalties: number;
-};
-
-export type MatchedSignals = {
-  industry_terms: string[];
-  title_terms: string[];
-  pain_point_terms: string[];
-};
-
-export type LeadScore = {
-  lead_id: string;
-  total_score: number;
-  priority: string; // "Hot" | "Warm" | "Cold" but permissive
-  // Permissive at runtime in case the backend rolls in new categories or
-  // omits ones the UI doesn't know about yet.
-  score_breakdown: Partial<ScoreBreakdown>;
-  matched_signals: MatchedSignals;
-  reasoning: string;
-};
-
 // Historical (prompt v1) content shapes. Kept so outputs generated before
 // grounded prompting still render as they were produced.
 export type SummaryContent = {
@@ -158,7 +131,13 @@ export type QualityFlag = {
 };
 
 // Phase 10: durable background jobs.
-export type JobType = "fit_score" | "legacy_score" | "generate_summary" | "generate_outreach" | "push_hot" | "assistant_outreach";
+export type JobType =
+  | "fit_score"
+  | "generate_summary"
+  | "generate_outreach"
+  | "push_hot"
+  | "assistant_outreach"
+  | "selected_outreach";
 
 export type Job = {
   id: string;
@@ -218,15 +197,6 @@ export type UploadResponse = {
   errors: UploadResponseError[];
 };
 
-export type BatchScoreResponse = {
-  batch_id: string;
-  scored_leads: number;
-  hot: number;
-  warm: number;
-  cold: number;
-  average_score: number;
-};
-
 export type PushResponse = IntegrationPush;
 
 export type BatchPushResult = {
@@ -268,23 +238,36 @@ export type DemoRunResponse = {
   leads_pushed: number;
 };
 
-// --- Phase 4: v2 deterministic company-fit scorer -------------------------
-// Entirely separate from the legacy `LeadScore` (Hot/Warm/Cold) above. A
-// `strong_match` fit band is NOT the same claim as legacy "Hot" -- it means
-// "matched this broad demonstration profile's two active criteria," not a
-// calibrated purchase-probability signal. Always label these distinctly in
-// the UI; never silently translate one into the other's meaning.
+// --- Ranking against the active seller profile's target customers ---------
+// One deterministic ranking (app/scoring/fit.py). Bands map to priorities:
+// strong_match = Hot, partial_match = Warm, weak_match = Cold, and
+// insufficient_evidence = "needs data" (priority null). A ranking describes
+// recorded company attributes only -- never interest, need or intent.
+
+export type Priority = "Hot" | "Warm" | "Cold";
+export type CriterionResult = "match" | "partial" | "mismatch" | "unknown" | "not_configured";
 
 export type FitCriterion = {
   name: string;
+  label: string | null;
   weight: number;
   active: boolean;
   source_field: string;
   raw_input: unknown;
   normalized_input: string | null;
-  result: string; // "match" | "mismatch" | "unknown" | "not_configured"
+  result: CriterionResult | string;
   points: number;
   explanation: string;
+  targets: string[];
+  matched_targets: string[];
+};
+
+export type CriteriaSummary = {
+  matched: string[];
+  partial: string[];
+  mismatched: string[];
+  missing: string[];
+  not_configured: string[];
 };
 
 export type ActionReadiness = {
@@ -324,12 +307,20 @@ export type LeadFitScore = {
   scorer_version: string;
   profile_id: string;
   profile_version: string;
+  seller_profile_id: string | null;
+  targeting_hash: string | null;
   normalization_version: string;
   input_fingerprint: string;
   fit_score: number;
   max_fit_score: number;
   evidence_coverage_pct: number;
   band: string; // "strong_match" | "partial_match" | "weak_match" | "insufficient_evidence"
+  priority: Priority | null;
+  // false: ranked against different target preferences than the active
+  // profile's -- shown as outdated, never used as the current ranking.
+  is_current: boolean;
+  explanation: string;
+  summary: CriteriaSummary;
   criteria: FitCriterion[];
   // CURRENT readiness/eligibility, recomputed from live lead, batch,
   // draft and review state on every read (single-lead and bulk alike).
@@ -344,36 +335,76 @@ export type LeadFitScore = {
   computation_ms: number;
 };
 
-export type FitProfile = {
-  profile_id: string;
-  profile_version: string;
-  scorer_version: string;
-  normalization_version: string;
-  description: string;
-  industry_match_values: string[];
-  industry_weight: number;
-  country_match_values: string[];
-  country_weight: number;
-  size_weight: number;
-  zero_weight_criteria: string[];
-  max_fit_score: number;
-  coverage_threshold_pct: number;
-  band_strong_min: number;
-  band_partial_min: number;
+export type TargetPreferences = {
+  industries: string[];
+  locations: string[];
+  company_sizes: { min_employees: number; max_employees: number | null }[];
+  contact_roles: string[];
+  keywords: string[];
 };
 
-// Distinct leads, each counted once in the band of its LATEST applicable
-// score. `score_rows` counts every stored row (history included).
+export type RankingState = "ready" | "no_active_profile" | "setup_required";
+
+// GET /api/scoring/profile
+export type RankingStatus = {
+  state: RankingState;
+  message: string;
+  profile: {
+    source: string;
+    profile_id: string;
+    seller_profile_id: string | null;
+    version: string;
+    profile_kind: string;
+    targeting: TargetPreferences;
+    targeting_hash: string;
+    configured_criteria: string[];
+  } | null;
+  scorer_version: string;
+  normalization_version: string;
+  weights: Record<string, number>;
+  labels: Record<string, string>;
+  hot_min: number;
+  warm_min: number;
+  coverage_min_pct: number;
+  partial_credit: number;
+  total_leads: number;
+  current_rankings: number;
+  outdated_rankings: number;
+  never_ranked: number;
+};
+
+// POST /api/scoring/recalculate
+export type RankingRunSummary = {
+  batch_id: string | null;
+  profile_id: string;
+  profile_version: string;
+  targeting_hash: string;
+  attempted: number;
+  newly_scored: number;
+  skipped_unchanged: number;
+  failed: number;
+};
+
+// Distinct leads, each counted once in the band of its latest CURRENT
+// ranking. `score_rows` counts every current row (history included).
 export type BatchFitSummary = {
-  batch_id: string;
+  batch_id: string | null;
+  ranking_state: RankingState;
+  profile_id: string | null;
+  profile_version: string | null;
+  targeting_hash: string | null;
   total_leads: number;
   scored_leads: number;
   unscored_leads: number;
+  outdated_leads: number;
   score_rows: number;
   strong_match: number;
   partial_match: number;
   weak_match: number;
   insufficient_evidence: number;
+  hot: number;
+  warm: number;
+  cold: number;
   average_fit_score: number | null;
 };
 
@@ -381,6 +412,8 @@ export type BatchFitSummary = {
 // distinct-lead state afterwards.
 export type BatchFitScoreRunSummary = {
   batch_id: string;
+  profile_id: string;
+  profile_version: string;
   attempted: number;
   newly_scored: number;
   skipped_unchanged: number;
@@ -415,7 +448,11 @@ export type MetricsDashboard = {
   average_lead_score: number;
   missing_data_rate: number;
   automation_coverage: number;
-  // v2 company fit (demo profile): distinct leads by latest band.
+  // Ranking against the active seller profile: distinct leads by the band
+  // of their current ranking (hot/warm/cold above are the same counts).
+  ranking_state: RankingState;
+  ranking_profile_version: string | null;
+  fit_outdated_leads: number;
   fit_scored_leads: number;
   fit_strong_match: number;
   fit_partial_match: number;
@@ -455,6 +492,9 @@ export type SellerProfileContent = {
   capabilities: string[];
   proof_points: { claim: string; source: string }[];
   exclusions: string[];
+  // Who the seller wants to sell to, used to rank leads. Empty lists mean
+  // "no preference"; with all empty, leads cannot be ranked.
+  target_preferences: TargetPreferences;
 };
 
 export type SellerProfile = {

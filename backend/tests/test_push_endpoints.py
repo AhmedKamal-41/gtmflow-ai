@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import IntegrationPush, WorkflowEvent
-from tests.conftest import approve_current_draft
+from tests.conftest import approve_current_draft, rank_batch
 
 pytestmark = pytest.mark.usefixtures("active_seller_profile")
 
@@ -37,7 +37,7 @@ def _scored_setup(client: TestClient) -> tuple[str, list[dict]]:
     tests/test_delivery_review_enforcement.py)."""
     up = _upload(client)
     batch_id = up["batch_id"]
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
     leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     for lead in leads:
         approve_current_draft(client, lead["id"])
@@ -72,7 +72,7 @@ def test_push_hot_lead_mock_success(
     text = body["payload"]["text"]
     assert "Cascade Modular" in text
     assert "Hot" in text
-    assert "94" in text or "/100" in text
+    assert "Target-customer match: 100/100 (Hot)" in text
 
     rows = (
         db_session.execute(
@@ -98,7 +98,23 @@ def test_push_lead_without_score_returns_400(client: TestClient) -> None:
         json={"integration_type": "slack"},
     )
     assert response.status_code == 400
-    assert "scored" in response.json()["detail"].lower()
+    assert "current ranking" in response.json()["detail"].lower()
+
+
+def test_push_after_target_preferences_change_needs_a_new_ranking(client: TestClient) -> None:
+    """A lead Hot under the old target preferences is not Hot under new
+    ones until it is ranked again -- and then by the new rules only."""
+    from tests.conftest import activate_preferences
+
+    _, leads = _scored_setup(client)
+    hot = _lead_by(leads, "Cascade Modular")
+    activate_preferences(client, {"industries": ["Retail"], "locations": [], "company_sizes": [],
+                                  "contact_roles": [], "keywords": []})
+    stale = client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
+    assert stale.status_code == 400 and "current ranking" in stale.json()["detail"]
+    client.post("/api/scoring/recalculate")
+    cold_now = client.post(f"/api/leads/{hot['id']}/push", json={"integration_type": "slack"})
+    assert cold_now.status_code == 400 and "Only Hot leads" in cold_now.json()["detail"]
 
 
 def test_push_non_hot_lead_without_force_returns_400(client: TestClient) -> None:

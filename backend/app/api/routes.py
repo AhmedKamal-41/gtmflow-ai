@@ -13,7 +13,6 @@ from app.api.leads import router as leads_router
 from app.api.metrics import router as metrics_router
 from app.api.outreach_review import router as outreach_review_router
 from app.api.push import router as push_router
-from app.api.scoring import router as scoring_router
 from app.api.seller_profile import router as seller_profile_router
 from app.api.workspace import router as workspace_router
 
@@ -21,7 +20,6 @@ router = APIRouter()
 router.include_router(health_router)
 router.include_router(batches_router)
 router.include_router(leads_router)
-router.include_router(scoring_router)
 router.include_router(fit_scoring_router)
 router.include_router(ai_router)
 router.include_router(push_router)

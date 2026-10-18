@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import AIOutputReview, WorkflowEvent
-from tests.conftest import review_json
+from tests.conftest import review_json, rank_batch
 
 # These tests generate outreach, which needs an explicitly activated
 # seller revision (Phase 5). The fixture activates a synthetic one.
@@ -32,7 +32,7 @@ def _upload(client: TestClient, csv: str = SCORED_CSV) -> dict:
 def _scored_lead_with_outreach(client: TestClient) -> tuple[str, str]:
     """Returns (lead_id, ai_output_id) for a freshly-generated outreach draft."""
     up = _upload(client)
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     lead = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
     output = client.post(f"/api/leads/{lead['id']}/generate-outreach").json()
     return lead["id"], output["id"]
@@ -40,7 +40,7 @@ def _scored_lead_with_outreach(client: TestClient) -> tuple[str, str]:
 
 def _scored_lead_without_outreach(client: TestClient) -> str:
     up = _upload(client)
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     return client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]["id"]
 
 
@@ -216,7 +216,7 @@ def test_review_rejects_output_belonging_to_another_lead(client: TestClient) -> 
 
 def test_review_rejects_non_outreach_output_type(client: TestClient) -> None:
     up = _upload(client)
-    client.post(f"/api/batches/{up['batch_id']}/score")
+    rank_batch(client, up['batch_id'])
     lead = client.get(f"/api/leads?batch_id={up['batch_id']}").json()["items"][0]
     summary = client.post(f"/api/leads/{lead['id']}/generate-summary").json()
 

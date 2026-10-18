@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from tests.conftest import approve_current_draft, review_json
+from tests.conftest import approve_current_draft, review_json, rank_batch
 
 # These tests generate outreach, which needs an explicitly activated
 # seller revision (Phase 5). The fixture activates a synthetic one.
@@ -34,7 +34,7 @@ def _upload(client: TestClient, csv: str, name: str = "metrics-test") -> dict:
 def _scored_batch_setup(client: TestClient) -> tuple[str, list[dict]]:
     up = _upload(client, SCORED_CSV)
     batch_id = up["batch_id"]
-    client.post(f"/api/batches/{batch_id}/score")
+    rank_batch(client, batch_id)
     leads = client.get(f"/api/leads?batch_id={batch_id}").json()["items"]
     return batch_id, leads
 
@@ -64,6 +64,9 @@ def test_metrics_empty_database_returns_zeros(client: TestClient) -> None:
         "average_lead_score": 0.0,
         "missing_data_rate": 0.0,
         "automation_coverage": 0.0,
+        "ranking_state": "ready",  # the synthetic profile is active
+        "ranking_profile_version": "1",
+        "fit_outdated_leads": 0,
         "fit_scored_leads": 0,
         "fit_strong_match": 0,
         "fit_partial_match": 0,
@@ -111,9 +114,9 @@ def test_metrics_average_score(client: TestClient) -> None:
     scores: list[int] = []
     for lead in leads:
         scores.append(
-            client.get(f"/api/leads/{lead['id']}/score").json()["total_score"]
+            client.get(f"/api/leads/{lead['id']}/fit-score").json()["fit_score"]
         )
-    expected = round(sum(scores) / len(scores), 2)
+    expected = round(sum(scores) / len(scores), 1)
     body = client.get("/api/metrics/dashboard").json()
     assert body["average_lead_score"] == expected
 
@@ -235,5 +238,21 @@ def test_fit_metrics_count_distinct_leads_not_score_rows(client: TestClient) -> 
         body["fit_strong_match"] + body["fit_partial_match"]
         + body["fit_weak_match"] + body["fit_insufficient_evidence"]
     ) == len(lead_ids)
-    # Fit scoring is not legacy scoring: v1 counters are untouched.
-    assert body["total_leads_processed"] == 0
+    # Ranking again adds history rows, not leads.
+    assert body["total_leads_processed"] == len(lead_ids)
+    assert body["hot_leads"] == body["fit_strong_match"] == 2
+
+
+def test_changing_target_preferences_marks_rankings_outdated_in_metrics(client: TestClient) -> None:
+    from tests.conftest import activate_preferences
+
+    _scored_batch_setup(client)
+    activate_preferences(client, {"industries": ["Retail"], "locations": [], "company_sizes": [],
+                                  "contact_roles": [], "keywords": []})
+    body = client.get("/api/metrics/dashboard").json()
+    assert body["ranking_profile_version"] == "2"
+    assert body["fit_outdated_leads"] == 3
+    assert body["total_leads_processed"] == body["hot_leads"] == 0  # outdated is not counted as ranked
+    client.post("/api/scoring/recalculate")
+    body = client.get("/api/metrics/dashboard").json()
+    assert (body["fit_outdated_leads"], body["total_leads_processed"], body["hot_leads"]) == (0, 3, 1)

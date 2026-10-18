@@ -5,7 +5,7 @@ import { Card } from "./Card";
 /**
  * Phase 4: CURRENT outreach readiness and routing eligibility for a lead,
  * recomputed by the backend from live lead / batch / draft / review state
- * on every read. Deliberately separate from <FitScoreCard>: readiness is
+ * on every read. Deliberately separate from <RankingCard>: readiness is
  * not part of the fit score, applies to unscored leads too, and a strong
  * fit never makes a lead eligible or ready.
  */
